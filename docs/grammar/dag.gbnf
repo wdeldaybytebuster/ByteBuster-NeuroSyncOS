@@ -1,0 +1,25 @@
+# GBNF (Grammar Backus-Naur Form) for DAG Proposal JSON
+# Used by local llama.cpp instances to enforce structured JSON output.
+#
+# §1.2 — Reserved system-service labels (foundational engines, never workflow tasks):
+#   scopelogic, basevault, routeswitch, scoutdaemon, coreexec, portgrid, cerebro
+# Enforced server-side by src/core/scopelogic/validator.ts (SA-07) using
+# src/core/system-reserved.ts::isReservedDAGPrompt (word-boundary regex).
+# Also enforced client-side in src/ui/App.tsx::handleProposal as defense-in-depth.
+# This grammar comment is the LLM-context gate: if the model sees these labels
+# listed as off-limits for node prompts, it should not propose them as steps.
+
+root ::= "{" ws "\"nodes\"" ws ":" ws "[" ws node (ws "," ws node)* ws "]" ws "}"
+
+node ::= "{" ws "\"id\"" ws ":" ws string ws "," ws "\"dependencies\"" ws ":" ws stringlist ws "," ws "\"prompt\"" ws ":" ws string ws "}"
+
+stringlist ::= "[" ws "]" | "[" ws string (ws "," ws string)* ws "]"
+
+# String representation with basic escaping
+string ::= "\"" (
+    [^"\\] |
+    "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+  )* "\""
+
+# Optional whitespace
+ws ::= [ \t\n\r]*

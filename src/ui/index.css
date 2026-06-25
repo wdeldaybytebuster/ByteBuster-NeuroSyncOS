@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root, .light {
+  --primary-glow: #0070F3;
+  --secondary-glow: #7928CA;
+  --bg-dots: rgba(0, 0, 0, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  
+  --color-void: #f8fafc;
+  --color-primary: #f1f5f9;
+  --color-gunmetal: #e2e8f0;
+  --color-foreground: #1e293b;
+  --color-foreground-muted: #64748b;
+  --color-glass-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(241, 245, 249, 0.95) 100%);
+  --color-glass-border: rgba(0, 0, 0, 0.1);
+}
+
+.dark {
+  --primary-glow: #0070F3;
+  --secondary-glow: #7928CA;
+  --bg-dots: rgba(255, 255, 255, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.5);
+
+  --color-void: #030408;
+  --color-primary: #0D0E15;
+  --color-gunmetal: #1A1C23;
+  --color-foreground: #E2E4E9;
+  --color-foreground-muted: #9ca3af;
+  --color-glass-gradient: linear-gradient(135deg, rgba(26, 28, 35, 0.8) 0%, rgba(13, 14, 21, 0.95) 100%);
+  --color-glass-border: rgba(255, 255, 255, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+@layer base {
+  body {
+    @apply font-sans antialiased overflow-x-hidden;
+    background-color: var(--color-void);
+    color: var(--color-foreground);
+  }
+}
+
+
