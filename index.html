@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NeuroSync Sovereign OS</title>
+    <!-- Fonts for premium look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Tailwind via local PostCSS -->
+    <style>
+      .squircle-box { border-radius: 22%; }
+      .glass-enclave {
+        background: theme('backgroundImage.glass-gradient');
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        position: relative;
+        overflow: hidden;
+      }
+      .glass-enclave::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      }
+      body {
+        background-color: #030408;
+        background-image: 
+          radial-gradient(circle at 15% 30%, rgba(26, 28, 35, 0.7), transparent 40%),
+          radial-gradient(circle at 85% 70%, rgba(10, 27, 58, 0.5), transparent 40%);
+        background-attachment: fixed;
+      }
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #030408; }
+      ::-webkit-scrollbar-thumb { background: #1A1C23; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
+    </style>
+  </head>
+  <body class="text-[#E2E4E9] antialiased overflow-x-hidden selection:bg-sovereign-gold/30 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/ui/main.tsx"></script>
+  </body>
+</html>

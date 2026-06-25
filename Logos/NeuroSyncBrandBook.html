@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuroSync SovereignOS - Master Brand Identity Guide</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Playfair Display', 'serif'],
+            mono: ['Fira Code', 'monospace'],
+          },
+          colors: {
+            sovereign: {
+              50: '#f0f4f8',
+              100: '#dbe3ed',
+              200: '#bdcbdc',
+              300: '#90aac6',
+              400: '#5f84ac',
+              500: '#3e638e',
+              600: '#2f4f74',
+              700: '#27405e',
+              800: '#1c2d42',
+              900: '#0b132b',
+              950: '#060b18',
+            },
+            cyberteal: {
+              50: '#f0faff',
+              100: '#e0f3fe',
+              200: '#bae2fd',
+              300: '#7cc7fb',
+              400: '#38a7f8',
+              500: '#0e8ce2',
+              600: '#026fc1',
+              700: '#03589c',
+              800: '#074c80',
+              900: '#0b406b',
+              950: '#0077b6',
+            },
+            localemerald: '#10b981',
+            warninggold: '#f59e0b',
+            alertcrimson: '#ef4444',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Print Customizations */
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 11pt !important;
+      }
+      .no-print { display: none !important; }
+      .print-page-break { page-break-before: always !important; break-before: page !important; }
+      .print-avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
+      .print-no-shadow { box-shadow: none !important; text-shadow: none !important; }
+      .print-border { border: 1px solid #e2e8f0 !important; }
+      @page { size: A4; margin: 20mm 15mm 20mm 15mm; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    }
+
+    /* Screen Utilities */
+    .glass {
+      background: rgba(11, 19, 43, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .view-mode-transition { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #060b18; }
+    ::-webkit-scrollbar-thumb { background: #1c2d42; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #0077b6; }
+  </style>
+</head>
+<body class="bg-sovereign-950 text-slate-200 font-sans min-h-screen antialiased selection:bg-cyberteal-500 selection:text-white" id="brand-body">
+
+  <!-- Interactive Dashboard Control Header -->
+  <header class="no-print sticky top-0 z-50 w-full glass border-b border-sovereign-800 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <!-- Embedded Master Mini Logo -->
+      <div class="w-10 h-10">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+            <defs>
+                <linearGradient id="goldGradHeader" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#FFF2A8" />
+                    <stop offset="50%" stop-color="#D4AF37" />
+                    <stop offset="100%" stop-color="#AA8D2C" />
+                </linearGradient>
+            </defs>
+            <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="rgba(212,175,55,0.05)" stroke="url(#goldGradHeader)" stroke-width="2" opacity="0.8"/>
+            <g transform="translate(50,50) scale(0.65) translate(-50,-50)">
+                <g transform="rotate(45,50,50)">
+                    <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(212,175,55,0.15)" stroke="url(#goldGradHeader)" stroke-width="4" stroke-linejoin="round"/>
+                    <rect x="46" y="74" width="3" height="5" fill="#0D0E15"/>
+                    <rect x="51" y="74" width="3" height="5" fill="#0D0E15"/>
+                    <rect x="48" y="40" width="4" height="24" rx="2" fill="#00E5FF" filter="drop-shadow(0 0 4px #00E5FF)" />
+                </g>
+            </g>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-md font-bold tracking-wider text-white flex items-center gap-2">
+          <span>NeuroSync SovereignOS</span> <span class="text-xs bg-cyberteal-500 text-white font-mono px-1.5 py-0.5 rounded font-normal lowercase">v1.0-beta</span>
+        </h1>
+        <p class="text-xs text-slate-400">Executive Brand Strategy & Visual Identity Guidelines</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+      <button onclick="toggleViewMode()" class="px-3.5 py-2 rounded text-xs font-semibold bg-sovereign-800 hover:bg-sovereign-700 border border-sovereign-700 hover:border-cyberteal-500 text-slate-300 hover:text-white transition-all flex items-center gap-2" id="toggle-view-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.364l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <span>Simulate Print Layout</span>
+      </button>
+      <button onclick="window.print()" class="px-4 py-2 rounded text-xs font-bold bg-cyberteal-950 hover:bg-cyberteal-500 border border-cyberteal-500 text-white transition-all flex items-center gap-2 shadow-lg shadow-cyberteal-950/30">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+        </svg>
+        Print / PDF
+      </button>
+    </div>
+  </header>
+
+  <!-- Notification Banner -->
+  <div class="no-print bg-cyberteal-900/40 border-b border-cyberteal-800 px-6 py-2.5 text-center text-xs text-cyberteal-200" id="notification-banner">
+    ✨ <strong class="text-white">Print Optimization Active:</strong> Page breaks are programmatically configured. Click the <span class="bg-cyberteal-950/80 px-1 border border-cyberteal-500/30 rounded font-mono text-white">Print / PDF</span> button to generate a clean compliance report.
+  </div>
+
+  <!-- Main Container -->
+  <div class="max-w-[210mm] mx-auto my-0 sm:my-8 bg-sovereign-900 sm:rounded-xl shadow-2xl overflow-hidden view-mode-transition border border-sovereign-800" id="document-paper">
+    
+    <!-- PAGE 01: BRAND BOOK COVER PAGE -->
+    <div class="relative min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-gradient-to-b from-sovereign-950 via-sovereign-900 to-sovereign-950 text-white print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/60 pb-4 uppercase">
+        <span>Security Protocol: Confidential</span>
+        <span>Spec-ID: Neuro-BR-2026</span>
+      </div>
+
+      <div class="my-auto py-16 flex flex-col gap-12">
+        <div class="flex flex-col gap-4">
+          <div class="flex items-center gap-5">
+            <div class="w-24 h-24">
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                  <defs>
+                      <linearGradient id="goldGradCover" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stop-color="#FFF2A8" />
+                          <stop offset="50%" stop-color="#D4AF37" />
+                          <stop offset="100%" stop-color="#AA8D2C" />
+                      </linearGradient>
+                  </defs>
+                  <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="rgba(212,175,55,0.05)" stroke="url(#goldGradCover)" stroke-width="2" opacity="0.8"/>
+                  <g transform="translate(50,50) scale(0.65) translate(-50,-50)">
+                      <g transform="rotate(45,50,50)">
+                          <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(212,175,55,0.15)" stroke="url(#goldGradCover)" stroke-width="4" stroke-linejoin="round"/>
+                          <rect x="46" y="74" width="3" height="5" fill="#0D0E15"/>
+                          <rect x="51" y="74" width="3" height="5" fill="#0D0E15"/>
+                          <rect x="48" y="40" width="4" height="24" rx="2" fill="#00E5FF" filter="drop-shadow(0 0 4px #00E5FF)" />
+                      </g>
+                  </g>
+              </svg>
+            </div>
+            <div class="flex flex-col justify-center">
+              <span class="font-serif font-extrabold text-3xl tracking-tight text-white leading-none">NeuroSync</span>
+              <span class="font-sans font-bold text-xs tracking-widest text-cyberteal-400 mt-1 uppercase">SovereignOS</span>
+            </div>
+          </div>
+          <p class="text-xs font-mono text-cyberteal-400 tracking-widest uppercase mt-4">Corporate Brand Identity Master Guide</p>
+        </div>
+
+        <div class="space-y-6">
+          <h1 class="text-5xl sm:text-6xl font-serif text-white tracking-tight leading-none">
+            Visual Identity &<br>
+            <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyberteal-400 to-cyberteal-200 font-sans font-extrabold tracking-normal">Brand Architecture</span>
+          </h1>
+          <p class="text-lg text-slate-300 max-w-xl font-light leading-relaxed">
+            The definitive framework governing canonical product names, system typography, layout logic, corporate voice, and the modular design architecture of <strong class="text-white font-medium">SovereignOS</strong>.
+          </p>
+        </div>
+
+        <div class="h-1.5 w-40 bg-gradient-to-r from-cyberteal-500 via-localemerald to-warninggold rounded-full"></div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-6 border-t border-sovereign-800/60 pt-8 text-xs font-mono">
+        <div>
+          <span class="text-slate-500 block mb-1 uppercase tracking-wider">Classification</span>
+          <span class="font-semibold text-slate-200">Internal Corporate</span>
+        </div>
+        <div>
+          <span class="text-slate-500 block mb-1 uppercase tracking-wider">Release Version</span>
+          <span class="font-semibold text-slate-200">v1.0 (Phase 9)</span>
+        </div>
+        <div>
+          <span class="text-slate-500 block mb-1 uppercase tracking-wider">Baseline Date</span>
+          <span class="font-semibold text-slate-200">June 21, 2026</span>
+        </div>
+        <div>
+          <span class="text-slate-500 block mb-1 uppercase tracking-wider">Brand Authority</span>
+          <span class="font-semibold text-cyberteal-400">ByteBuster Nexus</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- PAGE 02: TABLE OF CONTENTS & BRAND CORE -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10">
+        <span class="font-semibold tracking-wide uppercase">NeuroSync SovereignOS</span>
+        <span class="uppercase">Index & Mission</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-12 my-auto">
+        <!-- Table of Contents (Left 5 Cols) -->
+        <div class="md:col-span-5 space-y-8 pr-4 border-r border-sovereign-800/40">
+          <h2 class="text-xs font-mono text-cyberteal-400 uppercase tracking-widest font-bold">Manual Indexes</h2>
+          
+          <nav class="space-y-4 text-sm font-mono">
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">01</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>The Brand Core</span>
+                <span class="text-slate-500">P. 2</span>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">02</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>Verbal Identity & Voice</span>
+                <span class="text-slate-500">P. 3</span>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">03</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>Master Logo Rules</span>
+                <span class="text-slate-500">P. 4</span>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">04</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>Canonical Naming</span>
+                <span class="text-slate-500">P. 5</span>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">05</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>SovereignOS Architecture</span>
+                <span class="text-slate-500">P. 6</span>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">06</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>Color & Typography</span>
+                <span class="text-slate-500">P. 7</span>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">07</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>PortGrid UX Security</span>
+                <span class="text-slate-500">P. 8</span>
+              </div>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-cyberteal-400">08</span>
+              <div class="border-b border-dashed border-sovereign-700 pb-0.5 w-full flex justify-between">
+                <span>Corporate Governance</span>
+                <span class="text-slate-500">P. 9</span>
+              </div>
+            </div>
+          </nav>
+
+          <div class="theme-card rounded-lg p-4 bg-sovereign-950/50 border border-sovereign-800 text-xs text-slate-400 leading-relaxed print-border">
+            <strong class="text-slate-300 block mb-1">Interpretation Directive:</strong>
+            This manual is an immutable artifact. Any deviations in UI design, language, or logic structures risk creating agentic hallucinations and introducing user fatigue.
+          </div>
+        </div>
+
+        <!-- Part 1: The Brand Core (Right 7 Cols) -->
+        <div class="md:col-span-7 space-y-8">
+          <div class="space-y-3">
+            <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 01</span>
+            <h2 class="text-3xl font-serif text-white">The Brand Core (The "Why")</h2>
+          </div>
+
+          <div class="space-y-6 text-sm leading-relaxed text-slate-300">
+            <div class="space-y-2">
+              <h3 class="text-xs font-mono text-white tracking-wider uppercase font-bold border-b border-sovereign-800/50 pb-1">1.1 Our North Star</h3>
+              <p>
+                In the age of fragmented, cloud-dependent, and transient AI utilities, <strong class="text-white font-semibold">NeuroSync SovereignOS</strong> asserts a fundamental paradigm shift: <em class="text-cyberteal-300">Local-first data sovereignty and absolute executive control.</em> We reject the industry's trend toward opaque architectures, providing an invisible, deterministic orchestration hub that turns project thinking into an industrial-grade asset.
+              </p>
+            </div>
+            
+            <div class="space-y-2">
+              <h3 class="text-xs font-mono text-white tracking-wider uppercase font-bold border-b border-sovereign-800/50 pb-1">1.2 Mission Statement</h3>
+              <p>
+                To empower beginner hobbyists and freelancers by delivering an accessible, unbreakable, local-first AI workflow platform governed entirely by <strong class="text-white">Programmatic Determinism</strong> and zero-trust sandboxing, running seamlessly on consumer hardware.
+              </p>
+            </div>
+
+            <div class="space-y-2">
+              <h3 class="text-xs font-mono text-white tracking-wider uppercase font-bold border-b border-sovereign-800/50 pb-1">1.3 Vision Statement</h3>
+              <p>
+                To render opaque, cloud-dependent AI architectures obsolete, setting the global benchmark for verifiable confidence and user-sovereign automation.
+              </p>
+            </div>
+
+            <div class="space-y-2">
+              <h3 class="text-xs font-mono text-white tracking-wider uppercase font-bold border-b border-sovereign-800/50 pb-1">1.4 Core Operational Values</h3>
+              <ul class="space-y-3 pl-2 border-l-2 border-cyberteal-950 mt-2">
+                <li>
+                  <strong class="text-white block font-medium">Absolute Sovereignty</strong>
+                  <span class="text-xs text-slate-400">No user data, keys, or outputs leave the host machine without explicit human override.</span>
+                </li>
+                <li>
+                  <strong class="text-white block font-medium">Verifiable Confidence</strong>
+                  <span class="text-xs text-slate-400">Every single decision, synthesis, and workflow node has concrete validation paths.</span>
+                </li>
+                <li>
+                  <strong class="text-white block font-medium">Adaptive Autonomy</strong>
+                  <span class="text-xs text-slate-400">Automation occurs strictly inside user-approved bounds, relying on draft-only recommendations.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>Brand Core & Philosophy</span>
+        <span>Page 02</span>
+      </div>
+    </div>
+
+
+    <!-- PAGE 03: VERBAL IDENTITY & TONE -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10 uppercase">
+        <span class="font-semibold tracking-wide">Corporate Voice</span>
+        <span>Section 02</span>
+      </div>
+
+      <div class="space-y-8 my-auto">
+        <div class="space-y-3">
+          <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 02</span>
+          <h2 class="text-3xl font-serif text-white">Verbal Identity & Tone</h2>
+          <p class="text-slate-400 text-sm max-w-xl">
+            The brand voice must sound like an Executive System: Authoritative, Precise, and Deterministic. We do not use speculative or exaggerated language that degrades operational trust.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+          <!-- Tone Guidelines -->
+          <div class="space-y-4 print-avoid-break">
+            <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300 border-b border-sovereign-800 pb-2">The NeuroSync Tone</h3>
+            <ul class="space-y-4 text-sm">
+              <li>
+                <strong class="text-white block">1. Deterministic over Emotional</strong>
+                <span class="text-xs text-slate-400 block mt-1">We do not "guess," "hope," or "believe." The system calculates, verifies, routes, and asserts. Use definitive verbs.</span>
+              </li>
+              <li>
+                <strong class="text-white block">2. Transparent over Obscure</strong>
+                <span class="text-xs text-slate-400 block mt-1">If confidence is low, we state it. If an action is blocked by the Free Mode Governor, we explain exactly why.</span>
+              </li>
+              <li>
+                <strong class="text-white block">3. Structural over Synergistic</strong>
+                <span class="text-xs text-slate-400 block mt-1">Avoid empty corporate buzzwords. Every metaphor must translate directly to a mechanical function.</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Forbidden Vocabulary -->
+          <div class="space-y-4 print-avoid-break">
+            <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300 border-b border-sovereign-800 pb-2">Forbidden Vocabulary Ledger</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Inflated, subjective language causes trust friction for users and hallucination risks for coding agents. Strictly avoid the following legacy terms.
+            </p>
+            <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div class="theme-card bg-sovereign-950/60 p-3 rounded border border-sovereign-800 text-slate-400 print-border">
+                <span class="text-alertcrimson block mb-2 font-bold">❌ NEVER USE</span>
+                <ul class="space-y-1">
+                  <li>"Grit, Not Grime"</li>
+                  <li>"quantum leap"</li>
+                  <li>"absolute security"</li>
+                  <li>"production-ready"</li>
+                  <li>"magic" / "guessing"</li>
+                </ul>
+              </div>
+              <div class="theme-card bg-sovereign-950/60 p-3 rounded border border-sovereign-800 text-slate-400 print-border">
+                <span class="text-localemerald block mb-2 font-bold">✅ REPLACE WITH</span>
+                <ul class="space-y-1 text-slate-300">
+                  <li>Programmatic Determinism</li>
+                  <li>major phase transition</li>
+                  <li>verifiable boundaries</li>
+                  <li>beta-stable execution</li>
+                  <li>deterministic synthesis</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voice & Engineering Translation -->
+        <div class="print-avoid-break mt-6">
+          <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300 mb-4 border-b border-sovereign-800 pb-2">Translating Marketing to Tech Constraints</h3>
+          <p class="text-xs text-slate-400 leading-relaxed mb-3">
+            When authoring documentation or coding prompts, strategic adjectives must map directly to strict technical properties to prevent scope creep.
+          </p>
+          <div class="theme-table rounded-lg overflow-hidden border border-sovereign-800 print-border">
+            <table class="w-full text-xs font-mono text-left">
+              <thead>
+                <tr class="bg-sovereign-950 text-slate-400 uppercase tracking-wider border-b border-sovereign-800">
+                  <th class="p-3">Brand Voice Claim</th>
+                  <th class="p-3">Engineering Implementation / Translation</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-sovereign-800/60">
+                <tr>
+                  <td class="p-3 font-bold text-white">"Sovereign Enclave"</td>
+                  <td class="p-3 text-slate-400">Local directory sandbox with zero cloud egress capabilities.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">"Fortress-Level Security"</td>
+                  <td class="p-3 text-slate-400">SHA-256 hashed credentials, strict API allowlists, zero-eval runtime.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">"Verifiable Confidence"</td>
+                  <td class="p-3 text-slate-400">1:1 trace links, independent static audits, explicit warning payload fields.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">"Predictive Insight"</td>
+                  <td class="p-3 text-slate-400">Draft-only, non-persisted JSON proposals requiring POST approval.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>Verbal Identity & Voice Guidelines</span>
+        <span>Page 03</span>
+      </div>
+    </div>
+
+
+    <!-- PAGE 04: MASTER LOGO & USAGE RULES -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10 uppercase">
+        <span class="font-semibold tracking-wide">Logo & Graphical Rules</span>
+        <span>Section 03</span>
+      </div>
+
+      <div class="space-y-8 my-auto">
+        <div class="space-y-3">
+          <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 03</span>
+          <h2 class="text-3xl font-serif text-white">Master Logo & Usage Architecture</h2>
+          <p class="text-slate-400 text-sm max-w-xl">
+            The NeuroSync master mark is a precision-engineered hexagon and glowing cyan core. It symbolizes deterministic execution. Do not alter its geometry.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center border-y border-sovereign-800 py-8">
+          <div class="flex justify-center theme-card bg-sovereign-950/40 p-8 rounded-lg border border-sovereign-800 print-border relative">
+            <!-- Clear Space Indicators -->
+            <div class="absolute inset-4 border border-dashed border-cyberteal-500/30 rounded"></div>
+            <div class="absolute top-2 left-1/2 -translate-x-1/2 text-[9px] font-mono text-cyberteal-500">CLEAR SPACE: 1x CORE WIDTH</div>
+            
+            <div class="w-32 h-32 relative z-10">
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                  <defs>
+                      <linearGradient id="goldGradSafe" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stop-color="#FFF2A8" />
+                          <stop offset="50%" stop-color="#D4AF37" />
+                          <stop offset="100%" stop-color="#AA8D2C" />
+                      </linearGradient>
+                  </defs>
+                  <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="rgba(212,175,55,0.05)" stroke="url(#goldGradSafe)" stroke-width="2" opacity="0.8"/>
+                  <g transform="translate(50,50) scale(0.65) translate(-50,-50)">
+                      <g transform="rotate(45,50,50)">
+                          <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(212,175,55,0.15)" stroke="url(#goldGradSafe)" stroke-width="4" stroke-linejoin="round"/>
+                          <rect x="46" y="74" width="3" height="5" fill="#0D0E15"/>
+                          <rect x="51" y="74" width="3" height="5" fill="#0D0E15"/>
+                          <rect x="48" y="40" width="4" height="24" rx="2" fill="#00E5FF" filter="drop-shadow(0 0 4px #00E5FF)" />
+                      </g>
+                  </g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="space-y-4 print-avoid-break">
+            <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300">Spatial Architecture</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              <strong class="text-white">Clear Space:</strong> The minimum clear space around the master logo is defined by the width of the central cyan 'Wrench' element. No typography or graphical assets may intrude into this zone.
+            </p>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              <strong class="text-white">Minimum Size Constraints:</strong> To preserve the integrity of the cyan glow effect and the 45-degree angle path, the logo must never be rendered smaller than:
+            </p>
+            <ul class="text-xs font-mono bg-sovereign-950/60 p-3 rounded border border-sovereign-800 print-border space-y-1">
+              <li>Digital / Screen: <span class="text-cyberteal-400">32px Height</span></li>
+              <li>Physical / Print: <span class="text-cyberteal-400">15mm Height</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Unacceptable Uses -->
+        <div class="space-y-4 print-avoid-break">
+          <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300">Unacceptable Uses (Do Nots)</h3>
+          <p class="text-xs text-slate-400 mb-4">
+            Under no circumstances should the geometry, color logic, or effects of the SVG be overridden.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <!-- Bad 1: Stretched -->
+            <div class="theme-card p-4 bg-sovereign-950/40 border border-alertcrimson/30 rounded-lg text-center flex flex-col items-center gap-3 print-border">
+              <div class="w-16 h-16">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" transform="scale(1.4, 0.7)">
+                  <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="none" stroke="#D4AF37" stroke-width="2"/>
+                  <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="none" stroke="#D4AF37" stroke-width="4" transform="translate(50,50) scale(0.65) translate(-50,-50) rotate(45,50,50)"/>
+                </svg>
+              </div>
+              <span class="text-[10px] font-mono text-alertcrimson font-bold">DO NOT STRETCH</span>
+            </div>
+
+            <!-- Bad 2: Wrong Colors -->
+            <div class="theme-card p-4 bg-sovereign-950/40 border border-alertcrimson/30 rounded-lg text-center flex flex-col items-center gap-3 print-border">
+              <div class="w-16 h-16">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                  <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="#10b981" stroke="#ef4444" stroke-width="2"/>
+                  <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="#3b82f6" transform="translate(50,50) scale(0.65) translate(-50,-50) rotate(45,50,50)"/>
+                </svg>
+              </div>
+              <span class="text-[10px] font-mono text-alertcrimson font-bold">DO NOT RECOLOR</span>
+            </div>
+
+            <!-- Bad 3: Rotated -->
+            <div class="theme-card p-4 bg-sovereign-950/40 border border-alertcrimson/30 rounded-lg text-center flex flex-col items-center gap-3 print-border">
+              <div class="w-16 h-16">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="w-full h-full" transform="rotate(30)">
+                  <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="none" stroke="#D4AF37" stroke-width="2"/>
+                  <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="none" stroke="#00E5FF" stroke-width="4" transform="translate(50,50) scale(0.65) translate(-50,-50) rotate(45,50,50)"/>
+                </svg>
+              </div>
+              <span class="text-[10px] font-mono text-alertcrimson font-bold">DO NOT ROTATE HEXAGON</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>Master Logo Rules & Limitations</span>
+        <span>Page 04</span>
+      </div>
+    </div>
+
+
+    <!-- PAGE 05: CANONICAL NAMING ARCHITECTURE -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10 uppercase">
+        <span class="font-semibold tracking-wide">Canonical Naming Convention</span>
+        <span>Section 04</span>
+      </div>
+
+      <div class="space-y-8 my-auto">
+        <div class="space-y-3">
+          <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 04</span>
+          <h2 class="text-3xl font-serif text-white">Canonical Naming Architecture</h2>
+          <p class="text-slate-400 text-sm max-w-xl">
+            Naming inconsistency causes cognitive friction for operators and execution errors in coding agents. Use this precise authority ledger for all product references.
+          </p>
+        </div>
+
+        <!-- Naming Authority Grid -->
+        <div class="print-avoid-break overflow-x-auto">
+          <div class="theme-table border border-sovereign-800 rounded-lg overflow-hidden print-border">
+            <table class="w-full text-xs font-mono text-left">
+              <thead>
+                <tr class="bg-sovereign-950 text-slate-400 uppercase tracking-wider border-b border-sovereign-800">
+                  <th class="p-3">Asset Level</th>
+                  <th class="p-3">Canonical Brand Term</th>
+                  <th class="p-3">Forbidden / Deprecated</th>
+                  <th class="p-3">Engineering Definition</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-sovereign-800/60">
+                <tr>
+                  <td class="p-3 font-bold text-white">Master Product</td>
+                  <td class="p-3 text-cyberteal-400">NeuroSync SovereignOS</td>
+                  <td class="p-3 text-alertcrimson">NeuroSync Sovereign OS, NeuralSync</td>
+                  <td class="p-3 text-slate-400">The central local-first workflow cockpit platform. (Note: SovereignOS contains no space before OS).</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">Architecture</td>
+                  <td class="p-3 text-cyberteal-400">SovereignOS</td>
+                  <td class="p-3 text-alertcrimson">Sovereign Suite, Microservice Mesh</td>
+                  <td class="p-3 text-slate-400">The internal modular system ecosystem inside NeuroSync.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">Legacy Baseline</td>
+                  <td class="p-3 text-cyberteal-400">ByteBuster Agent v1.0 Beta</td>
+                  <td class="p-3 text-alertcrimson">ByteBuster Demon, Flat AI</td>
+                  <td class="p-3 text-slate-400">The functional single-process code base foundation.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">Memory Matrix</td>
+                  <td class="p-3 text-cyberteal-400">BaseVault / Cerebro</td>
+                  <td class="p-3 text-alertcrimson">Chroma Engine, Cloud Vector</td>
+                  <td class="p-3 text-slate-400">Persistent SQLite-backed localized project-scoped memory.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">Foresight Sentinel</td>
+                  <td class="p-3 text-cyberteal-400">ScoutDaemon</td>
+                  <td class="p-3 text-alertcrimson">ScoutDemon, TrendOps</td>
+                  <td class="p-3 text-slate-400">Passive background observer and tool quarantine.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-white">User Interface</td>
+                  <td class="p-3 text-cyberteal-400">PortGrid</td>
+                  <td class="p-3 text-alertcrimson">Widget Panel, Dev Console</td>
+                  <td class="p-3 text-slate-400">Human-in-the-loop validation & executive control deck.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>Naming Definitions & Ledger</span>
+        <span>Page 05</span>
+      </div>
+    </div>
+
+
+    <!-- PAGE 06: SOVEREIGNOS PILLARS & LOGOS -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10 uppercase">
+        <span class="font-bold tracking-wide">SovereignOS Pillars</span>
+        <span>Section 05</span>
+      </div>
+
+      <div class="space-y-6 my-auto">
+        <div class="space-y-3">
+          <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 05</span>
+          <h2 class="text-3xl font-serif text-white">Brand Architecture: The 6 Pillars</h2>
+          <p class="text-slate-400 text-sm max-w-xl">
+            SovereignOS is decoupled into six dedicated functional pillars. Each has a designated visual token and strict system boundaries to protect execution flow.
+          </p>
+        </div>
+
+        <!-- 6 Pillars Layout (3x2 Grid) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          
+          <div class="theme-card p-4 rounded-lg bg-sovereign-950/40 border border-sovereign-800 flex flex-col justify-between gap-4 print-border">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500 uppercase">Pillar 01 // Orchestration</span>
+              <img src="COREEXECLogo.png" alt="CoreExec Logo" class="w-8 h-8 object-contain" onerror="this.outerHTML=getFallbackPillarSVG('#0077b6', 'CX')">
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white font-mono">CoreExec</h3>
+              <p class="text-xs text-slate-400 mt-1">Authorized DAG orchestrator, master task queue, and atomic BEGIN IMMEDIATE transaction lease controller.</p>
+            </div>
+          </div>
+
+          <div class="theme-card p-4 rounded-lg bg-sovereign-950/40 border border-sovereign-800 flex flex-col justify-between gap-4 print-border">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500 uppercase">Pillar 02 // Persistence</span>
+              <img src="BASEVAULTLogo.png" alt="BaseVault Logo" class="w-8 h-8 object-contain" onerror="this.outerHTML=getFallbackPillarSVG('#10b981', 'BV')">
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white font-mono">BaseVault</h3>
+              <p class="text-xs text-slate-400 mt-1">SQLite control engine, memory snapshots, data sanitization loops, and local backup/restore pipelines.</p>
+            </div>
+          </div>
+
+          <div class="theme-card p-4 rounded-lg bg-sovereign-950/40 border border-sovereign-800 flex flex-col justify-between gap-4 print-border">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500 uppercase">Pillar 03 // Surface</span>
+              <img src="PORTGRIDLogo.png" alt="PortGrid Logo" class="w-8 h-8 object-contain" onerror="this.outerHTML=getFallbackPillarSVG('#f59e0b', 'PG')">
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white font-mono">PortGrid</h3>
+              <p class="text-xs text-slate-400 mt-1">Interactive operator control deck. Connects the user to validation logs and local verification badges.</p>
+            </div>
+          </div>
+
+          <div class="theme-card p-4 rounded-lg bg-sovereign-950/40 border border-sovereign-800 flex flex-col justify-between gap-4 print-border">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500 uppercase">Pillar 04 // Connectivity</span>
+              <img src="ROUTESWITCHLogo.png" alt="RouteSwitch Logo" class="w-8 h-8 object-contain" onerror="this.outerHTML=getFallbackPillarSVG('#3b82f6', 'RS')">
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white font-mono">RouteSwitch</h3>
+              <p class="text-xs text-slate-400 mt-1">Universal traffic director, provider manager, latency ELO routing engine, and Free Mode Governor.</p>
+            </div>
+          </div>
+
+          <div class="theme-card p-4 rounded-lg bg-sovereign-950/40 border border-sovereign-800 flex flex-col justify-between gap-4 print-border">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500 uppercase">Pillar 05 // Verification</span>
+              <img src="SCOPELOGICLogo.png" alt="ScopeLogic Logo" class="w-8 h-8 object-contain" onerror="this.outerHTML=getFallbackPillarSVG('#8b5cf6', 'SL')">
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white font-mono">ScopeLogic</h3>
+              <p class="text-xs text-slate-400 mt-1">Requirements reviews, asynchronous model consensus mechanisms, and draft-only proposal compilation.</p>
+            </div>
+          </div>
+
+          <div class="theme-card p-4 rounded-lg bg-sovereign-950/40 border border-sovereign-800 flex flex-col justify-between gap-4 print-border">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500 uppercase">Pillar 06 // Foresight</span>
+              <img src="SCOUTDAEMONLogo.png" alt="ScoutDaemon Logo" class="w-8 h-8 object-contain" onerror="this.outerHTML=getFallbackPillarSVG('#ec4899', 'SD')">
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white font-mono">ScoutDaemon</h3>
+              <p class="text-xs text-slate-400 mt-1">Headless scraper, passive resource monitor, environment scanner, and quarantined asset stager.</p>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="theme-card rounded-lg p-5 bg-gradient-to-r from-sovereign-950 to-sovereign-900 border border-sovereign-800 space-y-3 print-avoid-break print-border">
+          <h4 class="text-xs font-mono uppercase tracking-wider text-white font-bold flex items-center gap-2">
+            <span class="w-1.5 h-3 bg-cyberteal-500 inline-block"></span> Crucial Structural Boundaries (Zero-Trust)
+          </h4>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            The system’s claim of "Fortress Security" requires enforcing programmatic boundaries. 
+            <strong class="text-slate-300">ScopeLogic & ScoutDaemon</strong> are strictly prohibited from writing directly to production database tables or self-persisting configurations. They are draft-only mechanisms. Direct write/execution is exclusive to <strong class="text-slate-300">CoreExec</strong> upon explicit operator signature registered in <strong class="text-slate-300">PortGrid</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>6-Project Ecosystem Architecture Map</span>
+        <span>Page 06</span>
+      </div>
+    </div>
+
+
+    <!-- PAGE 07: BRAND PALETTE, TYPOGRAPHY & LAYOUT (Glassmorphism) -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10 uppercase">
+        <span>Visual Style: Palette & Typography</span>
+        <span>Section 06</span>
+      </div>
+
+      <div class="space-y-8 my-auto">
+        <div class="space-y-3">
+          <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 06</span>
+          <h2 class="text-3xl font-serif text-white">Visual Identity System</h2>
+          <p class="text-slate-400 text-sm max-w-xl">
+            The visual language reflects premium tactical command: deep, structural backgrounds accentuated by vibrant status markers indicating zero-trust safety.
+          </p>
+        </div>
+
+        <!-- Palette Swatches -->
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-4">
+          <div class="theme-card rounded-lg border border-sovereign-800 overflow-hidden bg-sovereign-950 flex flex-col h-32 justify-between p-3 print-border print-no-shadow">
+            <div class="h-8 w-8 rounded-full bg-sovereign-900 border border-sovereign-700"></div>
+            <div>
+              <span class="text-xs font-bold text-white block">Sovereign Navy</span>
+              <span class="text-[10px] font-mono text-slate-400">HEX: #0B132B</span>
+              <span class="text-[9px] font-mono text-slate-500 block">CMYK: 92, 78, 41, 48</span>
+            </div>
+          </div>
+          <div class="theme-card rounded-lg border border-sovereign-800 overflow-hidden bg-sovereign-950 flex flex-col h-32 justify-between p-3 print-border print-no-shadow">
+            <div class="h-8 w-8 rounded-full bg-[#0077b6]"></div>
+            <div>
+              <span class="text-xs font-bold text-white block">Cyber Teal</span>
+              <span class="text-[10px] font-mono text-slate-400">HEX: #0077B6</span>
+              <span class="text-[9px] font-mono text-slate-500 block">CMYK: 88, 48, 0, 0</span>
+            </div>
+          </div>
+          <div class="theme-card rounded-lg border border-sovereign-800 overflow-hidden bg-sovereign-950 flex flex-col h-32 justify-between p-3 print-border print-no-shadow">
+            <div class="h-8 w-8 rounded-full bg-[#10b981]"></div>
+            <div>
+              <span class="text-xs font-bold text-white block">Local Emerald</span>
+              <span class="text-[10px] font-mono text-slate-400">HEX: #10B981</span>
+              <span class="text-[9px] font-mono text-slate-500 block">CMYK: 73, 0, 61, 0</span>
+            </div>
+          </div>
+          <div class="theme-card rounded-lg border border-sovereign-800 overflow-hidden bg-sovereign-950 flex flex-col h-32 justify-between p-3 print-border print-no-shadow">
+            <div class="h-8 w-8 rounded-full bg-[#f59e0b]"></div>
+            <div>
+              <span class="text-xs font-bold text-white block">Warning Gold</span>
+              <span class="text-[10px] font-mono text-slate-400">HEX: #F59E0B</span>
+              <span class="text-[9px] font-mono text-slate-500 block">CMYK: 0, 42, 97, 4</span>
+            </div>
+          </div>
+          <div class="theme-card rounded-lg border border-sovereign-800 overflow-hidden bg-sovereign-950 flex flex-col h-32 justify-between p-3 print-border print-no-shadow">
+            <div class="h-8 w-8 rounded-full bg-[#ef4444]"></div>
+            <div>
+              <span class="text-xs font-bold text-white block">Alert Crimson</span>
+              <span class="text-[10px] font-mono text-slate-400">HEX: #EF4444</span>
+              <span class="text-[9px] font-mono text-slate-500 block">CMYK: 0, 85, 78, 6</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Typography & Layout Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+          <div class="space-y-4 print-avoid-break">
+            <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300">Typography Hierarchy</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              We employ a highly structured, triple-tier font classification system designed to distinguish between narrative direction and raw telemetry.
+            </p>
+            <div class="theme-card space-y-3 bg-sovereign-950/60 p-4 rounded-lg border border-sovereign-800 print-border">
+              <div class="border-b border-sovereign-800/60 pb-2">
+                <span class="text-[10px] font-mono text-slate-500 block uppercase">Primary Narrative (Titles & Editorial)</span>
+                <span class="font-serif text-xl text-white">Playfair Display Serif</span>
+                <span class="text-xs text-slate-400 block mt-1">Usage: Cover titles, major report headings.</span>
+              </div>
+              <div class="border-b border-sovereign-800/60 pb-2">
+                <span class="text-[10px] font-mono text-slate-500 block uppercase">UI Body & General Runtime</span>
+                <span class="font-sans font-medium text-slate-200">Inter Sans-Serif</span>
+                <span class="text-xs text-slate-400 block mt-1">Usage: App controls, descriptions, cockpit labels.</span>
+              </div>
+              <div>
+                <span class="text-[10px] font-mono text-slate-500 block uppercase">Logs, Metrics, Code & Telemetry</span>
+                <span class="font-mono text-xs text-cyberteal-400">Fira Code Monospace</span>
+                <span class="text-xs text-slate-400 block mt-1">Usage: File-paths, JSON outputs, metadata.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-4 print-avoid-break">
+            <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300">Layout System: Glassmorphism</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              In digital screens, PortGrid must avoid flat solid blocks. The visual promise of "Executive Control" is achieved through glass layers placed over abstract grid lines.
+            </p>
+            <div class="theme-card p-5 rounded-xl bg-gradient-to-tr from-sovereign-950/90 to-sovereign-900/60 border border-sovereign-800 shadow-xl space-y-3 relative overflow-hidden print-border print-no-shadow">
+              <!-- Grid Backdrop lines simulation -->
+              <div class="absolute inset-0 bg-[linear-gradient(to_right,#1c2d42_1px,transparent_1px),linear-gradient(to_bottom,#1c2d42_1px,transparent_1px)] bg-[size:16px_16px] opacity-10"></div>
+              
+              <div class="relative z-10 space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="w-3 h-3 rounded-full bg-cyberteal-500 shadow-sm shadow-cyberteal-500/50"></span>
+                  <span class="text-xs font-mono font-bold text-white uppercase tracking-wider">Visual Formula</span>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed">
+                  Glass components feature <strong>backdrop-blur (12px)</strong>, <strong>semi-transparent background alphas (0.75)</strong>, and a crisp <strong>1px white stroke at 0.08 opacity</strong>.
+                </p>
+                <div class="p-2.5 bg-white/5 rounded text-[11px] font-mono text-cyberteal-300 border border-white/5 inline-block">
+                  backdrop-filter: blur(12px);
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>Brand Palette, Typography & Layout Tokens</span>
+        <span>Page 07</span>
+      </div>
+    </div>
+
+
+    <!-- PAGE 08: PORTGRID COCKPIT BRAND RULES & VERIFIABLE EVIDENCE -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10 uppercase">
+        <span>PortGrid: Digital Environments</span>
+        <span>Section 07</span>
+      </div>
+
+      <div class="space-y-8 my-auto">
+        <div class="space-y-3">
+          <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 07</span>
+          <h2 class="text-3xl font-serif text-white">PortGrid Cockpit & UI Security</h2>
+          <p class="text-slate-400 text-sm max-w-xl">
+            In local-first, zero-trust systems, the interface is not a decorative layer. How information is displayed directly impacts how safely the operator runs the machine.
+          </p>
+        </div>
+
+        <!-- Local Proof Badges Detail -->
+        <div class="space-y-4 print-avoid-break">
+          <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300">The 6 Local Proof Badges</h3>
+          <p class="text-xs text-slate-400">
+            Every AI generation output or run action must explicitly render one or more verified badges representing execution boundaries:
+          </p>
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 font-mono text-xs">
+            
+            <div class="theme-card p-3 bg-sovereign-950/60 border border-sovereign-800 rounded-lg space-y-1 print-border">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-localemerald/20 text-localemerald border border-localemerald/30 uppercase">Local Only</span>
+              <p class="text-[11px] text-slate-400 leading-tight">No external model provider or network calls were initiated during node execution.</p>
+            </div>
+
+            <div class="theme-card p-3 bg-sovereign-950/60 border border-sovereign-800 rounded-lg space-y-1 print-border">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyberteal-500/20 text-cyberteal-300 border border-cyberteal-500/30 uppercase">Redacted First</span>
+              <p class="text-[11px] text-slate-400 leading-tight">PII, security tokens, and host configurations were scrubbed before external routing.</p>
+            </div>
+
+            <div class="theme-card p-3 bg-sovereign-950/60 border border-sovereign-800 rounded-lg space-y-1 print-border">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-warninggold/20 text-warninggold border border-warninggold/30 uppercase">Human Approved</span>
+              <p class="text-[11px] text-slate-400 leading-tight">User has manually signed off on file modifications or privileged tool execution.</p>
+            </div>
+
+            <div class="theme-card p-3 bg-sovereign-950/60 border border-sovereign-800 rounded-lg space-y-1 print-border">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyberteal-500/20 text-cyberteal-300 border border-cyberteal-500/30 uppercase">Source Linked</span>
+              <p class="text-[11px] text-slate-400 leading-tight">Output maintains a strict 1:1 trace integrity link to verified local files.</p>
+            </div>
+
+            <div class="theme-card p-3 bg-sovereign-950/60 border border-sovereign-800 rounded-lg space-y-1 print-border">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-alertcrimson/20 text-alertcrimson border border-alertcrimson/30 uppercase">Low Confidence</span>
+              <p class="text-[11px] text-slate-400 leading-tight">Validation checks detected structural anomalies; manual verification is required.</p>
+            </div>
+
+            <div class="theme-card p-3 bg-sovereign-950/60 border border-sovereign-800 rounded-lg space-y-1 print-border">
+              <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-localemerald/20 text-localemerald border border-localemerald/30 uppercase">Quota Active</span>
+              <p class="text-[11px] text-slate-400 leading-tight">Free Mode Governor active; token budgets capped within project constraints.</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Confidence Score Scaling -->
+        <div class="space-y-4 print-avoid-break">
+          <h3 class="text-sm font-semibold tracking-wider uppercase text-slate-300">Confidence Score Visualization Scale</h3>
+          <p class="text-xs text-slate-400">
+            Never show a precise confidence float without a programmatic formula validation. Instead, map the generated synthesis into clean qualitative brackets:
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 font-mono text-xs">
+            <div class="theme-card p-3 rounded-lg border border-localemerald/20 bg-localemerald/5 flex justify-between items-center print-border">
+              <div>
+                <span class="font-bold text-localemerald block">95% + Verified</span>
+                <span class="text-[10px] text-slate-400">Gold / Absolute compliance</span>
+              </div>
+              <span class="w-3 h-3 rounded-full bg-localemerald animate-pulse"></span>
+            </div>
+
+            <div class="theme-card p-3 rounded-lg border border-warninggold/20 bg-warninggold/5 flex justify-between items-center print-border">
+              <div>
+                <span class="font-bold text-warninggold block">80% - 94% Review Block</span>
+                <span class="text-[10px] text-slate-400">Amber / Human edit advised</span>
+              </div>
+              <span class="w-3 h-3 rounded-full bg-warninggold"></span>
+            </div>
+
+            <div class="theme-card p-3 rounded-lg border border-alertcrimson/20 bg-alertcrimson/5 flex justify-between items-center print-border">
+              <div>
+                <span class="font-bold text-alertcrimson block">&lt; 80% Quarantine</span>
+                <span class="text-[10px] text-slate-400">Red / Manual rewrite required</span>
+              </div>
+              <span class="w-3 h-3 rounded-full bg-alertcrimson"></span>
+            </div>
+
+            <div class="theme-card p-3 rounded-lg border border-sovereign-700 bg-sovereign-800/40 flex justify-between items-center print-border">
+              <div>
+                <span class="font-bold text-slate-400 block">Unknown</span>
+                <span class="text-[10px] text-slate-500">Gray / Insufficient footprint</span>
+              </div>
+              <span class="w-3 h-3 rounded-full bg-slate-600"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>PortGrid Operator Deck Compliance Rules</span>
+        <span>Page 08</span>
+      </div>
+    </div>
+
+
+    <!-- PAGE 09: CORPORATE GOVERNANCE & VERSION CONTROL -->
+    <div class="min-h-[297mm] p-12 sm:p-20 flex flex-col justify-between bg-sovereign-900 text-slate-300 print-page-break print-no-shadow">
+      <div class="flex items-center justify-between text-xs font-mono tracking-widest text-slate-500 border-b border-sovereign-800/40 pb-3 mb-10 uppercase">
+        <span>Corporate Governance</span>
+        <span>Section 08</span>
+      </div>
+
+      <div class="space-y-8 my-auto">
+        <div class="space-y-3">
+          <span class="text-xs font-mono uppercase bg-cyberteal-950 text-cyberteal-400 px-2 py-1 rounded border border-cyberteal-500/20 inline-block">Section 08</span>
+          <h2 class="text-3xl font-serif text-white">Brand Stewardship & Governance</h2>
+          <p class="text-slate-400 text-sm max-w-xl">
+            This document serves as the immutable source of truth for all NeuroSync SovereignOS identity execution. To prevent architectural naming drift, strict operational oversight is enforced.
+          </p>
+        </div>
+
+        <div class="space-y-6 print-avoid-break">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <div class="theme-card bg-sovereign-950/40 border border-sovereign-800 p-4 rounded-lg print-border">
+              <strong class="text-white block font-mono text-xs uppercase tracking-wider mb-1">Brand Stewards</strong>
+              <p class="text-slate-400">ByteBuster Cognitive Nexus Engineering Team</p>
+            </div>
+            <div class="theme-card bg-sovereign-950/40 border border-sovereign-800 p-4 rounded-lg print-border">
+              <strong class="text-white block font-mono text-xs uppercase tracking-wider mb-1">Contact Routing</strong>
+              <p class="text-slate-400 font-mono text-xs">nexus-ops@bytebuster-tools.online</p>
+            </div>
+          </div>
+          
+          <div class="theme-card bg-sovereign-950/40 border border-sovereign-800 p-4 rounded-lg print-border text-sm text-slate-300 leading-relaxed">
+            <strong class="text-white font-semibold">System Governance Protocol:</strong> Any proposed changes to the UI/UX tokens, modular naming structures, sub-brand designs, or departures from these core standards must be logged formally in the version tracking matrix below and approved by the designated Brand Stewards prior to engineering implementation.
+          </div>
+        </div>
+
+        <!-- Version Control Table -->
+        <div class="print-avoid-break overflow-x-auto mt-6">
+          <div class="theme-table border border-sovereign-800 rounded-lg overflow-hidden print-border">
+            <table class="w-full text-xs font-mono text-left">
+              <thead>
+                <tr class="bg-sovereign-950 text-slate-400 uppercase tracking-wider border-b border-sovereign-800">
+                  <th class="p-3">Version</th>
+                  <th class="p-3">Date</th>
+                  <th class="p-3">Author</th>
+                  <th class="p-3">Approver</th>
+                  <th class="p-3">Summary of Structural Changes</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-sovereign-800/60">
+                <tr>
+                  <td class="p-3 font-bold text-cyberteal-400">v1.0 Baseline</td>
+                  <td class="p-3 text-slate-400">June 21, 2026</td>
+                  <td class="p-3 text-slate-400">Corporate Brand Strategy</td>
+                  <td class="p-3 text-slate-400">ByteBuster Nexus</td>
+                  <td class="p-3 text-slate-400">Initial deployment of the comprehensive Master Brand Guide. Established SovereignOS core, canonical naming, SVG logo constraints, and PortGrid UX rules.</td>
+                </tr>
+                <tr>
+                  <td class="p-3 font-bold text-cyberteal-400">v1.1 Update</td>
+                  <td class="p-3 text-slate-400">June 21, 2026</td>
+                  <td class="p-3 text-slate-400">AI Documentation Agent</td>
+                  <td class="p-3 text-slate-400">Billie</td>
+                  <td class="p-3 text-slate-400">Strict enforcement of NeuroSync SovereignOS naming (no spaces, no ALL CAPS). Deprecation of legacy marketing phrasing. Integrated Master Identity PDF structure.</td>
+                </tr>
+                <!-- Empty rows for future logging -->
+                <tr><td class="p-5"></td><td></td><td></td><td></td><td></td></tr>
+                <tr><td class="p-5"></td><td></td><td></td><td></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="border-t border-sovereign-800/40 pt-4 text-xs font-mono text-slate-500 flex justify-between uppercase">
+        <span>Governance, Compliance Audits & Tracking</span>
+        <span>Page 09</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Script for toggling view/print presentation modes on-screen -->
+  <script>
+    let isPrintSimulated = false;
+
+    // Helper functions for Fallback SVGs
+    function getFallbackLogoSVG(label) {
+      return `
+        <div class="flex items-center gap-2">
+          <svg class="h-10 w-10 text-cyberteal-500" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L2 22h20L12 2zm0 3.99L19.53 19H4.47L12 5.99zM13 16h-2v2h2v-2zm0-6h-2v4h2v-4z"/>
+          </svg>
+          <span class="font-serif font-extrabold text-xl tracking-tight text-white">${label}</span>
+        </div>
+      `;
+    }
+
+    function getFallbackPillarSVG(colorHex, shortInit) {
+      return `
+        <svg class="w-8 h-8" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="50,5 90,28 90,72 50,95 10,72 10,28" fill="rgba(255,255,255,0.03)" stroke="${colorHex}" stroke-width="3" opacity="0.95"/>
+          <text x="50%" y="58%" font-family="monospace" font-weight="bold" font-size="28" fill="${colorHex}" text-anchor="middle">${shortInit}</text>
+        </svg>
+      `;
+    }
+
+    function toggleViewMode() {
+      const body = document.getElementById('brand-body');
+      const docPaper = document.getElementById('document-paper');
+      const toggleBtn = document.getElementById('toggle-view-btn');
+      const banner = document.getElementById('notification-banner');
+      
+      isPrintSimulated = !isPrintSimulated;
+      
+      if (isPrintSimulated) {
+        // Switch to simulated paper view
+        body.classList.remove('bg-sovereign-950');
+        body.classList.add('bg-slate-300');
+        
+        docPaper.classList.remove('bg-sovereign-900', 'border-sovereign-800');
+        docPaper.classList.add('bg-white', 'text-slate-800', 'border-slate-400');
+        
+        // Update styled cards
+        document.querySelectorAll('.theme-card').forEach(card => {
+          card.classList.remove('bg-sovereign-950/40', 'bg-sovereign-950/60', 'border-sovereign-800');
+          card.classList.add('bg-slate-50', 'border-slate-300', 'text-slate-800');
+          const h3 = card.querySelector('h3');
+          if(h3) h3.classList.add('text-slate-900');
+          // Fix specific badge colors overriding in light mode
+          card.classList.remove('text-slate-400'); 
+        });
+
+        // Update styled tables
+        document.querySelectorAll('.theme-table').forEach(tbl => {
+          tbl.classList.remove('border-sovereign-800');
+          tbl.classList.add('border-slate-300');
+          const thead = tbl.querySelector('thead tr');
+          if(thead) {
+              thead.classList.add('bg-slate-100', 'border-slate-300');
+              thead.classList.remove('bg-sovereign-950', 'border-sovereign-800');
+          }
+        });
+
+        document.querySelectorAll('.theme-table tbody tr').forEach(row => {
+          row.classList.remove('divide-sovereign-800/60');
+          row.querySelectorAll('td').forEach(td => td.classList.add('text-slate-900'));
+        });
+
+        // UI button update
+        toggleBtn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warninggold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+          <span>Command Center View</span>
+        `;
+        banner.innerHTML = `💻 <strong class="text-white">Print Simulation Active:</strong> Simulating real white-paper presentation. Visual styling adapts precisely to PDF outputs.`;
+      } else {
+        // Revert to dark command cockpit view
+        body.classList.add('bg-sovereign-950');
+        body.classList.remove('bg-slate-300');
+        
+        docPaper.classList.add('bg-sovereign-900', 'border-sovereign-800');
+        docPaper.classList.remove('bg-white', 'text-slate-800', 'border-slate-400');
+
+        document.querySelectorAll('.theme-card').forEach(card => {
+          card.classList.add('bg-sovereign-950/40', 'border-sovereign-800');
+          card.classList.remove('bg-slate-50', 'border-slate-300', 'text-slate-800', 'text-slate-900');
+          const h3 = card.querySelector('h3');
+          if(h3) h3.classList.remove('text-slate-900');
+        });
+
+        document.querySelectorAll('.theme-table').forEach(tbl => {
+          tbl.classList.add('border-sovereign-800');
+          tbl.classList.remove('border-slate-300');
+          const thead = tbl.querySelector('thead tr');
+          if(thead) {
+              thead.classList.remove('bg-slate-100', 'border-slate-300');
+              thead.classList.add('bg-sovereign-950', 'border-sovereign-800');
+          }
+        });
+
+        document.querySelectorAll('.theme-table tbody tr').forEach(row => {
+          row.classList.add('divide-sovereign-800/60');
+          row.querySelectorAll('td').forEach(td => td.classList.remove('text-slate-900'));
+        });
+
+        toggleBtn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.364l-.707-.707M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span>Simulate Print Layout</span>
+        `;
+        banner.innerHTML = `✨ <strong class="text-white">Print Optimization Active:</strong> Page breaks are programmatically configured. Click the <span class="bg-cyberteal-950/80 px-1 border border-cyberteal-500/30 rounded font-mono text-white">Print / PDF</span> button to generate a clean compliance report.`;
+      }
+    }
+  </script>
+</body>
+</html>

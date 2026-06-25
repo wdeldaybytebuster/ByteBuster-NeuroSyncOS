@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+.env.*
+cookies.txt
+cookies2.txt
+
+# GitNexus
+.gitnexus/
+
+# Build output
+dist/
+
+# Data files (SQLite)
+.data/*.db
+.data/*.db-shm
+.data/*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Cache
+.cache/
+*.tsbuildinfo
+.data/.master.key

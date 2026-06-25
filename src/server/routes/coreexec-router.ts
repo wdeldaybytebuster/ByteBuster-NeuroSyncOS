@@ -1,0 +1,111 @@
+import { Hono } from 'hono';
+import { db } from '../../core/basevault/db';
+import crypto from 'crypto';
+import { executeRun } from '../../core/coreexec/engine';
+import {
+  validateDAGProposal,
+  validateDAGTemplate,
+  escalateBlockedDAGToOsTodos,
+} from '../../core/coreexec/validateDAG';
+
+export const coreexecRouter = new Hono();
+
+/**
+ * §3.4 — /api/coreexec/approve gate: each interactive approval is run through
+ * the shared DAG validator BEFORE any DB writes or executeRun kickoff.
+ * Matches the gate in coreexec/scheduler.ts so both the cron path and the
+ * interactive approval path refuse to launch invalid DAGs.
+ */
+coreexecRouter.post('/approve', async (c) => {
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch (_e) {
+    return c.json({ error: 'Invalid JSON body.' }, 400);
+  }
+
+  const proposal = body?.proposal;
+  if (!proposal || !Array.isArray(proposal.nodes)) {
+    return c.json({ error: 'Invalid proposal (must have a nodes array).' }, 400);
+  }
+
+  // §3.4 — single validator gate, shared with scheduler.ts.
+  const { error } = validateDAGProposal(proposal);
+  if (error) {
+    const placeholderRunId = `pending-approve-${crypto.randomUUID()}`;
+    escalateBlockedDAGToOsTodos(placeholderRunId, error, 'approve-route');
+    return c.json({ error }, 400);
+  }
+
+  const runId = crypto.randomUUID();
+  const projectId = body.projectId || crypto.randomUUID();
+
+  db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+    projectId,
+    'ScopeLogic Session',
+    Date.now(),
+  );
+
+  const dagLayout = JSON.stringify({ nodes: proposal.nodes });
+  db.prepare(
+    'INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).run(runId, projectId, dagLayout, 'pending', Date.now());
+
+  const insertTask = db.prepare(
+    'INSERT INTO tasks (id, run_id, status, claim_lease, output_data) VALUES (?, ?, ?, ?, ?)',
+  );
+  for (const node of proposal.nodes) {
+    insertTask.run(node.id, runId, 'unclaimed', null, null);
+  }
+
+  executeRun(runId).catch((err) => console.error('Run failed:', err));
+
+  return c.json({ success: true, runId, message: `DAG approved. Run ${runId} started.` });
+});
+
+coreexecRouter.get('/run/:runId/status', (c) => {
+  try {
+    const { runId } = c.req.param();
+    const run = db.prepare('SELECT id, status FROM workflow_runs WHERE id = ?').get(runId) as any;
+    if (!run) return c.json({ error: 'Run not found' }, 404);
+
+    const tasks = db.prepare('SELECT id, status, output_data FROM tasks WHERE run_id = ?').all(runId);
+    return c.json({ runId, status: run.status, tasks });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// §1.3 — Retry failed/parked tasks for an existing run.
+// §3.4 — Re-validates `workflow_runs.dag_layout` before retrying. A run may
+// have been inserted when /approve vetted the proposal, but AdminSQL or a
+// backup-restore can mutate dag_layout after the fact. The original DB-bypass
+// class re-opens if retry trusts the layout blindly.
+coreexecRouter.post('/retry/:runId', async (c) => {
+  try {
+    const { runId } = c.req.param();
+    const run = db
+      .prepare('SELECT id, status, dag_layout FROM workflow_runs WHERE id = ?')
+      .get(runId) as any;
+    if (!run) return c.json({ error: 'Run not found' }, 404);
+
+    const { error: layoutError } = validateDAGTemplate(run.dag_layout);
+    if (layoutError) {
+      escalateBlockedDAGToOsTodos(runId, layoutError, 'approve-route');
+      return c.json({ error: layoutError }, 400);
+    }
+
+    db.prepare(
+      `UPDATE tasks
+       SET status = 'unclaimed', claim_lease = NULL
+       WHERE run_id = ? AND status IN ('failed', 'parked')`,
+    ).run(runId);
+    db.prepare("UPDATE workflow_runs SET status = 'pending' WHERE id = ?").run(runId);
+
+    executeRun(runId).catch((err) => console.error('Run retry failed:', err));
+
+    return c.json({ success: true, runId, message: `Retry started for ${runId}.` });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
