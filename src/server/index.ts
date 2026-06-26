@@ -86,6 +86,10 @@ app.route('/api/scout', scoutRouter);
 import { idleDetector } from '../core/scoutdaemon/idle';
 idleDetector.start();
 
+import telemetryRouter from './routes/telemetry';
+// Mount Telemetry
+app.route('/api/telemetry', telemetryRouter);
+
 import { systemRouter } from './routes/system';
 // Mount System Telemetry & Config
 app.route('/api/system', systemRouter);
