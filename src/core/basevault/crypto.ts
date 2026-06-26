@@ -38,6 +38,7 @@ export function decrypt(hexString: string): string {
   const parts = hexString.split(':');
   if (parts.length !== 3) return hexString;
   const [ivHex, authTagHex, encryptedHex] = parts;
+  if (!ivHex || !authTagHex || !encryptedHex) return hexString;
   const decipher = crypto.createDecipheriv(ALGO, MASTER_KEY, Buffer.from(ivHex, 'hex'));
   decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
   let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');

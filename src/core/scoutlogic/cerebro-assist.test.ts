@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CerebroAssistPipeline } from './cerebro-assist';
-import { ZenDiscoveryService } from '../routeswitch/discovery';
+import { ZenDiscoveryService, ModelDiscovery } from '../routeswitch/discovery';
 import { db } from '../basevault/db';
 
 describe('CerebroAssistPipeline', () => {
@@ -65,7 +65,6 @@ describe('ModelDiscovery db Atomic Batch Insertion', () => {
       })
     });
 
-    const { ModelDiscovery } = await import('../routeswitch/discovery');
     await ModelDiscovery.fetchModels();
 
     const stmt = db.prepare('SELECT count(*) as count FROM discovered_models');

@@ -19,6 +19,7 @@ export async function executeWithFallback(
 
   for (let i = 0; i < currentChain.length; i++) {
     const model = currentChain[i];
+    if (!model) continue;
     const state = ProviderHealthState.getState(model);
     
     if (state.isExhausted) {
