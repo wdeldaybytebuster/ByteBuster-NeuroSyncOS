@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 
 
-export function ScopeLogicDashboard() {
+export function PortGridDashboard() {
   useEffect(() => {
     // Make sure lucid icons render on initial mount
     try {
@@ -13,45 +13,45 @@ export function ScopeLogicDashboard() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-        /* CSS Variable System for Stealth Black & Cyber Cyan Morphing */
+        /* CSS Variable System for Cyan-Teal-to-Mint Theme Morphing */
         :root {
-            /* Dark Mode: Cyber-Cyan & Stealth Black Space */
-            --bg-base: #030303;
-            --bg-surface: #0a0a0c;
-            --bg-surface-glass: rgba(10, 10, 12, 0.85);
-            --bg-nested: rgba(0, 229, 255, 0.01);
-            --border-glow: rgba(0, 229, 255, 0.08);
+            /* Dark Mode: Cyber-Teal & Deep Obsidian Space */
+            --bg-base: #020a07;
+            --bg-surface: #071914;
+            --bg-surface-glass: rgba(7, 25, 20, 0.75);
+            --bg-nested: rgba(0, 255, 204, 0.03);
+            --border-glow: rgba(0, 255, 204, 0.2);
             --text-primary: #fafafa;
-            --text-muted: #a1a1aa;
-            --accent: #00E5FF;
-            --accent-glow: rgba(0, 229, 255, 0.2);
-            --card-border: rgba(39, 39, 42, 0.8);
-            --grid-color: rgba(0, 229, 255, 0.01);
-            --grid-line: rgba(255, 255, 255, 0.005);
-            --glow-color: rgba(0, 229, 255, 0.05);
-            --logo-accent: #00E5FF;
-            --terminal-bg: #050505;
-            --terminal-text: #00E5FF;
+            --text-muted: #86efac;
+            --accent: #00FFCC;
+            --accent-glow: rgba(0, 255, 204, 0.4);
+            --card-border: rgba(13, 148, 136, 0.4);
+            --grid-color: rgba(0, 255, 204, 0.03);
+            --grid-line: rgba(0, 255, 204, 0.015);
+            --glow-color: rgba(0, 255, 204, 0.15);
+            --logo-accent: #00FFCC;
+            --terminal-bg: #010806;
+            --terminal-text: #00FFCC;
         }
 
         .light {
-            /* Light Mode: Structured Paper & Deep Cyan Slate */
-            --bg-base: #f8fafc;
+            /* Light Mode: Mint sky paper & rich forest green text - Highly textured & super readable */
+            --bg-base: #f0fdf4;
             --bg-surface: #ffffff;
-            --bg-surface-glass: rgba(255, 255, 255, 0.9);
-            --bg-nested: rgba(14, 116, 144, 0.03);
-            --border-glow: rgba(14, 116, 144, 0.05);
-            --text-primary: #0f172a;
-            --text-muted: #64748b;
-            --accent: #0891b2;
-            --accent-glow: rgba(8, 145, 178, 0.15);
-            --card-border: rgba(226, 232, 240, 0.8);
-            --grid-color: rgba(14, 116, 144, 0.02);
-            --grid-line: rgba(14, 116, 144, 0.01);
-            --glow-color: rgba(14, 116, 144, 0.02);
-            --logo-accent: #0891b2;
-            --terminal-bg: #0f172a;
-            --terminal-text: #38bdf8;
+            --bg-surface-glass: rgba(255, 255, 255, 0.85);
+            --bg-nested: rgba(13, 148, 136, 0.05);
+            --border-glow: rgba(13, 148, 136, 0.15);
+            --text-primary: #064e3b;
+            --text-muted: #0d9488;
+            --accent: #0d9488;
+            --accent-glow: rgba(13, 148, 136, 0.35);
+            --card-border: rgba(13, 148, 136, 0.2);
+            --grid-color: rgba(13, 148, 136, 0.05);
+            --grid-line: rgba(13, 148, 136, 0.02);
+            --glow-color: rgba(13, 148, 136, 0.08);
+            --logo-accent: #0d9488;
+            --terminal-bg: #09090b;
+            --terminal-text: #2dd4bf;
         }
 
         body {
@@ -66,20 +66,20 @@ export function ScopeLogicDashboard() {
             transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
         }
 
-        /* Technical Low-Glow Stealth Card Design */
+        /* Technical Glow and Shadow Box Effects - Highly Interactive */
         .glow-card {
             border: 1px solid var(--card-border);
             background-color: var(--bg-surface-glass);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 5px var(--glow-color);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .glow-card:hover {
             border-color: var(--accent);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 12px var(--accent-glow);
-            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+            transform: translateY(-2px);
         }
 
         /* Focus rings */
@@ -116,12 +116,16 @@ export function ScopeLogicDashboard() {
 
             
             <div className="w-8 h-8 rounded-lg flex items-center justify-center">
-                <svg id="scopelogic-logo" viewBox="0 0 100 100" className="w-8 h-8 transition-all duration-300 text-[var(--accent)]">
-                    <polygon points="50,15 90,80 10,80" fill="rgba(0,229,255,0.05)" stroke="currentColor" strokeWidth="2" opacity="0.6"/>
-                    <circle cx="50" cy="55" r="30" fill="none" stroke="#C0C0C0" strokeWidth="1" stroke-dasharray="3 3" opacity="0.5"/>
-                    <g transform="translate(50,58) scale(0.5) translate(-50,-50)">
+                <svg id="portgrid-logo" viewBox="0 0 100 100" className="w-8 h-8 transition-all duration-300 text-[var(--accent)]">
+                    <rect x="15" y="15" width="20" height="20" rx="4" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4"/>
+                    <rect x="65" y="15" width="20" height="20" rx="4" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4"/>
+                    <rect x="15" y="65" width="20" height="20" rx="4" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4"/>
+                    <rect x="65" y="65" width="20" height="20" rx="4" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.4"/>
+                    <line x1="50" y1="10" x2="50" y2="90" stroke="currentColor" strokeWidth="1" stroke-dasharray="2 4" opacity="0.5"/>
+                    <line x1="10" y1="50" x2="90" y2="50" stroke="currentColor" strokeWidth="1" stroke-dasharray="2 4" opacity="0.5"/>
+                    <g transform="translate(50,50) scale(0.55) translate(-50,-50)">
                         <g transform="rotate(45,50,50)">
-                            <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(0,229,255,0.1)" stroke="currentColor" strokeWidth="4" strokeLinejoin="round"/>
+                            <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(0,255,204,0.1)" stroke="currentColor" strokeWidth="4" strokeLinejoin="round"/>
                             <rect x="46" y="74" width="3" height="5" fill="#0D0E15"/>
                             <rect x="51" y="74" width="3" height="5" fill="#0D0E15"/>
                             <rect x="48" y="40" width="4" height="24" rx="2" fill="currentColor" />
@@ -131,7 +135,7 @@ export function ScopeLogicDashboard() {
             </div>
             
             <div className="hidden sm:block">
-                <span className="font-black text-sm tracking-wider uppercase bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] via-[var(--accent)] to-[var(--text-primary)]">SCOPELOGIC ENGINE</span>
+                <span className="font-black text-sm tracking-wider uppercase bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] via-[var(--accent)] to-[var(--text-primary)]">PORTGRID COCKPIT</span>
                 <span className="text-[9px] uppercase font-semibold text-[var(--text-muted)] tracking-widest block -mt-1">NeuroSync Sovereign Suite</span>
             </div>
         </div>
@@ -191,23 +195,23 @@ export function ScopeLogicDashboard() {
                 <span className="text-xs font-bold uppercase tracking-wider">BaseVault (Database)</span>
             </button>
 
-            <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="grid-3x3" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">PortGrid (Skills Hub)</span>
-            </button>
+            <a href="#" className="flex items-center justify-between p-3 rounded-xl bg-[var(--accent)]/10 border border-[var(--accent)] text-[var(--text-primary)] transition focusable">
+                <div className="flex items-center space-x-3">
+                    <i data-lucide="grid-3x3" className="w-4 h-4 text-[var(--accent)]"></i>
+                    <span className="text-xs font-bold uppercase tracking-wider">PortGrid (Skills Hub)</span>
+                </div>
+                <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse"></span>
+            </a>
 
             <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
                 <i data-lucide="shuffle" className="w-4 h-4 mr-3"></i>
                 <span className="text-xs font-bold uppercase tracking-wider">RouteSwitch (Router)</span>
             </button>
 
-            <a href="#" className="flex items-center justify-between p-3 rounded-xl bg-[var(--accent)]/10 border border-[var(--accent)] text-[var(--text-primary)] transition focusable">
-                <div className="flex items-center space-x-3">
-                    <i data-lucide="file-question" className="w-4 h-4 text-[var(--accent)]"></i>
-                    <span className="text-xs font-bold uppercase tracking-wider">ScopeLogic (Proposal)</span>
-                </div>
-                <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse"></span>
-            </a>
+            <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
+                <i data-lucide="file-question" className="w-4 h-4 mr-3"></i>
+                <span className="text-xs font-bold uppercase tracking-wider">ScopeLogic (Proposal)</span>
+            </button>
 
             <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
                 <i data-lucide="radar" className="w-4 h-4 mr-3"></i>
@@ -274,35 +278,14 @@ export function ScopeLogicDashboard() {
             </div>
 
             
-            <div className="bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg p-3 space-y-3">
-                <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center space-x-1.5">
-                    <i data-lucide="chart-spline" className="w-3.5 h-3.5 text-[var(--accent)]"></i>
-                    <span>ScopeLogic Telemetry</span>
-                </span>
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed font-medium">
-                    Real-time metrics tracking requirements extraction ELO benchmarks.
-                </p>
-                <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                        <span>Syntactic Grammar Adherence</span>
-                        <span className="text-green-500 font-bold">100%</span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                        <span>Average Interview Cycles</span>
-                        <span className="text-[var(--accent)] font-bold">5.4 rounds</span>
-                    </div>
-                </div>
-            </div>
-
-            
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase">ScopeLogic Activity Log</label>
+                    <label className="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase">PortGrid Activity Log</label>
                     <button  className="text-[10px] text-[var(--accent)] hover:underline font-bold">Clear</button>
                 </div>
                 <div id="pino-logger" className="w-full h-44 bg-zinc-950 border border-[var(--card-border)] rounded-lg p-2 font-mono text-[9px] text-zinc-300 overflow-y-auto space-y-1">
-                    <div className="text-zinc-500">INIT: ScopeLogic requirements parser loaded...</div>
-                    <div className="text-zinc-500">INIT: Grammar Constraint Engine (XGrammar) active...</div>
+                    <div className="text-zinc-500 font-bold">INIT: PortGrid Registry active...</div>
+                    <div className="text-zinc-500 font-bold">INIT: P0 Sandboxing parameters validated...</div>
                     <div className="text-[var(--accent)]">AUDIT: Scoped Workspace locked to project silo: alex-workspace</div>
                 </div>
             </div>
@@ -330,81 +313,117 @@ export function ScopeLogicDashboard() {
                         
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--card-border)] pb-3 gap-3">
                             <div>
-                                <h1 className="text-xl font-black tracking-wide">ScopeLogic Interview & Synthesis Room</h1>
-                                <p className="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Gather requirements via bounded interview loops, filter hallucinations using multi-model consensus, and compile draft-only workflow DAG configurations.</p>
+                                <h1 className="text-xl font-black tracking-wide">Skills &amp; Capabilities Registry</h1>
+                                <p className="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Review sandboxed commands, manage local tool executions, and trigger proactive security validation loops.</p>
                             </div>
                             
-                            <button  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] via-cyan-600 to-sky-600 hover:opacity-95 text-white dark:text-zinc-950 dark:font-extrabold text-sm font-bold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-[var(--accent-glow)] focusable">
-                                <i data-lucide="refresh-cw" className="w-4 h-4 text-white dark:text-zinc-950"></i>
-                                <span>Restart Loop</span>
+                            
+                            <button  id="run-escape-btn" className="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] via-teal-600 to-emerald-600 hover:opacity-95 text-white dark:text-zinc-950 dark:font-extrabold text-sm font-bold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-[var(--accent-glow)] focusable">
+                                <i data-lucide="shield-alert" className="w-4 h-4 text-white dark:text-zinc-950"></i>
+                                <span>Run 40+ Sandbox Escape Tests</span>
                             </button>
                         </div>
 
                         
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             
-                            
-                            <div className="glow-card rounded-2xl p-4 flex flex-col h-[400px]">
-                                <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-2 mb-3">
-                                    <span className="text-xs font-bold text-[var(--accent)] flex items-center space-x-1.5">
-                                        <i data-lucide="message-square-quote" className="w-4 h-4"></i>
-                                        <span>Bounded Interview (Max 8 rounds)</span>
-                                    </span>
-                                    <span id="interview-round" className="px-2 py-0.5 bg-[var(--bg-nested)] text-[var(--accent)] rounded text-[10px] font-mono font-black border border-[var(--accent)]/20">Round 1 / 8</span>
-                                </div>
-
-                                
-                                <div id="interview-scroller" className="flex-1 overflow-y-auto space-y-3 p-1 text-xs">
-                                    <div className="bg-[var(--bg-nested)] border border-[var(--card-border)] p-3 rounded-xl max-w-[90%] leading-relaxed">
-                                        <span className="font-bold text-[10px] text-[var(--accent)] block mb-1 uppercase tracking-wider">ScopeLogic:</span>
-                                        Welcome, Billie. Let us define your transactional workflow parameters. What is the primary objective of the workflow DAG we are building?
+                            <div className="glow-card rounded-2xl p-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-2 text-[var(--accent)]">
+                                            <i data-lucide="terminal" className="w-4 h-4"></i>
+                                            <span className="text-xs font-black uppercase tracking-wider">run_command</span>
+                                        </div>
+                                        <span className="px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 text-[8px] font-bold rounded uppercase font-mono tracking-wider">ACTIVE</span>
                                     </div>
+                                    <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">Runs host terminal commands. Restricted to a strict allowlist of 20 read-only commands (ls, cat, grep, find, wc, etc.).</p>
                                 </div>
-
-                                
-                                <div className="mt-3 pt-2 border-t border-[var(--card-border)] flex items-center space-x-2">
-                                    <input id="interview-input" type="text" placeholder="Specify your requirements..." className="flex-1 bg-[var(--bg-surface)] border border-[var(--card-border)] text-xs rounded-xl px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"  />
-                                    <button  className="p-2 bg-[var(--accent)] text-white dark:text-zinc-950 hover:opacity-90 rounded-xl transition focusable" aria-label="Send answer">
-                                        <i data-lucide="arrow-right" className="w-4 h-4"></i>
-                                    </button>
+                                <div className="mt-4 pt-3 border-t border-[var(--card-border)] flex items-center justify-between">
+                                    <span className="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] text-[8px] rounded uppercase font-bold tracking-widest border border-[var(--accent)]/20">Local Only</span>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" checked className="sr-only peer"  />
+                                        <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                                    </label>
                                 </div>
                             </div>
 
                             
-                            <div className="glow-card rounded-2xl p-4 flex flex-col h-[400px] relative">
-                                <div className="absolute inset-0 bg-red-500/[0.02] dark:bg-red-500/[0.01] pointer-events-none rounded-2xl"></div>
-                                <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-2 mb-3 z-10 relative">
-                                    <span className="text-xs font-bold text-[var(--accent)] flex items-center space-x-1.5">
-                                        <i data-lucide="container" className="w-4 h-4"></i>
-                                        <span>Draft-Only Proposal Boundary (Quarantined)</span>
-                                    </span>
-                                    <span className="px-2 py-0.5 bg-red-500/10 text-red-500 rounded text-[9px] font-black uppercase tracking-widest border border-red-500/20">Quarantined</span>
+                            <div className="glow-card rounded-2xl p-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-2 text-[var(--accent)]">
+                                            <i data-lucide="git-branch" className="w-4 h-4"></i>
+                                            <span className="text-xs font-black uppercase tracking-wider">git_nexus</span>
+                                        </div>
+                                        <span className="px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 text-[8px] font-bold rounded uppercase font-mono tracking-wider">ACTIVE</span>
+                                    </div>
+                                    <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">Asynchronously parses AST trees from target repositories without event-loop starvation, yielding structure snapshots.</p>
                                 </div>
-
-                                
-                                <div className="flex-1 bg-zinc-950 border border-[var(--card-border)] p-3 rounded-xl font-mono text-[10px] text-cyan-400 overflow-y-auto leading-relaxed select-text relative z-10">
-                                    <pre id="compiled-dag-output">
-{`{
-  "status": "Awaiting Requirements...",
-  "instructions": "Answer questions in the interview loop on the left to compile the workflow DAG blueprint by construction."
-}`}
-                                    </pre>
-                                </div>
-
-                                
-                                <div className="mt-3 pt-2 border-t border-[var(--card-border)] flex gap-2 relative z-10">
-                                    <button  id="btn-approve" disabled className="flex-1 bg-green-600 hover:bg-green-700 text-white disabled:opacity-30 disabled:pointer-events-none py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 focusable">
-                                        <i data-lucide="check-circle" className="w-4 h-4"></i>
-                                        <span>Approve & Write</span>
-                                    </button>
-                                    <button  id="btn-reject" disabled className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 disabled:pointer-events-none py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 focusable">
-                                        <i data-lucide="ban" className="w-4 h-4"></i>
-                                        <span>Reject Proposal</span>
-                                    </button>
+                                <div className="mt-4 pt-3 border-t border-[var(--card-border)] flex items-center justify-between">
+                                    <span className="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] text-[8px] rounded uppercase font-bold tracking-widest border border-var(--accent)/20">Redacted before send</span>
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" checked className="sr-only peer"  />
+                                        <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                                    </label>
                                 </div>
                             </div>
 
+                            
+                            <div className="glow-card rounded-2xl p-4 flex flex-col justify-between">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-2 text-[var(--accent)]">
+                                            <i data-lucide="database" className="w-4 h-4"></i>
+                                            <span className="text-xs font-black uppercase tracking-wider">sqlite_vec</span>
+                                        </div>
+                                        <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-[8px] font-bold rounded uppercase font-mono tracking-wider">OFF-PEAK</span>
+                                    </div>
+                                    <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">Computes local vector cosine similarity searches, offloaded to worker threads to prevent main event loop starvation.</p>
+                                </div>
+                                <div className="mt-4 pt-3 border-t border-[var(--card-border)] flex items-center justify-between">
+                                    <span className="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] text-[8px] rounded uppercase font-bold tracking-widest border border-var(--accent)/20">Worker thread bound</span>
+                                    <label className="relative inline-flex inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" className="sr-only peer"  />
+                                        <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
+
+                        
+                        <div className="border border-[var(--card-border)] bg-[var(--terminal-bg)] rounded-2xl p-5 relative overflow-hidden flex flex-col space-y-3 h-52">
+                            <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-2">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--terminal-text)] font-mono">P0 Container Hardening Sandbox Test Audit Trail</span>
+                                <span id="audit-indicator" className="text-[9px] font-mono font-bold text-zinc-500">STANDBY - WAITING TRIGGER</span>
+                            </div>
+                            
+                            
+                            <div id="sandbox-logs-area" className="flex-1 overflow-y-auto font-mono text-[10px] text-zinc-300 space-y-1.5 pr-2 select-text">
+                                <div className="text-zinc-500">Awaiting Sandbox Diagnostic Suite... click button to evaluate local security invariants against malicious command exfiltrations.</div>
+                            </div>
+
+                            
+                            <div id="sandbox-progress-bar-container" className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden hidden">
+                                <div id="sandbox-progress-bar" className="h-full bg-gradient-to-r from-[var(--accent)] to-teal-500 transition-all duration-100" style={{ width: '0%' }}></div>
+                            </div>
+                        </div>
+
+                        
+                        <div className="border border-[var(--card-border)] bg-[var(--bg-nested)] p-4 rounded-xl flex items-center justify-between shadow-sm relative overflow-hidden">
+                            <div className="flex items-center space-x-3">
+                                <span id="statusline-pulse" className="w-2.5 h-2.5 rounded-full bg-[var(--accent)] animate-pulse shadow shadow-[var(--accent-glow)]"></span>
+                                <div>
+                                    <span className="text-xs font-black uppercase tracking-wider block text-[var(--text-primary)]">Deference Statusline</span>
+                                    <p id="statusline-msg" className="text-[10px] text-[var(--text-muted)] font-medium">All background tasks executing quietly. Click 'Decision Node Audit' to inspect intent tree.</p>
+                                </div>
+                            </div>
+                            
+                            
+                            <button  className="px-4 py-1.5 rounded-lg border border-[var(--card-border)] bg-[var(--bg-surface)] hover:opacity-90 text-[var(--accent)] text-xs font-bold transition focusable">
+                                Decision Node Audit
+                            </button>
+                        </div>
+
                     </div>
                 </div>
 
@@ -412,76 +431,34 @@ export function ScopeLogicDashboard() {
                 <div className="w-full lg:w-96 flex flex-col space-y-6">
                     
                     
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="AI Jury Consensus Matrix">
+                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Autonomy Dials">
                         <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
                             <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="scale" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">AI Jury Consensus</h3>
+                                <i data-lucide="gauge" className="w-4 h-4"></i>
+                                <h3 className="font-bold text-xs tracking-wider uppercase">Autonomy Dials</h3>
                             </div>
-                            <button  className="text-[10px] text-[var(--accent)] hover:underline flex items-center space-x-1 font-bold focusable">
-                                <i data-lucide="refresh-cw" className="w-3 h-3 animate-spin"></i>
-                                <span>Re-audit</span>
-                            </button>
+                            <span className="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded text-[9px] uppercase font-bold tracking-widest border border-[var(--accent)]/20">Sovereign Limits</span>
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="space-y-5">
                             
-                            <div className="space-y-1">
-                                <div className="flex justify-between text-xs font-semibold">
-                                    <span>Consensus Rating</span>
-                                    <span id="consensus-pct" className="text-green-500 font-bold">98.4% (Gold)</span>
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs font-black">
+                                    <span>Budget &amp; Rigour Dial</span>
+                                    <span id="dial-budget-label" className="text-[var(--accent)] uppercase font-mono text-[10px]">Low Quota</span>
                                 </div>
-                                <div className="w-full h-2 bg-zinc-800/80 rounded-full overflow-hidden border border-[var(--card-border)]">
-                                    <div id="consensus-progress" className="h-full bg-gradient-to-r from-[var(--accent)] to-teal-500 rounded-full transition-all duration-300" style={{ width: '98%' }}></div>
-                                </div>
+                                <input type="range" id="dial-budget" min="1" max="3" value="1" onInput={() => {}} className="w-full h-1.5 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
+                                <p className="text-[10px] text-[var(--text-muted)] leading-relaxed">Limits loop iterations and contexts to conserve daily API tokens.</p>
                             </div>
 
                             
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-[11px] items-center p-1.5 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg">
-                                    <span className="font-semibold">Qwen-2.5-72B-Free</span>
-                                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 text-[9px] rounded font-bold border border-green-500/20">AGREED</span>
+                            <div className="space-y-1.5 border-t border-[var(--card-border)] pt-4">
+                                <div className="flex justify-between text-xs font-black">
+                                    <span>Autonomy &amp; Delegation</span>
+                                    <span id="dial-autonomy-label" className="text-[var(--accent)] uppercase font-mono text-[10px]">Strict Previews</span>
                                 </div>
-                                <div className="flex justify-between text-[11px] items-center p-1.5 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg">
-                                    <span className="font-semibold">Llama-3-70B-Free</span>
-                                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 text-[9px] rounded font-bold border border-green-500/20">AGREED</span>
-                                </div>
-                                <div className="flex justify-between text-[11px] items-center p-1.5 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg">
-                                    <span className="font-semibold">Phi-3-Medium-Free</span>
-                                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 text-[9px] rounded font-bold border border-green-500/20">AGREED</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Grammar-Constrained Telemetry">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="binary" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">Grammar-Constrained Telemetry</h3>
-                            </div>
-                            <span className="text-[9px] font-mono text-zinc-500 font-bold">XGrammar Active</span>
-                        </div>
-
-                        <div className="space-y-4">
-                            
-                            <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                                <div className="bg-[var(--bg-nested)] p-2 rounded-xl border border-[var(--card-border)]">
-                                    <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Token Savings</span>
-                                    <span className="text-sm font-bold text-[var(--accent)] font-mono">14,200 (23%)</span>
-                                </div>
-                                <div className="bg-[var(--bg-nested)] p-2 rounded-xl border border-[var(--card-border)]">
-                                    <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Parse Validity</span>
-                                    <span className="text-sm font-bold text-green-500 font-mono">100% PERFECT</span>
-                                </div>
-                            </div>
-
-                            
-                            <div className="bg-zinc-950 border border-[var(--card-border)] p-2.5 rounded-xl font-mono text-[9px] text-cyan-400 h-24 overflow-y-auto space-y-1">
-                                <div className="opacity-80">[Parser] State Transition: T_OBJECT_OPEN -&gt; KEY('nodes')</div>
-                                <div className="opacity-80">[Parser] Match strict regex pattern structure...</div>
-                                <div className="opacity-100 text-[var(--accent)]">[Masking Engine] Zeroed probabilities of all non-conforming JSON tokens</div>
+                                <input type="range" id="dial-autonomy" min="1" max="3" value="1" onInput={() => {}} className="w-full h-1.5 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
+                                <p className="text-[10px] text-[var(--text-muted)] leading-relaxed">Controls if code is stripped of execution permissions before human approval.</p>
                             </div>
                         </div>
                     </div>
@@ -504,7 +481,7 @@ export function ScopeLogicDashboard() {
                                     <span id="quota-value" className="text-[var(--accent)] font-bold">12,500 / 50,000 Tokens</span>
                                 </div>
                                 <div className="w-full h-2 bg-zinc-800/80 rounded-full overflow-hidden border border-[var(--card-border)]">
-                                    <div id="quota-progress" className="h-full bg-gradient-to-r from-[var(--accent)] to-amber-600 rounded-full transition-all duration-300" style={{ width: '25%' }}></div>
+                                    <div id="quota-progress" className="h-full bg-gradient-to-r from-[var(--accent)] to-teal-600 rounded-full transition-all duration-300" style={{ width: '25%' }}></div>
                                 </div>
                             </div>
 
@@ -531,6 +508,46 @@ export function ScopeLogicDashboard() {
                         </div>
                     </div>
 
+                    
+                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Cerebro Memory Matrix">
+                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                            <div className="flex items-center space-x-2 text-[var(--accent)]">
+                                <i data-lucide="brain" className="w-4 h-4"></i>
+                                <h3 className="font-bold text-xs tracking-wider uppercase">Memory Matrix</h3>
+                            </div>
+                            <button  className="text-[10px] text-[var(--accent)] hover:underline flex items-center space-x-1 font-bold focusable">
+                                <i data-lucide="trash-2" className="w-3 h-3"></i>
+                                <span>Prune Stale</span>
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            
+                            <div className="relative">
+                                <input id="memory-search" type="text" placeholder="Search project memory (Keyword)..." onInput={() => {}} className="w-full bg-[var(--bg-surface)] border border-[var(--card-border)] text-xs rounded-lg pl-8 pr-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] focusable" aria-label="Search memory" />
+                                <i data-lucide="search" className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2.5"></i>
+                            </div>
+
+                            
+                            <div id="memory-nodes-list" className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                <div className="p-2 rounded bg-[var(--bg-nested)] border border-[var(--card-border)] text-[11px] space-y-1 transition hover:border-[var(--accent)]/40">
+                                    <div className="flex justify-between font-bold">
+                                        <span className="text-[var(--accent)]">User Client Identity</span>
+                                        <span className="text-zinc-500 text-[9px] font-mono">Confidence: 0.98</span>
+                                    </div>
+                                    <p className="text-[var(--text-muted)] line-clamp-1 font-medium">Alex manages strict, high-privacy content creation portfolios.</p>
+                                </div>
+                                <div className="p-2 rounded bg-[var(--bg-nested)] border border-[var(--card-border)] text-[11px] space-y-1 transition hover:border-[var(--accent)]/40">
+                                    <div className="flex justify-between font-bold">
+                                        <span className="text-[var(--accent)]">Database Engine Config</span>
+                                        <span className="text-zinc-500 text-[9px] font-mono">Confidence: 0.95</span>
+                                    </div>
+                                    <p className="text-[var(--text-muted)] line-clamp-1 font-medium">SQLite selected over DuckDB to optimize transactional locking.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -544,8 +561,8 @@ export function ScopeLogicDashboard() {
                     <div className="relative z-10 flex flex-col h-full space-y-4">
                         
                         <div className="border-b border-[var(--card-border)] pb-3">
-                            <h1 className="text-xl font-black tracking-wide">ScopeLogic Engine Set-ups</h1>
-                            <p className="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Control requirements gathering loops, model consensus juries, and strict outlines grammar schema structures.</p>
+                            <h1 className="text-xl font-black tracking-wide">PortGrid Sandbox Set-ups</h1>
+                            <p className="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Configure network namespaces, seccomp filters, thread allocations, and credential sanitization layers.</p>
                         </div>
 
                         
@@ -554,59 +571,44 @@ export function ScopeLogicDashboard() {
                             
                             <div className="space-y-4">
                                 <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
-                                    <i data-lucide="message-square" className="w-4 h-4"></i>
-                                    <span>Bounded Interview Specifications</span>
+                                    <i data-lucide="cpu" className="w-4 h-4"></i>
+                                    <span>Dynamic Threading Allocation</span>
                                 </h3>
 
                                 <div className="space-y-3 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
                                     
                                     <div className="space-y-2">
-                                        <div className="flex justify-between text-xs font-semibold">
-                                            <span className="text-[var(--text-muted)]">Maximum Interview Rounds</span>
-                                            <span id="rounds-display" className="font-black text-[var(--accent)]">8 rounds (Strict limit)</span>
+                                        <div className="flex justify-between text-xs">
+                                            <span className="text-[var(--text-muted)] font-semibold">Active Worker Threads</span>
+                                            <span id="threads-display" className="font-black text-[var(--accent)]">3 cores (Safe max)</span>
                                         </div>
-                                        <input type="range" min="3" max="15" value="8" onInput={() => {}} className="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
+                                        <input type="range" min="1" max="8" value="3" onInput={() => {}} className="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
                                     </div>
-                                    
-                                    <div className="space-y-1">
-                                        <label htmlFor="rigour-select" className="text-xs font-bold text-[var(--text-muted)]">Rigor Level</label>
-                                        <select id="rigour-select" className="w-full bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] focusable">
-                                            <option value="high">High Reasoning (Continuous multi-model cross reference)</option>
-                                            <option value="standard">Standard (Saves token budget)</option>
-                                        </select>
-                                    </div>
+                                    <p className="text-[10px] text-[var(--text-muted)]">Balances complex semantic calculations and AST parsing over legacy silicon to protect the main Honoe event loop.</p>
                                 </div>
                             </div>
 
                             
                             <div className="space-y-4">
                                 <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
-                                    <i data-lucide="gavel" className="w-4 h-4"></i>
-                                    <span>AI Jury & Consensus Thresholds</span>
+                                    <i data-lucide="eye-off" className="w-4 h-4"></i>
+                                    <span>Redaction Checkpoints</span>
                                 </h3>
 
                                 <div className="space-y-3 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
-                                    
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-xs font-semibold">
-                                            <span className="text-[var(--text-muted)]">Minimum Consensus Match</span>
-                                            <span id="consensus-threshold-display" className="font-black text-[var(--accent)]">95% (Gold level)</span>
-                                        </div>
-                                        <input type="range" min="60" max="100" value="95" onInput={() => {}} className="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
-                                    </div>
-                                    
-                                    <div className="space-y-1 text-xs">
-                                        <span className="font-bold text-[var(--text-muted)] block mb-1">Jury Members:</span>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <label className="flex items-center space-x-1.5">
-                                                <input type="checkbox" checked className="rounded accent-[var(--accent)]" />
-                                                <span>Llama 3 70B</span>
-                                            </label>
-                                            <label className="flex items-center space-x-1.5">
-                                                <input type="checkbox" checked className="rounded accent-[var(--accent)]" />
-                                                <span>Qwen 2.5 72B</span>
-                                            </label>
-                                        </div>
+                                    <div className="space-y-2 text-xs font-semibold">
+                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked className="rounded bg-zinc-800 border-zinc-700 text-[var(--accent)] focus:ring-[var(--accent)]" />
+                                            <span>Redact before external inference</span>
+                                        </label>
+                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked className="rounded bg-zinc-800 border-zinc-700 text-[var(--accent)] focus:ring-[var(--accent)]" />
+                                            <span>Redact before memory persistence</span>
+                                        </label>
+                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked className="rounded bg-zinc-800 border-zinc-700 text-[var(--accent)] focus:ring-[var(--accent)]" />
+                                            <span>Scrub plain keys from Pino log exports</span>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -615,30 +617,30 @@ export function ScopeLogicDashboard() {
                             <div className="space-y-4 md:col-span-2">
                                 <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
                                     <i data-lucide="binary" className="w-4 h-4"></i>
-                                    <span>Grammar Masking & Compiling Rules</span>
+                                    <span>Environment Isolation Rules</span>
                                 </h3>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
                                     <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
                                         <div>
-                                            <span className="text-xs font-bold block">Logic Masking</span>
-                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Guarantee structured JSON</span>
+                                            <span className="text-xs font-bold block">Network Isolation</span>
+                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">unshare --net sandbox</span>
                                         </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
+                                        <input type="checkbox" id="check-net" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
                                     </div>
                                     <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
                                         <div>
-                                            <span className="text-xs font-bold block">Strict Typings</span>
-                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Reject flexible schema fields</span>
+                                            <span className="text-xs font-bold block">Seccomp Profiles</span>
+                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Limit host system calls</span>
                                         </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
+                                        <input type="checkbox" id="check-seccomp" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
                                     </div>
                                     <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
                                         <div>
-                                            <span className="text-xs font-bold block">Pre-Compile Checks</span>
-                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Verify acyclic DAG bounds</span>
+                                            <span className="text-xs font-bold block">Read-Only Runtime</span>
+                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Secure root filesystem</span>
                                         </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
+                                        <input type="checkbox" id="check-readonly" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
                                     </div>
                                 </div>
                             </div>
@@ -648,7 +650,7 @@ export function ScopeLogicDashboard() {
                         
                         <div className="flex justify-end space-x-3 pt-6 border-t border-[var(--card-border)] mt-auto">
                             <button  className="px-5 py-2 rounded-xl bg-[var(--bg-nested)] hover:opacity-90 text-sm font-bold border border-[var(--card-border)] transition focusable">Reset Defaults</button>
-                            <button  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] to-sky-600 hover:opacity-90 text-white dark:text-zinc-950 font-black text-sm transition shadow-lg shadow-[var(--accent-glow)] focusable">Apply Configurations</button>
+                            <button  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] to-teal-600 hover:opacity-90 text-white dark:text-zinc-950 font-black text-sm transition shadow-lg shadow-[var(--accent-glow)] focusable">Apply Configurations</button>
                         </div>
 
                     </div>
@@ -693,29 +695,6 @@ export function ScopeLogicDashboard() {
                         </div>
                     </div>
 
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Workflow Quarantine Rules">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="shield-alert" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">Quarantine Invariants</h3>
-                            </div>
-                            <span className="text-[9px] font-mono text-zinc-500 font-bold">Assume Breach</span>
-                        </div>
-
-                        
-                        <div className="space-y-2 text-xs">
-                            <div className="flex justify-between p-2 rounded bg-[var(--accent)]/5 border border-[var(--accent)]/20">
-                                <span className="font-bold">Proposals strictly Draft-Only</span>
-                                <i data-lucide="lock" className="w-3.5 h-3.5 text-[var(--accent)]"></i>
-                            </div>
-                            <div className="flex justify-between p-2 rounded bg-[var(--bg-nested)] border border-[var(--card-border)] text-zinc-400">
-                                <span className="font-bold">0 Authority to mutate file states</span>
-                                <i data-lucide="lock" className="w-3.5 h-3.5 text-zinc-400"></i>
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
@@ -730,9 +709,9 @@ export function ScopeLogicDashboard() {
                 <span className="font-bold text-green-400 uppercase">Hono Daemon Online</span>
             </div>
             <span>|</span>
-            <span>Port: <strong className="text-[var(--accent)]">127.0.0.1:4096</strong></span>
+            <span>Port: <strong className="text-[var(--accent)] font-bold">127.0.0.1:4096</strong></span>
             <span>|</span>
-            <span>Database: <strong className="text-[var(--accent)]">BaseVault.db</strong></span>
+            <span>Database: <strong className="text-[var(--accent)] font-bold">BaseVault.db</strong></span>
         </div>
         <div className="flex items-center space-x-4">
             <span>Verified Confidence Metrics: <strong className="text-green-400 font-bold">398 Tests Pass</strong></span>
@@ -745,14 +724,14 @@ export function ScopeLogicDashboard() {
     <div id="chat-sentinel" className="fixed bottom-12 right-6 z-50 flex flex-col items-end">
         
         
-        <button  className="w-12 h-12 rounded-full bg-gradient-to-tr from-[var(--accent)] to-sky-600 text-white dark:text-zinc-950 flex items-center justify-center shadow-lg shadow-[var(--accent-glow)] hover:scale-105 transform transition duration-200 focusable" aria-label="Toggle Cerebro chatbot assistant">
+        <button  className="w-12 h-12 rounded-full bg-gradient-to-tr from-[var(--accent)] to-teal-600 text-white dark:text-zinc-950 flex items-center justify-center shadow-lg shadow-[var(--accent-glow)] hover:scale-105 transform transition duration-200 focusable" aria-label="Toggle Cerebro chatbot assistant">
             <i data-lucide="bot-message-square" className="w-6 h-6"></i>
         </button>
 
         
         <div id="chat-box" className="w-80 h-96 bg-[var(--bg-surface-glass)] backdrop-blur-md border border-[var(--card-border)] rounded-2xl shadow-2xl mt-3 hidden flex-col overflow-hidden transition-all duration-300">
             
-            <div className="bg-gradient-to-r from-zinc-950 to-cyan-950 p-3 flex items-center justify-between border-b border-[var(--card-border)]">
+            <div className="bg-gradient-to-r from-zinc-950 to-teal-950 p-3 flex items-center justify-between border-b border-[var(--card-border)]">
                 <div className="flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-green-400"></span>
                     <span className="text-xs font-bold tracking-wide uppercase text-white">Cerebro Assist Sentinel</span>
@@ -766,7 +745,7 @@ export function ScopeLogicDashboard() {
             <div id="chat-conversation" className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
                 <div className="bg-[var(--terminal-bg)] text-[var(--terminal-text)] border border-[var(--accent)]/20 p-2.5 rounded-xl rounded-tl-none self-start max-w-[85%] leading-relaxed">
                     <span className="font-black text-[10px] text-[var(--accent)] block mb-1">CEREBRO SENTINEL:</span>
-                    Welcome, Billie. Let us synthesize and map your local cognitive topology. Ask me anything about ScopeLogic requirements, mock juries, or grammar-masking bounds.
+                    Welcome, Billie. Let us synthesize and map your local cognitive topology. Ask me anything about PortGrid's tools sandbox, escape validation, or autonomy dails.
                 </div>
             </div>
 
@@ -814,6 +793,45 @@ export function ScopeLogicDashboard() {
                 <button  className="bg-[var(--accent)] text-white dark:text-zinc-950 px-4 py-2 rounded-xl text-xs font-bold focusable">
                     Return to cockpit
                 </button>
+            </div>
+        </div>
+    </div>
+
+    
+    <div id="intent-modal" className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center hidden p-6">
+        <div className="w-full max-w-xl bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-2xl p-6 shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                <div className="flex items-center space-x-2 text-[var(--accent)]">
+                    <i data-lucide="split" className="w-5 h-5"></i>
+                    <h2 className="font-black text-lg uppercase tracking-wide">Decision Node Audit</h2>
+                </div>
+                <button  className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white" aria-label="Close preview">
+                    <i data-lucide="x" className="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <p className="text-xs text-[var(--text-muted)] mb-4">
+                Rather than loading exhausting background terminal spam, PortGrid models a clean intent preview of the current processing cycle.
+            </p>
+
+            <div className="bg-zinc-950 border border-[var(--card-border)] p-4 rounded-xl space-y-3 font-mono text-xs text-[var(--terminal-text)]">
+                <div className="flex items-center space-x-2">
+                    <i data-lucide="check-circle" className="w-4 h-4 text-green-400"></i>
+                    <span>CLAIM WORKFLOW: [wf_7a8d29b] -&gt; claimed by [worker-3]</span>
+                </div>
+                <div className="flex items-center space-x-2 pl-4 border-l border-zinc-800">
+                    <i data-lucide="arrow-right" className="w-3.5 h-3.5 text-zinc-500"></i>
+                    <span>Execute command: <code className="bg-zinc-900 px-1 rounded text-yellow-400">ls -la</code> (Safe allowlist Match)</span>
+                </div>
+                <div className="flex items-center space-x-2 pl-4 border-l border-zinc-800 text-green-400">
+                    <i data-lucide="shield" className="w-3.5 h-3.5"></i>
+                    <span>Verification complete. Output scrubbed: 0 credentials parsed.</span>
+                </div>
+            </div>
+
+            <div className="mt-5 pt-3 border-t border-[var(--card-border)] flex justify-end space-x-2">
+                <button  className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-bold transition">Close</button>
+                <button  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition">Force Cancel Run</button>
             </div>
         </div>
     </div>
