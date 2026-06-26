@@ -3,21 +3,48 @@
 @tailwind utilities;
 
 :root, .light {
+  --color-gray-100: #111827;
+  --color-gray-200: #1f2937;
+  --color-gray-300: #374151;
+  --color-gray-400: #4b5563;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #9ca3af;
+  --color-gray-700: #d1d5db;
+  --color-gray-800: #e5e7eb;
+  --color-gray-900: #f3f4f6;
+
   --primary-glow: #0070F3;
   --secondary-glow: #7928CA;
-  --bg-dots: rgba(0, 0, 0, 0.1);
-  --shadow-color: rgba(0, 0, 0, 0.1);
-  
+  --bg-dots: rgba(0, 0, 0, 0.05);
+  --shadow-color: rgba(0, 0, 0, 0.05);
+
   --color-void: #f8fafc;
   --color-primary: #f1f5f9;
   --color-gunmetal: #e2e8f0;
-  --color-foreground: #1e293b;
-  --color-foreground-muted: #64748b;
+  --color-foreground: #0f172a;
+  --color-foreground-muted: #475569;
   --color-glass-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(241, 245, 249, 0.95) 100%);
   --color-glass-border: rgba(0, 0, 0, 0.1);
+
+  --bg-radial-1: rgba(220, 230, 245, 0.9);
+  --bg-radial-2: rgba(200, 220, 240, 0.8);
+
+  --color-core-exec: #008899;
+  --color-sovereign-gold: #B8860B;
+  --color-report-green: #00A82D;
 }
 
 .dark {
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+
   --primary-glow: #0070F3;
   --secondary-glow: #7928CA;
   --bg-dots: rgba(255, 255, 255, 0.1);
@@ -30,6 +57,13 @@
   --color-foreground-muted: #9ca3af;
   --color-glass-gradient: linear-gradient(135deg, rgba(26, 28, 35, 0.8) 0%, rgba(13, 14, 21, 0.95) 100%);
   --color-glass-border: rgba(255, 255, 255, 0.05);
+
+  --bg-radial-1: rgba(26, 28, 35, 0.7);
+  --bg-radial-2: rgba(10, 27, 58, 0.5);
+
+  --color-core-exec: #00E5FF;
+  --color-sovereign-gold: #D4AF37;
+  --color-report-green: #00FF41;
 }
 
 * {
@@ -38,12 +72,582 @@
   padding: 0;
 }
 
+::selection {
+  background-color: var(--color-sovereign-gold);
+  color: var(--color-void);
+}
+
 @layer base {
   body {
     @apply font-sans antialiased overflow-x-hidden;
     background-color: var(--color-void);
     color: var(--color-foreground);
+    background-image:
+      radial-gradient(circle at 15% 30%, var(--bg-radial-1), transparent 40%),
+      radial-gradient(circle at 85% 70%, var(--bg-radial-2), transparent 40%);
+    background-attachment: fixed;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px var(--color-void) inset !important;
+    -webkit-text-fill-color: var(--color-foreground) !important;
+    caret-color: var(--color-foreground) !important;
+    transition: background-color 5000s ease-in-out 0s;
+    background-color: transparent !important;
+    color: var(--color-foreground) !important;
   }
 }
 
+@layer components {
+  .input-base {
+    @apply w-full bg-void opacity-60 border border-[var(--color-glass-border)] rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-sovereign-gold transition-colors;
+    color: var(--color-foreground);
+  }
+}
 
+@layer utilities {
+  .squircle-box { border-radius: 22%; }
+
+  .glass-enclave {
+    background: var(--color-glass-gradient);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-glass-border);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .glass-enclave::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  }
+}
+
+::-webkit-scrollbar { width: 8px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-gunmetal); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: theme('colors.sovereign-gold'); }
+
+/* ── CoreExec Cockpit ──────────────────────────────────────────────────────
+   Scoped palette: Tailwind 1:1 substitution for the original HTML's CSS vars.
+   Tuned so the cockpit reads as a distinct surface (cyan-dark / purple-light)
+   inside the broader OS, while resetting on the SAME global .dark/.light
+   classes our ThemeContext toggles on <html>.                             */
+.coreexec-cockpit {
+  --bg-base: #060813;
+  --bg-surface: #0b1120;
+  --bg-surface-glass: rgba(11, 17, 32, 0.75);
+  --bg-nested: rgba(0, 229, 255, 0.03);
+  --border-glow: rgba(0, 229, 255, 0.2);
+  --text-primary: #fafafa;
+  --text-muted: #94a3b8;
+  --accent: #00E5FF;
+  --accent-glow: rgba(0, 229, 255, 0.4);
+  --card-border: rgba(30, 41, 59, 0.8);
+  --grid-color: rgba(0, 229, 255, 0.04);
+  --grid-line: rgba(0, 229, 255, 0.02);
+  --glow-color: rgba(0, 229, 255, 0.15);
+  --logo-accent: #00E5FF;
+  --terminal-bg: #030712;
+  --terminal-text: #00e5ff;
+}
+
+.coreexec-cockpit.light {
+  --bg-base: #f5f3ff;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.85);
+  --bg-nested: rgba(124, 58, 237, 0.05);
+  --border-glow: rgba(124, 58, 237, 0.15);
+  --text-primary: #1e1b4b;
+  --text-muted: #4f46e5;
+  --accent: #7c3aed;
+  --accent-glow: rgba(124, 58, 237, 0.35);
+  --card-border: rgba(124, 58, 237, 0.16);
+  --grid-color: rgba(124, 58, 237, 0.06);
+  --grid-line: rgba(124, 58, 237, 0.04);
+  --glow-color: rgba(124, 58, 237, 0.08);
+  --logo-accent: #7c3aed;
+  --terminal-bg: #120e2e;
+  --terminal-text: #e9d5ff;
+}
+
+.coreexec-cockpit {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 85%);
+  background-size: 100% 100%;
+  transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+}
+
+.coreexec-cockpit .glow-card {
+  border: 1px solid var(--card-border);
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.coreexec-cockpit .glow-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.coreexec-cockpit .focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.coreexec-cockpit::-webkit-scrollbar-track { background: transparent; }
+.coreexec-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+.coreexec-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── BaseVault Cockpit ──────────────────────────────────────────────────────
+   Parallels `.coreexec-cockpit` but with a gold/bronze (#D4AF37) palette
+   matching the original HTML mock. Scoped via .basevault-cockpit so each
+   dashboard surface has its own identity without polluting the global theme. */
+.basevault-cockpit {
+  --bg-base: #0a0904;
+  --bg-surface: #100e08;
+  --bg-surface-glass: rgba(12, 10, 4, 0.82);
+  --bg-nested: rgba(212, 175, 55, 0.02);
+  --border-glow: rgba(212, 175, 55, 0.12);
+  --text-primary: #fafafa;
+  --text-muted: #a19d91;
+  --accent: #D4AF37;
+  --accent-glow: rgba(212, 175, 55, 0.18);
+  --card-border: rgba(184, 134, 11, 0.32);
+  --grid-color: rgba(212, 175, 55, 0.025);
+  --grid-line: rgba(212, 175, 55, 0.014);
+  --glow-color: rgba(212, 175, 55, 0.07);
+  --logo-accent: #D4AF37;
+  --terminal-bg: #0d0c07;
+  --terminal-text: #D4AF37;
+}
+
+.basevault-cockpit.light {
+  --bg-base: #fffdf5;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.85);
+  --bg-nested: rgba(212, 175, 55, 0.05);
+  --border-glow: rgba(212, 175, 55, 0.15);
+  --text-primary: #2b2513;
+  --text-muted: #857442;
+  --accent: #B8860B;
+  --accent-glow: rgba(184, 134, 11, 0.35);
+  --card-border: rgba(184, 134, 11, 0.2);
+  --grid-color: rgba(212, 175, 55, 0.06);
+  --grid-line: rgba(212, 175, 55, 0.04);
+  --glow-color: rgba(184, 134, 11, 0.08);
+  --logo-accent: #B8860B;
+  --terminal-bg: #1c1809;
+  --terminal-text: #f0e6ce;
+}
+
+.basevault-cockpit {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 85%);
+  background-size: 100% 100%;
+  transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+}
+
+.basevault-cockpit .glow-card {
+  border: 1px solid var(--card-border);
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.basevault-cockpit .glow-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.basevault-cockpit .focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.basevault-cockpit::-webkit-scrollbar-track { background: transparent; }
+.basevault-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+.basevault-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── PortGrid Cockpit ───────────────────────────────────────────────────────
+   Spring-green/teal registry cockpit. Dark mode intentionally keeps the neon
+   reduced so black space remains dominant; light mode mirrors the HTML guide. */
+.portgrid-cockpit {
+  --bg-base: #020a07;
+  --bg-surface: #04110d;
+  --bg-surface-glass: rgba(3, 12, 9, 0.84);
+  --bg-nested: rgba(0, 255, 204, 0.018);
+  --border-glow: rgba(0, 255, 204, 0.1);
+  --text-primary: #fafafa;
+  --text-muted: #86efac;
+  --accent: #00FFCC;
+  --accent-glow: rgba(0, 255, 204, 0.18);
+  --card-border: rgba(13, 148, 136, 0.28);
+  --grid-color: rgba(0, 255, 204, 0.018);
+  --grid-line: rgba(0, 255, 204, 0.01);
+  --glow-color: rgba(0, 255, 204, 0.065);
+  --logo-accent: #00FFCC;
+  --terminal-bg: #010806;
+  --terminal-text: #00FFCC;
+}
+
+.portgrid-cockpit.light {
+  --bg-base: #f0fdf4;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.85);
+  --bg-nested: rgba(13, 148, 136, 0.05);
+  --border-glow: rgba(13, 148, 136, 0.15);
+  --text-primary: #064e3b;
+  --text-muted: #0d9488;
+  --accent: #0d9488;
+  --accent-glow: rgba(13, 148, 136, 0.35);
+  --card-border: rgba(13, 148, 136, 0.2);
+  --grid-color: rgba(13, 148, 136, 0.05);
+  --grid-line: rgba(13, 148, 136, 0.02);
+  --glow-color: rgba(13, 148, 136, 0.08);
+  --logo-accent: #0d9488;
+  --terminal-bg: #09090b;
+  --terminal-text: #2dd4bf;
+}
+
+.portgrid-cockpit {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 85%);
+  background-size: 100% 100%;
+  transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+}
+
+.portgrid-cockpit .glow-card {
+  border: 1px solid var(--card-border);
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.portgrid-cockpit .glow-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.portgrid-cockpit .focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.portgrid-cockpit::-webkit-scrollbar-track { background: transparent; }
+.portgrid-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+.portgrid-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── ScopeLogic Cockpit ───────────────────────────────────────────────────────
+   Cyan/obsidian cockpit for requirements gathering and validation. */
+.scopelogic-cockpit {
+  --bg-base: #020813;
+  --bg-surface: #071424;
+  --bg-surface-glass: rgba(7, 20, 36, 0.75);
+  --bg-nested: rgba(0, 229, 255, 0.03);
+  --border-glow: rgba(0, 229, 255, 0.2);
+  --text-primary: #fafafa;
+  --text-muted: #94a3b8;
+  --accent: #00E5FF;
+  --accent-glow: rgba(0, 229, 255, 0.4);
+  --card-border: rgba(14, 116, 144, 0.4);
+  --grid-color: rgba(0, 229, 255, 0.03);
+  --grid-line: rgba(0, 229, 255, 0.015);
+  --glow-color: rgba(0, 229, 255, 0.15);
+  --logo-accent: #00E5FF;
+  --terminal-bg: #010b14;
+  --terminal-text: #00E5FF;
+}
+
+.scopelogic-cockpit.light {
+  --bg-base: #f0f9ff;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.85);
+  --bg-nested: rgba(8, 145, 178, 0.05);
+  --border-glow: rgba(8, 145, 178, 0.15);
+  --text-primary: #0f172a;
+  --text-muted: #0891b2;
+  --accent: #0891b2;
+  --accent-glow: rgba(8, 145, 178, 0.35);
+  --card-border: rgba(124, 58, 237, 0.12);
+  --grid-color: rgba(124, 58, 237, 0.04);
+  --grid-line: rgba(124, 58, 237, 0.02);
+  --glow-color: rgba(124, 58, 237, 0.08);
+  --logo-accent: #0891b2;
+  --terminal-bg: #09090b;
+  --terminal-text: #38bdf8;
+}
+
+.scopelogic-cockpit {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 85%);
+  background-size: 100% 100%;
+  transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+}
+
+.scopelogic-cockpit .glow-card {
+  border: 1px solid var(--card-border);
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scopelogic-cockpit .glow-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.scopelogic-cockpit .focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.scopelogic-cockpit::-webkit-scrollbar-track { background: transparent; }
+.scopelogic-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+.scopelogic-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── RouteSwitch Cockpit ────────────────────────────────────────────────────
+   High-Glow Amber */
+.routeswitch-cockpit {
+  --bg-base: #000000; 
+  --bg-surface: #050505;
+  --bg-surface-glass: rgba(5, 5, 5, 0.45); 
+  --bg-nested: rgba(255, 179, 0, 0.05);
+  --border-glow: rgba(255, 179, 0, 0.35);
+  --text-primary: #fafafa;
+  --text-muted: #8f8f9d;
+  --accent: #FFB300;
+  --accent-glow: rgba(255, 179, 0, 0.75);
+  --card-border: rgba(35, 30, 20, 0.8);
+  --grid-color: rgba(255, 179, 0, 0.08);
+  --grid-line: rgba(255, 255, 255, 0.03);
+  --glow-color: rgba(255, 179, 0, 0.25);
+  --terminal-bg: #030303;
+  --terminal-text: #FFB300;
+  
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 85%);
+  background-size: 100% 100%;
+  transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+}
+
+.routeswitch-cockpit.light {
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.85);
+  --bg-nested: rgba(217, 119, 6, 0.04);
+  --border-glow: rgba(217, 119, 6, 0.1);
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --accent: #d97706;
+  --accent-glow: rgba(217, 119, 6, 0.25);
+  --card-border: rgba(203, 213, 225, 0.8);
+  --grid-color: rgba(217, 119, 6, 0.03);
+  --grid-line: rgba(217, 119, 6, 0.03);
+  --glow-color: rgba(217, 119, 6, 0.05);
+  --terminal-bg: #0f172a;
+  --terminal-text: #fbbf24;
+}
+
+.routeswitch-cockpit .glow-card {
+  border: 1px solid var(--card-border);
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.routeswitch-cockpit .glow-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.routeswitch-cockpit .focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.routeswitch-cockpit::-webkit-scrollbar-track { background: transparent; }
+.routeswitch-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+.routeswitch-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── ScoutDaemon Cockpit ────────────────────────────────────────────────────
+   High-Glow Purple */
+.scoutdaemon-cockpit {
+  --bg-base: #000000; 
+  --bg-surface: #050505;
+  --bg-surface-glass: rgba(5, 5, 5, 0.45); 
+  --bg-nested: rgba(142, 36, 170, 0.05);
+  --border-glow: rgba(142, 36, 170, 0.35);
+  --text-primary: #fafafa;
+  --text-muted: #8f8f9d;
+  --accent: #8E24AA;
+  --accent-glow: rgba(142, 36, 170, 0.75);
+  --card-border: rgba(30, 20, 35, 0.8);
+  --grid-color: rgba(142, 36, 170, 0.08);
+  --grid-line: rgba(255, 255, 255, 0.03);
+  --glow-color: rgba(142, 36, 170, 0.25);
+  --terminal-bg: #030303;
+  --terminal-text: #d05ce3;
+  
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 85%);
+  background-size: 100% 100%;
+  transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+}
+
+.scoutdaemon-cockpit.light {
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.85);
+  --bg-nested: rgba(107, 33, 168, 0.04);
+  --border-glow: rgba(107, 33, 168, 0.1);
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --accent: #7e22ce;
+  --accent-glow: rgba(107, 33, 168, 0.25);
+  --card-border: rgba(203, 213, 225, 0.8);
+  --grid-color: rgba(107, 33, 168, 0.03);
+  --grid-line: rgba(107, 33, 168, 0.03);
+  --glow-color: rgba(107, 33, 168, 0.05);
+  --terminal-bg: #0f172a;
+  --terminal-text: #d8b4fe;
+}
+
+.scoutdaemon-cockpit .glow-card {
+  border: 1px solid var(--card-border);
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scoutdaemon-cockpit .glow-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.scoutdaemon-cockpit .focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.scoutdaemon-cockpit::-webkit-scrollbar-track { background: transparent; }
+.scoutdaemon-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+.scoutdaemon-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Danger / Kill Switch Styling */
+.scoutdaemon-cockpit .kill-switch {
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  box-shadow: 0 0 15px rgba(220, 38, 38, 0.2) inset;
+}
+.scoutdaemon-cockpit .kill-switch:hover {
+  background: rgba(220, 38, 38, 0.2);
+  border-color: rgba(220, 38, 38, 0.8);
+  box-shadow: 0 0 25px rgba(220, 38, 38, 0.4) inset, 0 0 15px rgba(220, 38, 38, 0.3);
+}
+
+/* ── Cerebro Cockpit ────────────────────────────────────────────────────────
+   High-Glow Indigo */
+.cerebro-cockpit {
+  --bg-base: #000000; 
+  --bg-surface: #030308;
+  --bg-surface-glass: rgba(3, 3, 8, 0.55); 
+  --bg-nested: rgba(99, 102, 241, 0.05);
+  --border-glow: rgba(99, 102, 241, 0.35);
+  --text-primary: #fafafa;
+  --text-muted: #8f8f9d;
+  --accent: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.75);
+  --card-border: rgba(20, 20, 40, 0.8);
+  --grid-color: rgba(99, 102, 241, 0.08);
+  --grid-line: rgba(255, 255, 255, 0.03);
+  --glow-color: rgba(99, 102, 241, 0.25);
+  --terminal-bg: #010103;
+  --terminal-text: #818cf8;
+  
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--accent-glow) 0%, transparent 85%);
+  background-size: 100% 100%;
+  transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+}
+
+.cerebro-cockpit.light {
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.85);
+  --bg-nested: rgba(79, 70, 229, 0.04);
+  --border-glow: rgba(79, 70, 229, 0.1);
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --accent: #4f46e5;
+  --accent-glow: rgba(79, 70, 229, 0.25);
+  --card-border: rgba(203, 213, 225, 0.8);
+  --grid-color: rgba(79, 70, 229, 0.03);
+  --grid-line: rgba(79, 70, 229, 0.03);
+  --glow-color: rgba(79, 70, 229, 0.05);
+  --terminal-bg: #0f172a;
+  --terminal-text: #6366f1;
+}
+
+.cerebro-cockpit .glow-card {
+  border: 1px solid var(--card-border);
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cerebro-cockpit .glow-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+  transform: translateY(-2px);
+}
+
+.cerebro-cockpit .focusable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cerebro-cockpit::-webkit-scrollbar-track { background: transparent; }
+.cerebro-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+.cerebro-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
