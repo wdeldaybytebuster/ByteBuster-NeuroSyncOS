@@ -2,8 +2,12 @@
 
 import AutonomyDials from '@/components/AutonomyDials';
 import DeferenceUI from '@/components/DeferenceUI';
+import ProjectManager from '@/components/ProjectManager';
+import SettingsModal from '@/components/SettingsModal';
+import { useState } from 'react';
 
 export default function Home() {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const dummyTasks = [
     { id: '1', description: 'Resolve import paths in src/core/scoutlogic/cerebro-assist.test.ts', confidence: 99 },
     { id: '2', description: 'Apply non-null assertion to availableModels in dynamic-router.ts', confidence: 97 },
@@ -19,6 +23,12 @@ export default function Home() {
             <p className="text-sm text-zinc-500 mt-1">Next.js Autonomous Agent Dashboard</p>
           </div>
           <div className="flex gap-4 items-center">
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-3 py-1 bg-zinc-800 text-zinc-300 rounded-full text-xs font-medium hover:bg-zinc-700 transition-colors border border-white/10"
+            >
+              Settings
+            </button>
             <span className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               CoreExec Online
@@ -32,6 +42,8 @@ export default function Home() {
 
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
+            <ProjectManager />
+            
             <div className="bg-zinc-900/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl h-[400px] flex items-center justify-center">
               <p className="text-zinc-600 italic">Directed Acyclic Graph (DAG) Visualization Pipeline</p>
             </div>
@@ -74,6 +86,8 @@ export default function Home() {
           onApproveAll={(ids) => console.log('Approved:', ids)} 
           onRejectAll={(ids) => console.log('Rejected:', ids)} 
         />
+        
+        <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       </div>
     </main>
   );
