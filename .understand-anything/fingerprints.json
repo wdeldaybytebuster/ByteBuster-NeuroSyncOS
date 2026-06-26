@@ -1,0 +1,6390 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "0b87172eb40c65b95c6d79b1f8348711ee169a5d",
+  "generatedAt": "2026-06-26T06:04:31.921Z",
+  "files": {
+    ".antigravity/mcp.json": {
+      "filePath": ".antigravity/mcp.json",
+      "contentHash": "7d8eca5f0d1950dbda007088a7fef62ed4574816f29c0f0a391a61ecfd481dcf",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/skills/gitnexus/gitnexus-cli/SKILL.md": {
+      "filePath": ".claude/skills/gitnexus/gitnexus-cli/SKILL.md",
+      "contentHash": "6581737584d7cd98c973c91558f2a9197a253d128f8df4164255b2eb1687ebbe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 86,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/skills/gitnexus/gitnexus-debugging/SKILL.md": {
+      "filePath": ".claude/skills/gitnexus/gitnexus-debugging/SKILL.md",
+      "contentHash": "d8090c85e2c8faffd4767fc2dcc52aeb3f3dab3dc7218bc96b29dacf53635d64",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 102,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/skills/gitnexus/gitnexus-exploring/SKILL.md": {
+      "filePath": ".claude/skills/gitnexus/gitnexus-exploring/SKILL.md",
+      "contentHash": "21b18eee1f679efff654bf45f9dc32a495c81c014d210ac7e778c58a2a204dbd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/skills/gitnexus/gitnexus-guide/SKILL.md": {
+      "filePath": ".claude/skills/gitnexus/gitnexus-guide/SKILL.md",
+      "contentHash": "d8c625f599eedc7c30adf2c02575ba3733ff3c55e6fb0bd98171c786f72aa8b5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 129,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md": {
+      "filePath": ".claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md",
+      "contentHash": "09e529505da155532059a3656557811f99bafff0f05c8f9e6e47bb96edc340d3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 98,
+      "hasStructuralAnalysis": true
+    },
+    ".claude/skills/gitnexus/gitnexus-refactoring/SKILL.md": {
+      "filePath": ".claude/skills/gitnexus/gitnexus-refactoring/SKILL.md",
+      "contentHash": "4d3968c0737e337602bc5c4397e186ecb6e522914a134db593087fd215300a25",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 122,
+      "hasStructuralAnalysis": true
+    },
+    ".env.example": {
+      "filePath": ".env.example",
+      "contentHash": "2795c5108fa3fd93d2f0de7fda6f2ee63b8c5a22cb2b514b4f60d5945520b371",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "AGENTS.md": {
+      "filePath": "AGENTS.md",
+      "contentHash": "1a4107f29cf693142b24326e9da2a67939ebb86fecb8ba39ef4b8849cfd50937",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 114,
+      "hasStructuralAnalysis": true
+    },
+    "CLAUDE.md": {
+      "filePath": "CLAUDE.md",
+      "contentHash": "dfbc967409152492da7f73e45d1b8a52c7ccd2de8692dd67df8b1f86ac088789",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "docs/AGENTS.md": {
+      "filePath": "docs/AGENTS.md",
+      "contentHash": "a4641a64d41726f8bcae143d46c1e43544d0bd4bd89388656a27f1008f7a19f2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 137,
+      "hasStructuralAnalysis": true
+    },
+    "docs/CLAUDE.md": {
+      "filePath": "docs/CLAUDE.md",
+      "contentHash": "8fedda93af2640fdcb7d59717758db449dd3fc2174cdc473951b0dfa4cf78176",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/ai-workflow-rules_working.md": {
+      "filePath": "docs/context/ai-workflow-rules_working.md",
+      "contentHash": "25058f71af1a99f9f8bc0e1d9342fce27371a704ee2b2cd1fa8cd0f4b2c564e4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/ai-workflow-rules.md": {
+      "filePath": "docs/context/ai-workflow-rules.md",
+      "contentHash": "9aa2394440323433e6d928669efd24455a9b10530c30dcf6132e258b35c9c9cc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 191,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/architecture_working.md": {
+      "filePath": "docs/context/architecture_working.md",
+      "contentHash": "556e8f7cca66130ab4e9662391e77021de175f8203d5e4983da6766e703b9d0e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/architecture.md": {
+      "filePath": "docs/context/architecture.md",
+      "contentHash": "6580d2b361d78cb8bf756957a86925f8578e63942c89498593100d918b647809",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 340,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/code-standards_working.md": {
+      "filePath": "docs/context/code-standards_working.md",
+      "contentHash": "f23bfe9c8835860d0b33e6c4c257201198caf0bf062e417df5643675720dc287",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/code-standards.md": {
+      "filePath": "docs/context/code-standards.md",
+      "contentHash": "84236e44122214e022413a0818a2c1f8a76614067b5e7a3013929e85f2fb7c47",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 193,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/phase8-plan_working.md": {
+      "filePath": "docs/context/phase8-plan_working.md",
+      "contentHash": "5f33737dd19a09b1852529d3c3edd9cea6dc19e3ed20516a5312a859c5f46544",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/progress-tracker_working.md": {
+      "filePath": "docs/context/progress-tracker_working.md",
+      "contentHash": "118af3d76bda66a9bc042bee379d04cc4443de6b5423a418d56892c163e18b4c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 89,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/progress-tracker.md": {
+      "filePath": "docs/context/progress-tracker.md",
+      "contentHash": "0072fbb1b5aa78a94160888991855a49d06d4b98eed29d302df17288d9050757",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 114,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/project-overview_working.md": {
+      "filePath": "docs/context/project-overview_working.md",
+      "contentHash": "1ba846e88e425c8beb149d871f81e4f731e70ad53c6d86a3b8cf0247cf54d73e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/project-overview.md": {
+      "filePath": "docs/context/project-overview.md",
+      "contentHash": "e75d21e64ff62a670ee3cdc7f125680e60cc9ac93a8c03a8a13aeac6b8fa4fae",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 165,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/00-build-plan_working.md": {
+      "filePath": "docs/context/specs/00-build-plan_working.md",
+      "contentHash": "eb09c88ec494097f8d9bf646e60a3c60ec3f0ac352c66826e666ecd235a018b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/00-build-plan.md": {
+      "filePath": "docs/context/specs/00-build-plan.md",
+      "contentHash": "ebe0dd076172021795ce7e293cc24fee87716a4532e61ff78371e8a494b03fc0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/MASTER_STATUS.md": {
+      "filePath": "docs/context/specs/MASTER_STATUS.md",
+      "contentHash": "15601f0c0ce6101447cf5601271cedca9564d6d08c248810a086f0dfc3866bde",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 169,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/NN-unit-spec-template_working.md": {
+      "filePath": "docs/context/specs/NN-unit-spec-template_working.md",
+      "contentHash": "eb09c88ec494097f8d9bf646e60a3c60ec3f0ac352c66826e666ecd235a018b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/NN-unit-spec-template.md": {
+      "filePath": "docs/context/specs/NN-unit-spec-template.md",
+      "contentHash": "aad0baf3520bb937ec7c7d525d11049cb4a22371fcfc55582a1adc29614811f3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase10-plan_working.md": {
+      "filePath": "docs/context/specs/phase10-plan_working.md",
+      "contentHash": "bf45d7a9f97c8af5708f871050811500b7227765e8ea19604e1de495299d0f81",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase11-plan_working.md": {
+      "filePath": "docs/context/specs/phase11-plan_working.md",
+      "contentHash": "242f47c986cf5fefa990ab2e53b0656b7c40ee96407a30f36cc333f683126650",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 58,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase12-plan_working.md": {
+      "filePath": "docs/context/specs/phase12-plan_working.md",
+      "contentHash": "13d57f6b71e3bb2786a3be64433a608e9432a8e43f6435488981b0642ea648be",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 61,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase3-plan_working.md": {
+      "filePath": "docs/context/specs/phase3-plan_working.md",
+      "contentHash": "eb09c88ec494097f8d9bf646e60a3c60ec3f0ac352c66826e666ecd235a018b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase4-plan_working.md": {
+      "filePath": "docs/context/specs/phase4-plan_working.md",
+      "contentHash": "eb09c88ec494097f8d9bf646e60a3c60ec3f0ac352c66826e666ecd235a018b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase4-plan.md": {
+      "filePath": "docs/context/specs/phase4-plan.md",
+      "contentHash": "a2abc59e31f0011942c2bfb79f350062fec047ee09aef72db1c5bac21590d2b2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase5-plan_working.md": {
+      "filePath": "docs/context/specs/phase5-plan_working.md",
+      "contentHash": "eb09c88ec494097f8d9bf646e60a3c60ec3f0ac352c66826e666ecd235a018b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase5-plan.md": {
+      "filePath": "docs/context/specs/phase5-plan.md",
+      "contentHash": "a298c638537b51f7fdc08f21a7eb56f6cdbe75691417776654b6ba212ba633fa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 36,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase6-plan_working.md": {
+      "filePath": "docs/context/specs/phase6-plan_working.md",
+      "contentHash": "eb09c88ec494097f8d9bf646e60a3c60ec3f0ac352c66826e666ecd235a018b4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase6-plan.md": {
+      "filePath": "docs/context/specs/phase6-plan.md",
+      "contentHash": "72981681ba42aed3a4a68228c7ce9932192d8107eaacf4c2677ca95cabe26e0f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 40,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase7-plan_working.md": {
+      "filePath": "docs/context/specs/phase7-plan_working.md",
+      "contentHash": "71ff9ad15968efedd9322cd5c4162786bcc65eaa8b1c07ce30247f3b8e8bd39f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase7-plan.md": {
+      "filePath": "docs/context/specs/phase7-plan.md",
+      "contentHash": "9ca8b98d15378c5da9ea7d63c610a6f96014fb2ee71e1d0816736a0aee7f8e6f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase8-plan_working.md": {
+      "filePath": "docs/context/specs/phase8-plan_working.md",
+      "contentHash": "f7cc2f0a0eb10bd03e9cd7c9f06f8a564f1beadeb22608bd00da91e14338d03b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 75,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase8-plan.md": {
+      "filePath": "docs/context/specs/phase8-plan.md",
+      "contentHash": "bb03c8853ab22c233ed2c9b3886d56de6fa77645c0c93fd46b786b516e3229fa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 278,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/phase9-plan_working.md": {
+      "filePath": "docs/context/specs/phase9-plan_working.md",
+      "contentHash": "947fdcd9fe9608e3286c2f2872800a6f463384197f0d1e4e5101410edb1ae6c0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 203,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/specs/swarm-testing-prompts.md": {
+      "filePath": "docs/context/specs/swarm-testing-prompts.md",
+      "contentHash": "f0857327605779b21953ba58ce089275951e838ddaadb0626b168d745958988c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 188,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/ui-context_working.md": {
+      "filePath": "docs/context/ui-context_working.md",
+      "contentHash": "92656f5ecdb55f045fb4d37b42ac40e40a2cca46849d42522350470f5bf7128d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "docs/context/ui-context.md": {
+      "filePath": "docs/context/ui-context.md",
+      "contentHash": "b1f592a89d3a0b249e4b621077f6133aa599d01268b98244ef28aedc7d8ff77a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 240,
+      "hasStructuralAnalysis": true
+    },
+    "docs/dashboard-drift-plan.md": {
+      "filePath": "docs/dashboard-drift-plan.md",
+      "contentHash": "6202137b69def4e158b6ebeeab8b9d4fdb93ccffce5a91163eb804d5213b45af",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/00-foundation/master-index_working.md": {
+      "filePath": "docs/docs/00-foundation/master-index_working.md",
+      "contentHash": "149da16904664c4abd1bcc3d040fe8a0d7798aeb31c8e4873f22b3987ba08e97",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/00-foundation/master-index.md": {
+      "filePath": "docs/docs/00-foundation/master-index.md",
+      "contentHash": "ba75b0cbe45d026b2d6c737c25d92650f0ba055a0f756d9e61eacf31542bb23a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 80,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/00-foundation/project-charter_working.md": {
+      "filePath": "docs/docs/00-foundation/project-charter_working.md",
+      "contentHash": "79137a634307c2d2ff67b27d97446c1ca5945688ed50bebad3bcffa85c239108",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/00-foundation/project-charter.md": {
+      "filePath": "docs/docs/00-foundation/project-charter.md",
+      "contentHash": "9c95e302f9352ece75522f61231102149170e45fccd318c51cf86e366b7f47ae",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 54,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/00-foundation/research-foundation_working.md": {
+      "filePath": "docs/docs/00-foundation/research-foundation_working.md",
+      "contentHash": "be31364b08b93b9d89760ffb1726b17032d5439a9e5cd8e0747f8c3ebfc2b8dd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/00-foundation/research-foundation.md": {
+      "filePath": "docs/docs/00-foundation/research-foundation.md",
+      "contentHash": "55ecd28f19fef166b4c26c7328f117f7ee0d80fc11d6b7f6dd93a3e6e1b0b1f0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 47,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/audience-and-personas_working.md": {
+      "filePath": "docs/docs/01-product/audience-and-personas_working.md",
+      "contentHash": "ddd5db842e489c3072e200cd93e3ce7268a49ad4f0b9dc3e76f6e99168e227ec",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/audience-and-personas.md": {
+      "filePath": "docs/docs/01-product/audience-and-personas.md",
+      "contentHash": "710d8fdeb9ead887a883e111d4dc83ca6dfe6928f8072c12a058cf38f9ac5c16",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 29,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/market-and-competitor-analysis_working.md": {
+      "filePath": "docs/docs/01-product/market-and-competitor-analysis_working.md",
+      "contentHash": "b560411425c26561a27b24aba7a0b5a0480bd1ec3085c6f769e5041ba358f80f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/market-and-competitor-analysis.md": {
+      "filePath": "docs/docs/01-product/market-and-competitor-analysis.md",
+      "contentHash": "272d236bc6de894a4a9a1d3cb61c422dcc590d221dce044533b418894fdd47b6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 229,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/mvp-definition_working.md": {
+      "filePath": "docs/docs/01-product/mvp-definition_working.md",
+      "contentHash": "2c375984428c177070ecfc2668a9a165622daefa9e6d0de73e2eb3865676e2d9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/mvp-definition.md": {
+      "filePath": "docs/docs/01-product/mvp-definition.md",
+      "contentHash": "4e48075546db0d027461b007cdfb8d16018667bb663cc05aa504be5a4014c357",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/problem-statement_working.md": {
+      "filePath": "docs/docs/01-product/problem-statement_working.md",
+      "contentHash": "14800e4b76f0eb9ec4135026eb3ced2d6c36fa9caf33744ea51792e69f350164",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/problem-statement.md": {
+      "filePath": "docs/docs/01-product/problem-statement.md",
+      "contentHash": "52cc4085cdefa98a21b4e8d5c6f470478d251f2858f63d52e787b0252c7dfe7f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/requirements-catalog_working.md": {
+      "filePath": "docs/docs/01-product/requirements-catalog_working.md",
+      "contentHash": "e73dd1e1ec56b79d29f059d3cce1331fb82acee90cb46fe45d93de665f4563a2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/requirements-catalog.md": {
+      "filePath": "docs/docs/01-product/requirements-catalog.md",
+      "contentHash": "1699192d5fea80eb589db1a4e77854cf790f9130b35b97af6cecba01839b0725",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 36,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/scope-boundaries_working.md": {
+      "filePath": "docs/docs/01-product/scope-boundaries_working.md",
+      "contentHash": "8bb48d18bdba2c97bc4ed717f4c755938df84ebc61674004abf768f44f9db914",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/scope-boundaries.md": {
+      "filePath": "docs/docs/01-product/scope-boundaries.md",
+      "contentHash": "8f14db89b8a531b6e93aa13e93c56c2c8e512443b189ff92a9256c22c0226adb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/success-metrics_working.md": {
+      "filePath": "docs/docs/01-product/success-metrics_working.md",
+      "contentHash": "7bcbd64c8b2ab7d54d27f4fac1e922a07796603ed9076026fe19c37211e1d93a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/01-product/success-metrics.md": {
+      "filePath": "docs/docs/01-product/success-metrics.md",
+      "contentHash": "7ab31d37df4e03582b8a7cc030612cc0a42ee7c70e17cc55aa98ae8584b070f9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/architecture-blueprint_working.md": {
+      "filePath": "docs/docs/02-architecture/architecture-blueprint_working.md",
+      "contentHash": "75cc7dbf9864c97e485f910fc06ed0ac7e4d7524ec14d031ea14d5b7585e16c7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/architecture-blueprint.md": {
+      "filePath": "docs/docs/02-architecture/architecture-blueprint.md",
+      "contentHash": "14484e1aaee9d1598f1e05d3b8a4f4c2c34a5a2b433cfb31990501968ca1aafb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/c4-component-view_working.md": {
+      "filePath": "docs/docs/02-architecture/c4-component-view_working.md",
+      "contentHash": "38cd87ab830f629a9c8560b267d61745124009b8d48bc7aa98350f0d7a800911",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/c4-component-view.md": {
+      "filePath": "docs/docs/02-architecture/c4-component-view.md",
+      "contentHash": "c4fb3bee410fa85b19a215cd224236b4cb8f376f7d725effd24763fd5d8cd493",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/c4-container-view_working.md": {
+      "filePath": "docs/docs/02-architecture/c4-container-view_working.md",
+      "contentHash": "9cba500a2b8ffd96cf4d2ad53b7e314c0cd716c01a58d73032382ffc92772bfc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/c4-container-view.md": {
+      "filePath": "docs/docs/02-architecture/c4-container-view.md",
+      "contentHash": "67c78d0b5b893e521a9516542984131d8c1b3bfe916aeb1c783ae26d8538683d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/c4-system-context_working.md": {
+      "filePath": "docs/docs/02-architecture/c4-system-context_working.md",
+      "contentHash": "765339657d20f947df091a8802c38ab493136a12e593f75a64ef98f382ac4b94",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/c4-system-context.md": {
+      "filePath": "docs/docs/02-architecture/c4-system-context.md",
+      "contentHash": "8fd67d49f13b1679fdd590feacdb41b90a8f0716eafa573b5317cd5ed00f940a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/data-architecture_working.md": {
+      "filePath": "docs/docs/02-architecture/data-architecture_working.md",
+      "contentHash": "74323ae08b97a0864b8f58fee8f2a0196298d312c9e6d30c8a8e843e7b70e293",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/data-architecture.md": {
+      "filePath": "docs/docs/02-architecture/data-architecture.md",
+      "contentHash": "da485fc89806ca83c58ff20caa266c73dc988976a9c32affc283aa453600f428",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 41,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/integration-map_working.md": {
+      "filePath": "docs/docs/02-architecture/integration-map_working.md",
+      "contentHash": "9772ecdc8b81874dd13313fcf168f54732e372a6b6c3b9488c85a190fb230ce5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/integration-map.md": {
+      "filePath": "docs/docs/02-architecture/integration-map.md",
+      "contentHash": "5ff9b304f9810aa640457b662b12ff7c082afc023c6e61b8cb6ae1be1085a336",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/runtime-flows_working.md": {
+      "filePath": "docs/docs/02-architecture/runtime-flows_working.md",
+      "contentHash": "726a0d625e94ffc505ac9a3fc0e2c75e2675410a8cf207bb86707b96fb975489",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/runtime-flows.md": {
+      "filePath": "docs/docs/02-architecture/runtime-flows.md",
+      "contentHash": "c74bdbde549695da3a66e84205c0f8a5706334d58f462f6fbb899e330a94d04e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 38,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/sqlite-5-tier-design.md": {
+      "filePath": "docs/docs/02-architecture/sqlite-5-tier-design.md",
+      "contentHash": "c6d61228247163d2da3d23be35597ec97f7234e381069166ea6733a5ee02a027",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 294,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/sqlite-vector-retrieval.md": {
+      "filePath": "docs/docs/02-architecture/sqlite-vector-retrieval.md",
+      "contentHash": "950703d34b69ecfec9b8057fe83ba409ac95124180912bbf318645cefeca02f5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 293,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/system-boundaries_working.md": {
+      "filePath": "docs/docs/02-architecture/system-boundaries_working.md",
+      "contentHash": "900bb23636b1201c5b1c8276d354cdeebe167a5c07f5746b9fffaeb6068763c2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/02-architecture/system-boundaries.md": {
+      "filePath": "docs/docs/02-architecture/system-boundaries.md",
+      "contentHash": "bad1a26240423bd1e32baa17fa4d6379ad401553289193898c1e5544e177b794",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/api-contracts_working.md": {
+      "filePath": "docs/docs/03-engineering/api-contracts_working.md",
+      "contentHash": "2e346dedab25294ecaee53a9d2cdca7c0963c9ed8f7633525e1929095bde60f0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/api-contracts.md": {
+      "filePath": "docs/docs/03-engineering/api-contracts.md",
+      "contentHash": "b84704bbc91121241d8398a0efa8a000cff335396326244e7bac834731b68897",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/codebase-standards_working.md": {
+      "filePath": "docs/docs/03-engineering/codebase-standards_working.md",
+      "contentHash": "86eb793307928e1d463f5006082e947add1dcbe5478b228fcfb966030c9bb04a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/codebase-standards.md": {
+      "filePath": "docs/docs/03-engineering/codebase-standards.md",
+      "contentHash": "1be49f5439d5ba6ca0e2459db67e69e3a4c665e56e92a594251055bcff1078c2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/dependency-policy_working.md": {
+      "filePath": "docs/docs/03-engineering/dependency-policy_working.md",
+      "contentHash": "f4e73ca7003146a83d2dbf20f6d4cc87b9ce673f6e3b863aa83f174a9222525b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/dependency-policy.md": {
+      "filePath": "docs/docs/03-engineering/dependency-policy.md",
+      "contentHash": "54d041af1292245d88aa24d441780cc6c1e29c216ab862b755d599f4536d9085",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/environment-config_working.md": {
+      "filePath": "docs/docs/03-engineering/environment-config_working.md",
+      "contentHash": "c167f1c574f6d8fdbaedf8766cf57318e1bbea3ba69dcc912e8fd7e41225888a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/03-engineering/environment-config.md": {
+      "filePath": "docs/docs/03-engineering/environment-config.md",
+      "contentHash": "ec4588f81f55fac533b269379a3e335b0f767072128f4993e2e061f87eead172",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/access-control-matrix_working.md": {
+      "filePath": "docs/docs/04-security/access-control-matrix_working.md",
+      "contentHash": "a583ce8e6afadaf202ed46078740db28f5365d9a27438ebac95cd8c3e97c311c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 12,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/access-control-matrix.md": {
+      "filePath": "docs/docs/04-security/access-control-matrix.md",
+      "contentHash": "f005fdadaff789eba9ec5b877f9e3084a653ad5b3300312bf3eaa95d862db131",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/security-privacy-model_working.md": {
+      "filePath": "docs/docs/04-security/security-privacy-model_working.md",
+      "contentHash": "31a969d8550ecebf0742e43d1f7880b6e256ecce95559e6f029747f9781e8f75",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/security-privacy-model.md": {
+      "filePath": "docs/docs/04-security/security-privacy-model.md",
+      "contentHash": "207c9227a87bce7497dc47683599d9b26a7cfc60ae60a4ff8a30d8c5a681f76e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/security-verification-checklist_working.md": {
+      "filePath": "docs/docs/04-security/security-verification-checklist_working.md",
+      "contentHash": "59a655e9a0f47bb248ec73e15c272606eb8c1525c68392b35058ab7cb1e37706",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/security-verification-checklist.md": {
+      "filePath": "docs/docs/04-security/security-verification-checklist.md",
+      "contentHash": "d2518cb8d6ab2bc3f7572654635b347fe782b1ea210571bd9b22f5fec02e9abc",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/threat-model_working.md": {
+      "filePath": "docs/docs/04-security/threat-model_working.md",
+      "contentHash": "b821419b159cf64ffd8c7ceec6b83bf8f31ccb30569a83df765a6c87683ed23c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/04-security/threat-model.md": {
+      "filePath": "docs/docs/04-security/threat-model.md",
+      "contentHash": "327319547863e4406b721ddec5b2d5e36daa2dff942a1754a2fb165c9fbe42e1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/05-delivery/change-control_working.md": {
+      "filePath": "docs/docs/05-delivery/change-control_working.md",
+      "contentHash": "284f86a37a40168007d3f966187a4af668b902929ea0b8433d3ebd8c57ee7e03",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/05-delivery/change-control.md": {
+      "filePath": "docs/docs/05-delivery/change-control.md",
+      "contentHash": "5102744a1f6afad6ac438ccf30ac52af41cb5d0c885a348e56bd65f87591af42",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/05-delivery/implementation-plan-reliability.md": {
+      "filePath": "docs/docs/05-delivery/implementation-plan-reliability.md",
+      "contentHash": "a3e846538c6b41ccb948550e39ee2d21c0fdaa7f2637dd41f33bc60085ff7cd1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 190,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/05-delivery/milestone-roadmap_working.md": {
+      "filePath": "docs/docs/05-delivery/milestone-roadmap_working.md",
+      "contentHash": "0db23203ab09d3188d20d6c57bacc1cc2085aa43120677aef0b2a5c9138317d9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/05-delivery/milestone-roadmap.md": {
+      "filePath": "docs/docs/05-delivery/milestone-roadmap.md",
+      "contentHash": "b12b3b619afa70ff2ee2663903b2a57ee3965f7eb40df9c4eed76a8fb02c7dbd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/05-delivery/release-plan_working.md": {
+      "filePath": "docs/docs/05-delivery/release-plan_working.md",
+      "contentHash": "cbcd77738bcc9be835eb96df3906782c9ca7b424dd1304ed74f96bb973742f11",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/05-delivery/release-plan.md": {
+      "filePath": "docs/docs/05-delivery/release-plan.md",
+      "contentHash": "9712ff8eb8d492e71c39593cc49a5a5b1e2f255b9710bec733478c7e00073c5c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/06-quality/acceptance-checklists_working.md": {
+      "filePath": "docs/docs/06-quality/acceptance-checklists_working.md",
+      "contentHash": "fbdc6fc44819e65f1a53fc9448e0b9192ca784170017412128f45971a7842b72",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/06-quality/acceptance-checklists.md": {
+      "filePath": "docs/docs/06-quality/acceptance-checklists.md",
+      "contentHash": "93ada0e43c99db5ee0db8aafc6fcab1c756e93ccf701ae3efd5eeca122b0facf",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/06-quality/test-strategy_working.md": {
+      "filePath": "docs/docs/06-quality/test-strategy_working.md",
+      "contentHash": "bc3e712258d98180c095cfff12d8595ff0b107178659f387f9bf6f241f88f90d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/06-quality/test-strategy.md": {
+      "filePath": "docs/docs/06-quality/test-strategy.md",
+      "contentHash": "51e8853f7fa3f0a5bdbea782ab719dac8def8d490bd3c2e1833547ccc47f2bd1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/07-operations/incident-response-plan_working.md": {
+      "filePath": "docs/docs/07-operations/incident-response-plan_working.md",
+      "contentHash": "6968ba62531d9539a470e608df3f3a00bebb6e66ee2d30fdb769227b3a532327",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/07-operations/incident-response-plan.md": {
+      "filePath": "docs/docs/07-operations/incident-response-plan.md",
+      "contentHash": "c0d0da8e38ca87e616e64ed79bdf57e5478f9fbc591fd040a8fb8dec07037088",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/07-operations/observability-plan_working.md": {
+      "filePath": "docs/docs/07-operations/observability-plan_working.md",
+      "contentHash": "5901f646ccd7773cf31f51d6ecbb9f935bebe6af8bb8077f541c9b30fced7401",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/07-operations/observability-plan.md": {
+      "filePath": "docs/docs/07-operations/observability-plan.md",
+      "contentHash": "a09b516d2750ffe21d45cc27d857045b70f5823433eb53a2fab346110a7843aa",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/07-operations/runbook_working.md": {
+      "filePath": "docs/docs/07-operations/runbook_working.md",
+      "contentHash": "c058dac73b245818c2660cb48dee7b597e5a434a64a126783a591521a2669aca",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/07-operations/runbook.md": {
+      "filePath": "docs/docs/07-operations/runbook.md",
+      "contentHash": "11ce4c884c40f17df44dfd217b9126e75c512954bbc6e1cf808788626e8dfc49",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/ai-os-architecture-brief.md": {
+      "filePath": "docs/docs/08-research/ai-os-architecture-brief.md",
+      "contentHash": "52a2ae6f04a38a1f461bd22c15882b4b30c9298a976db7d83aaf59dcb5013c5d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 340,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/cost-model_working.md": {
+      "filePath": "docs/docs/08-research/cost-model_working.md",
+      "contentHash": "2d9a4275d192fa3f6d19fa740d723416d01cfa88c5bf13e9800b197d192435e5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/cost-model.md": {
+      "filePath": "docs/docs/08-research/cost-model.md",
+      "contentHash": "8bd78e21ddab67d3bbf7453ea90a91727124e1eba400c64755f504728effba6a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/emerging-ux-patterns.md": {
+      "filePath": "docs/docs/08-research/emerging-ux-patterns.md",
+      "contentHash": "d971b60a68051fe52406787799125eb6ae21131ef51a6e4499a0355541c73b5f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 259,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/grammar-constrained-decoding.md": {
+      "filePath": "docs/docs/08-research/grammar-constrained-decoding.md",
+      "contentHash": "6a48da3e21eb97ccb35ad1d550cad0280476d3acc0b7e4ea6c7113f23efa0f22",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 183,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/llm-provider-integration-research_working.md": {
+      "filePath": "docs/docs/08-research/llm-provider-integration-research_working.md",
+      "contentHash": "034a9a581158174350ffac6a2c85520df2284339f705c03b3b80a1eb932cb609",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 84,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/local-ai-os-deep-dive.md": {
+      "filePath": "docs/docs/08-research/local-ai-os-deep-dive.md",
+      "contentHash": "ead1ee86e67c06e246e2c4806187a735dbcac21dd30ad263b8109e619034bb23",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 246,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/research-log_working.md": {
+      "filePath": "docs/docs/08-research/research-log_working.md",
+      "contentHash": "3c3097f15842cafaea272fbeef97d004f2e83a5e566beaf8e8782f6cb3809354",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/research-log.md": {
+      "filePath": "docs/docs/08-research/research-log.md",
+      "contentHash": "795e44d3b961763fe9019aeeebc76629e763318b862c8b41f69263aad05659c4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/vendor-tool-evaluation_working.md": {
+      "filePath": "docs/docs/08-research/vendor-tool-evaluation_working.md",
+      "contentHash": "6e77ba37fe328b615fba5fa2db36354a76b28ac7c03d8bcc633f31a16fc0640c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/08-research/vendor-tool-evaluation.md": {
+      "filePath": "docs/docs/08-research/vendor-tool-evaluation.md",
+      "contentHash": "c9902e661bad38017e2551546da6223ec6eec5338f94ace6663dd0309eda3073",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/assumption-log_working.md": {
+      "filePath": "docs/docs/09-governance/assumption-log_working.md",
+      "contentHash": "b355ab9ce9bf11f556a5844e2347742f3c2f7a93dfc3e7ea4d44573938686e39",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/assumption-log.md": {
+      "filePath": "docs/docs/09-governance/assumption-log.md",
+      "contentHash": "0bfebd03a91d839709ef42b3224165247434b591561ebb4ad41b0b2a23b3e8fd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/decision-log_working.md": {
+      "filePath": "docs/docs/09-governance/decision-log_working.md",
+      "contentHash": "f477c97f90ee141fd89db616f68e7387a2f899fd377732b75774ff2b67b9a17a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/decision-log.md": {
+      "filePath": "docs/docs/09-governance/decision-log.md",
+      "contentHash": "af2646ef4b5d75ac412649dc275b024292db83aefed6aacfdb2c623601e5845f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/dependency-register_working.md": {
+      "filePath": "docs/docs/09-governance/dependency-register_working.md",
+      "contentHash": "96183f2fe38764ec68432f484a623ae30470f6bd7114017d9ded54a219d9afc8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/dependency-register.md": {
+      "filePath": "docs/docs/09-governance/dependency-register.md",
+      "contentHash": "e7b45bb2b30dea191ce35239f81af03f482e854e58c469f11c700e3c78be9d1a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/glossary_working.md": {
+      "filePath": "docs/docs/09-governance/glossary_working.md",
+      "contentHash": "18bd3b883dc20f93d0db8232bb4e4b020677e4323d068eb547f7a09c18f0e1a6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/glossary.md": {
+      "filePath": "docs/docs/09-governance/glossary.md",
+      "contentHash": "bf31cee9008ac96ebc82f1ddad216a73aa87b17863dbb9ded322cec978e2008a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/open-questions_working.md": {
+      "filePath": "docs/docs/09-governance/open-questions_working.md",
+      "contentHash": "b371d725f6e5dbe23effa9145c45ae63719614d3093074e246e6fece62d79460",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/open-questions.md": {
+      "filePath": "docs/docs/09-governance/open-questions.md",
+      "contentHash": "96768a678509cd0ec930603c3557f121b54f60114914cc26c8857124d45e1ab8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/risk-register_working.md": {
+      "filePath": "docs/docs/09-governance/risk-register_working.md",
+      "contentHash": "dcf4fd877a1e8d7156ac93df6b4fab69de3957917ed9bb0bf738aa4922ed4271",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "docs/docs/09-governance/risk-register.md": {
+      "filePath": "docs/docs/09-governance/risk-register.md",
+      "contentHash": "f9693c8d58946bafff80a8a3a9a02a0939d18f80f0627940335f7bcd529b06f9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "docs/grammar/dag.gbnf": {
+      "filePath": "docs/grammar/dag.gbnf",
+      "contentHash": "8cdd18ecf7ba1060775ba8fc733a0283895cfc1d2f59a0a05763174e2437326b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": false
+    },
+    "docs/MANIFEST.md": {
+      "filePath": "docs/MANIFEST.md",
+      "contentHash": "62c219b175da7f6bdebdd9b94f33fd459e28e4793dbd02bbba955f4d1c0f33e8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 220,
+      "hasStructuralAnalysis": true
+    },
+    "docs/phase8-expansion-ideas_working.md": {
+      "filePath": "docs/phase8-expansion-ideas_working.md",
+      "contentHash": "53dbaf52cd90490cae04c578560cc1badb03c010d8a9280e7e9f6d540ab6bd82",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "docs/phase8-expansion-ideas.md": {
+      "filePath": "docs/phase8-expansion-ideas.md",
+      "contentHash": "3d3993ba5611c37ba1113363bc1baaafe65ddc37646d29dc005a50b79f575b3c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 62,
+      "hasStructuralAnalysis": true
+    },
+    "docs/Phase9/phase-9-expansion-neurosync-architecture-the-blueprint-for-sovereignos-implement.md": {
+      "filePath": "docs/Phase9/phase-9-expansion-neurosync-architecture-the-blueprint-for-sovereignos-implement.md",
+      "contentHash": "af15c708d5cb616b21ecbfdd59fae7a5b11704955ab50a10705db3e00c8b7b69",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "docs/Phase9/research-for-implementation-review-neurosync-architecture-research-blueprint.md": {
+      "filePath": "docs/Phase9/research-for-implementation-review-neurosync-architecture-research-blueprint.md",
+      "contentHash": "ea39a899c62af72492a51f2e0e179d183dd2b38c78953172097241412a6615d9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 232,
+      "hasStructuralAnalysis": true
+    },
+    "docs/README.md": {
+      "filePath": "docs/README.md",
+      "contentHash": "b72ee0c3f81af60625e05d67790fdf4154c5297e02063d3fa9916c6b279a648b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 120,
+      "hasStructuralAnalysis": true
+    },
+    "docs/scopelogic-research-proposal.md": {
+      "filePath": "docs/scopelogic-research-proposal.md",
+      "contentHash": "a5c00fb888cf50b5fe77bd7a57c9e36e0a3b3ffb825f62933ac1ef19f6850f8b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "docs/scopelogic-weekly-proposal.md": {
+      "filePath": "docs/scopelogic-weekly-proposal.md",
+      "contentHash": "48774b23c1b8cfba10f1f5415e0331bed6bffec5133e81256d66872a4f6c9c7c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 862,
+      "hasStructuralAnalysis": true
+    },
+    "docs/skill-routing-map.html": {
+      "filePath": "docs/skill-routing-map.html",
+      "contentHash": "dc99af730ba08e5911bdf0d205971110d73066cc52a8d8b8b8eee1f076051ce8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 802,
+      "hasStructuralAnalysis": false
+    },
+    "docs/templates/adr/ADR-0000-template.md": {
+      "filePath": "docs/templates/adr/ADR-0000-template.md",
+      "contentHash": "43e6e3e7db99650d56f66a2a7271bab9befeff6feae7d22639c903ea76fc9782",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 64,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/feature-spec-template.md": {
+      "filePath": "docs/templates/feature-spec-template.md",
+      "contentHash": "3936aab0111c4fe0bf182e81ceccb44f7fbd961847d5dd8c317e087728367f57",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 52,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/reviews/ai-output-review-checklist.md": {
+      "filePath": "docs/templates/reviews/ai-output-review-checklist.md",
+      "contentHash": "d6a85f64211977021e3bf7bf68f2f828f0cefb08bb39cd29b451da57cda1e6f3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/reviews/architecture-review-checklist.md": {
+      "filePath": "docs/templates/reviews/architecture-review-checklist.md",
+      "contentHash": "a61a823334209a734a14d7625cfe4fa3020c314fe865f4ca0b6f733504f1f022",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/reviews/postmortem-template.md": {
+      "filePath": "docs/templates/reviews/postmortem-template.md",
+      "contentHash": "d13c514934b493cfb378777183c8009686734e89ac498079130ad79a75de1149",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 62,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/reviews/product-review-checklist.md": {
+      "filePath": "docs/templates/reviews/product-review-checklist.md",
+      "contentHash": "c3c2d47b0c37a0bb69684810722e76051d425db898fd5170e82abb350fa05af8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/reviews/release-review-checklist.md": {
+      "filePath": "docs/templates/reviews/release-review-checklist.md",
+      "contentHash": "8dbbefccdd56cac9c182118da74eb6ac4828f1184f7d85712a39ee8630d37d22",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/reviews/security-review-checklist.md": {
+      "filePath": "docs/templates/reviews/security-review-checklist.md",
+      "contentHash": "9bb9309b4842dccd8d60c43bf84d6e9b5dce59091bb9097a6ddf1b30b94a7767",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/rfc/RFC-0000-template.md": {
+      "filePath": "docs/templates/rfc/RFC-0000-template.md",
+      "contentHash": "8412cc4738f17f77aafb575a196ffedf743db5b447bd5e2eb1a6ff37fbf4ff1d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "docs/templates/technical-spec-template.md": {
+      "filePath": "docs/templates/technical-spec-template.md",
+      "contentHash": "6c4bf66064569f35e86087a8cecc6f7e043849c40677e60b2af3dd612855508f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 56,
+      "hasStructuralAnalysis": true
+    },
+    "generate_working_docs.py": {
+      "filePath": "generate_working_docs.py",
+      "contentHash": "41bc42aad3a023a4626037cba7ddb40a6f2b494924271ac6f3a39431ab56bba0",
+      "functions": [
+        {
+          "name": "generate_working_file",
+          "params": [
+            "filepath"
+          ],
+          "exported": true,
+          "lineCount": 34
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "glob",
+          "specifiers": [
+            "glob"
+          ]
+        },
+        {
+          "source": "re",
+          "specifiers": [
+            "re"
+          ]
+        }
+      ],
+      "exports": [
+        "generate_working_file"
+      ],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
+    "index.html": {
+      "filePath": "index.html",
+      "contentHash": "84a44ccee40f9c086d0ee82b19851aed7cd202ebb6aa7cef6464b6694470bc40",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 44,
+      "hasStructuralAnalysis": false
+    },
+    "Logos/NeuroSyncBrandBook.html": {
+      "filePath": "Logos/NeuroSyncBrandBook.html",
+      "contentHash": "8608655d18ca8ed79e4749fb893aaa03c855ee3270614a78c85091fcc946f3ff",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1182,
+      "hasStructuralAnalysis": false
+    },
+    "package.json": {
+      "filePath": "package.json",
+      "contentHash": "7b02a50caa7a06ea29a77abe16eef6d1fff9b6c85a18e22dc8471dd2b868d103",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 57,
+      "hasStructuralAnalysis": true
+    },
+    "postcss.config.js": {
+      "filePath": "postcss.config.js",
+      "contentHash": "251ecddd4672c9cf467547e3dc535de00ad2129df26e7e7ae728fa4e5ac45fc5",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/crypto-test.ts": {
+      "filePath": "scripts/crypto-test.ts",
+      "contentHash": "159e25a06d8391202e9e55e4940907aeb66caba01ef6b443363a8b014cb6be28",
+      "functions": [
+        {
+          "name": "testCrypto",
+          "params": [],
+          "exported": false,
+          "lineCount": 63
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "better-sqlite3",
+          "specifiers": [
+            "Database"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 69,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/dag-test.ts": {
+      "filePath": "scripts/dag-test.ts",
+      "contentHash": "b75f4035beb637911580cbe4fda29c50cea78380af150b313fb30bf83ae0085d",
+      "functions": [
+        {
+          "name": "testDAG",
+          "params": [],
+          "exported": false,
+          "lineCount": 100
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 105,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/e2e-test.ts": {
+      "filePath": "scripts/e2e-test.ts",
+      "contentHash": "f0bec3683b3dab7a5322f99e6f568477810066611eb1c3d8b9194a2d5a517b51",
+      "functions": [
+        {
+          "name": "runE2E",
+          "params": [],
+          "exported": false,
+          "lineCount": 85
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/auth.ts": {
+      "filePath": "src/core/basevault/auth.ts",
+      "contentHash": "c55f8ccbb95b2ef5eb678e8939799798c787266757029a13118dbc9aeb1fde32",
+      "functions": [],
+      "classes": [
+        {
+          "name": "AuthManager",
+          "methods": [
+            "hashPassword",
+            "verifyPassword",
+            "encryptApiKey",
+            "decryptApiKey"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 61
+        }
+      ],
+      "imports": [
+        {
+          "source": "argon2",
+          "specifiers": [
+            "argon2"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [
+        "AuthManager"
+      ],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/crypto.test.ts": {
+      "filePath": "src/core/basevault/crypto.test.ts",
+      "contentHash": "dab59d5518469b6a878a3bce1f9e29a92cb323a02a80a0f4846248b2325afa94",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./crypto",
+          "specifiers": [
+            "encrypt",
+            "decrypt"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/crypto.ts": {
+      "filePath": "src/core/basevault/crypto.ts",
+      "contentHash": "a5513e770d21ecc2f5fec0b94fd389730e342265609a570d94253031da1c1d7b",
+      "functions": [
+        {
+          "name": "getMasterKey",
+          "params": [],
+          "returnType": "Buffer",
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "encrypt",
+          "params": [
+            "text"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "decrypt",
+          "params": [
+            "hexString"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        }
+      ],
+      "exports": [
+        "encrypt",
+        "decrypt"
+      ],
+      "totalLines": 47,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/db.test.ts": {
+      "filePath": "src/core/basevault/db.test.ts",
+      "contentHash": "82a96d58b9424c63286cd8901d3e725d8ca83d4dae89b6b8be60ec6ebb84bf96",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll",
+            "afterAll"
+          ]
+        },
+        {
+          "source": "./db",
+          "specifiers": [
+            "db",
+            "initDB",
+            "dbPath"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/db.ts": {
+      "filePath": "src/core/basevault/db.ts",
+      "contentHash": "a9b22868c777ab670666347039e8def1f2887f6c0d3d43b737de369fb20b8809",
+      "functions": [
+        {
+          "name": "initDB",
+          "params": [],
+          "exported": true,
+          "lineCount": 99
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "better-sqlite3",
+          "specifiers": [
+            "Database"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "worker_threads",
+          "specifiers": [
+            "isMainThread"
+          ]
+        },
+        {
+          "source": "better-sqlite3",
+          "specifiers": [
+            "BetterSqlite3Database"
+          ]
+        },
+        {
+          "source": "sqlite-vec",
+          "specifiers": [
+            "* as sqliteVec"
+          ]
+        }
+      ],
+      "exports": [
+        "dbPath",
+        "db",
+        "initDB"
+      ],
+      "totalLines": 131,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/schema.test.ts": {
+      "filePath": "src/core/basevault/schema.test.ts",
+      "contentHash": "c34b43d800262247114b3d91656369d47028b42f78ba03fe60369639e18c6e29",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeEach",
+            "afterEach",
+            "vi"
+          ]
+        },
+        {
+          "source": "./schema",
+          "specifiers": [
+            "ProjectSchema",
+            "WorkflowRunSchema",
+            "TaskSchema",
+            "partitionBySchema"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 266,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/schema.ts": {
+      "filePath": "src/core/basevault/schema.ts",
+      "contentHash": "5ff62fb22f453baaa96381f42f067b877c24478ab7dabd2c84e8bedb55c5ffe4",
+      "functions": [
+        {
+          "name": "partitionBySchema",
+          "params": [
+            "rawRows",
+            "schema",
+            "label"
+          ],
+          "returnType": "PartitionResult<T>",
+          "exported": true,
+          "lineCount": 41
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "zod",
+          "specifiers": [
+            "z"
+          ]
+        }
+      ],
+      "exports": [
+        "ProjectSchema",
+        "WorkflowRunSchema",
+        "TaskSchema",
+        "partitionBySchema"
+      ],
+      "totalLines": 94,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/basevault/write-queue.ts": {
+      "filePath": "src/core/basevault/write-queue.ts",
+      "contentHash": "97c657e5d86edcf6d2335bd6d59544e280bd9487932471b9f4c0ec3801a6459d",
+      "functions": [
+        {
+          "name": "executeWriteTask",
+          "params": [
+            "task"
+          ],
+          "returnType": "Promise<any>",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./db.js",
+          "specifiers": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        "executeWriteTask"
+      ],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/dispatch.ts": {
+      "filePath": "src/core/coreexec/dispatch.ts",
+      "contentHash": "15f50effb38506b2c25901f30863632519201c0dda67c6a829d24363eba84685",
+      "functions": [
+        {
+          "name": "classifyDirective",
+          "params": [
+            "prompt"
+          ],
+          "returnType": "NodeDirective",
+          "exported": true,
+          "lineCount": 36
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./sandbox",
+          "specifiers": [
+            "ALLOWLIST"
+          ]
+        }
+      ],
+      "exports": [
+        "classifyDirective"
+      ],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/engine.test.ts": {
+      "filePath": "src/core/coreexec/engine.test.ts",
+      "contentHash": "0c33157471f066eb54a8f8451a923ada064f497e116754d5a0ef3dc1836c638f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll",
+            "afterAll",
+            "beforeEach"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db",
+            "initDB",
+            "dbPath"
+          ]
+        },
+        {
+          "source": "./engine",
+          "specifiers": [
+            "executeRun"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 107,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/engine.ts": {
+      "filePath": "src/core/coreexec/engine.ts",
+      "contentHash": "3fbb8de9bdfdd4bb9d04e5caf26eb45f9a77b0f1470bcc03c7ca96135fef9272",
+      "functions": [
+        {
+          "name": "executeRun",
+          "params": [
+            "runId"
+          ],
+          "returnType": "Promise<boolean>",
+          "exported": true,
+          "lineCount": 116
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "./queue",
+          "specifiers": [
+            "claimTask"
+          ]
+        },
+        {
+          "source": "../scoutdaemon/sse",
+          "specifiers": [
+            "scoutEmitter"
+          ]
+        },
+        {
+          "source": "./worker-pool",
+          "specifiers": [
+            "workerPool"
+          ]
+        },
+        {
+          "source": "../../server/routes/system",
+          "specifiers": [
+            "systemConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "executeRun"
+      ],
+      "totalLines": 140,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/memory-sweep.test.ts": {
+      "filePath": "src/core/coreexec/memory-sweep.test.ts",
+      "contentHash": "01b4292c7a5f386a69873990455a7cf01ff60d6b43b9ba2b0ac8948e111ab1e2",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "vi",
+            "beforeEach",
+            "afterEach"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "./memory-sweep",
+          "specifiers": [
+            "sweepOrphanedWorkspaces"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 74,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/memory-sweep.ts": {
+      "filePath": "src/core/coreexec/memory-sweep.ts",
+      "contentHash": "0624b31bc679ab9a273642f993e7c6d0281ce6fc609e9e8e9d9fefc0f0ba3ac8",
+      "functions": [
+        {
+          "name": "sweepOrphanedWorkspaces",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 37
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        "sweepOrphanedWorkspaces"
+      ],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/path-validator.ts": {
+      "filePath": "src/core/coreexec/path-validator.ts",
+      "contentHash": "c787a78ce7fae4e7950da452886eb3186cb64290ae5c0b10f013e50e9e3c404b",
+      "functions": [],
+      "classes": [
+        {
+          "name": "PathValidator",
+          "methods": [
+            "validateContainment"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 49
+        }
+      ],
+      "imports": [
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [
+        "PathValidator"
+      ],
+      "totalLines": 52,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/python_scripts/scraper.py": {
+      "filePath": "src/core/coreexec/python_scripts/scraper.py",
+      "contentHash": "bb28df4c239c0482aa1ebb7e3c95f0b9f13b271e49e07ee6abd5846d97758054",
+      "functions": [
+        {
+          "name": "run_scrapling",
+          "params": [
+            "url",
+            "headless"
+          ],
+          "exported": true,
+          "lineCount": 38
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "sys",
+          "specifiers": [
+            "sys"
+          ]
+        },
+        {
+          "source": "json",
+          "specifiers": [
+            "json"
+          ]
+        },
+        {
+          "source": "argparse",
+          "specifiers": [
+            "argparse"
+          ]
+        },
+        {
+          "source": "traceback",
+          "specifiers": [
+            "traceback"
+          ]
+        }
+      ],
+      "exports": [
+        "run_scrapling"
+      ],
+      "totalLines": 52,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/queue.test.ts": {
+      "filePath": "src/core/coreexec/queue.test.ts",
+      "contentHash": "939894e943d6ac73f99c0a661cba074d31d4e88d6196e2ad068696abf1717c54",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll",
+            "afterAll",
+            "beforeEach"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db",
+            "initDB",
+            "dbPath"
+          ]
+        },
+        {
+          "source": "./queue",
+          "specifiers": [
+            "claimTask",
+            "createRunAndTasks"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 72,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/queue.ts": {
+      "filePath": "src/core/coreexec/queue.ts",
+      "contentHash": "30a629ca54645642e8104e68871cea36668fd9b542f4be1246db5942414695bf",
+      "functions": [
+        {
+          "name": "createRunAndTasks",
+          "params": [
+            "projectId",
+            "taskCount"
+          ],
+          "exported": true,
+          "lineCount": 34
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [
+        "createRunAndTasks",
+        "claimTask"
+      ],
+      "totalLines": 67,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/sandbox.test.ts": {
+      "filePath": "src/core/coreexec/sandbox.test.ts",
+      "contentHash": "86f6e6e2ab406b6a96986291b9822f4cfa4604265abb350b65244675d3de916c",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./sandbox",
+          "specifiers": [
+            "CommandSandbox"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 59,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/sandbox.ts": {
+      "filePath": "src/core/coreexec/sandbox.ts",
+      "contentHash": "54fd7ca602fd5d96c4e2464ea72d220ee337d246a29493951655011e073fdb14",
+      "functions": [],
+      "classes": [
+        {
+          "name": "CommandExecutionError",
+          "methods": [
+            "constructor"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "CommandSandbox",
+          "methods": [
+            "constructor",
+            "execute"
+          ],
+          "properties": [
+            "baseDir"
+          ],
+          "exported": true,
+          "lineCount": 82
+        }
+      ],
+      "imports": [
+        {
+          "source": "child_process",
+          "specifiers": [
+            "spawn"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "./path-validator",
+          "specifiers": [
+            "PathValidator"
+          ]
+        }
+      ],
+      "exports": [
+        "CommandExecutionError",
+        "ALLOWLIST",
+        "CommandSandbox"
+      ],
+      "totalLines": 109,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/scheduler.test.ts": {
+      "filePath": "src/core/coreexec/scheduler.test.ts",
+      "contentHash": "8d7d5064f675a28d3c7c9b6ebf7f547bb8157f7b5cc56d9e46da0246795792c0",
+      "functions": [
+        {
+          "name": "seedWorkflow",
+          "params": [
+            "name",
+            "dagTemplate"
+          ],
+          "returnType": "{ id: string }",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "cleanupWorkflow",
+          "params": [
+            "id"
+          ],
+          "exported": false,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        },
+        {
+          "source": "./scheduler",
+          "specifiers": [
+            "refreshJobs"
+          ]
+        },
+        {
+          "source": "../scoutdaemon/sse",
+          "specifiers": [
+            "scoutEmitter"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 167,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/scheduler.ts": {
+      "filePath": "src/core/coreexec/scheduler.ts",
+      "contentHash": "1185957236818f34d67f9953b59a72cdae17ae71d32c69b7baeb82e8e8eab8b8",
+      "functions": [
+        {
+          "name": "_stopSchedulerLoopForTests",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "initScheduler",
+          "params": [],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "refreshJobs",
+          "params": [],
+          "returnType": "void",
+          "exported": true,
+          "lineCount": 56
+        },
+        {
+          "name": "triggerWorkflow",
+          "params": [
+            "wf"
+          ],
+          "exported": false,
+          "lineCount": 22
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node-cron",
+          "specifiers": [
+            "cron",
+            "ScheduledTask"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "./memory-sweep",
+          "specifiers": [
+            "sweepOrphanedWorkspaces"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        },
+        {
+          "source": "./engine",
+          "specifiers": [
+            "executeRun"
+          ]
+        },
+        {
+          "source": "./validateDAG",
+          "specifiers": [
+            "validateDAGTemplate",
+            "escalateBlockedDAGToOsTodos"
+          ]
+        }
+      ],
+      "exports": [
+        "_stopSchedulerLoopForTests",
+        "initScheduler",
+        "refreshJobs"
+      ],
+      "totalLines": 127,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/scraping.ts": {
+      "filePath": "src/core/coreexec/scraping.ts",
+      "contentHash": "6cafd948e9b15d21d30aaef294788d060433758265b72421468f20822a2d71b7",
+      "functions": [],
+      "classes": [
+        {
+          "name": "StealthScraper",
+          "methods": [
+            "constructor",
+            "scrape"
+          ],
+          "properties": [
+            "sandbox"
+          ],
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "imports": [
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "./sandbox",
+          "specifiers": [
+            "CommandSandbox"
+          ]
+        }
+      ],
+      "exports": [
+        "StealthScraper"
+      ],
+      "totalLines": 31,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/test-fix-retest.test.ts": {
+      "filePath": "src/core/coreexec/test-fix-retest.test.ts",
+      "contentHash": "95164ef78056e5c2d7bf41cb53922e4ffbc81fe551fca76ea0362660c8aaac2f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "vi"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 47,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/validateDAG.test.ts": {
+      "filePath": "src/core/coreexec/validateDAG.test.ts",
+      "contentHash": "97c9d7c13549b8bd1f93e96eccf927f00d3a0d892b011f2da259faf284da9e66",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll",
+            "vi"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 186,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/validateDAG.ts": {
+      "filePath": "src/core/coreexec/validateDAG.ts",
+      "contentHash": "ba2f11f766f7384983842c5092dda692a504bace11577dc4b7e709789d6e2ec4",
+      "functions": [
+        {
+          "name": "validateDAGTemplate",
+          "params": [
+            "templateStr"
+          ],
+          "returnType": "ValidateDAGResult",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "validateDAGProposal",
+          "params": [
+            "proposal"
+          ],
+          "returnType": "ValidateDAGResult",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "escalateBlockedDAGToOsTodos",
+          "params": [
+            "workflowId",
+            "validationError",
+            "origin"
+          ],
+          "returnType": "{ todoId: string; sentinelTaskId: string; runId: string }",
+          "exported": true,
+          "lineCount": 78
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../scopelogic/validator",
+          "specifiers": [
+            "ValidatorLogic"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "../scoutdaemon/sse",
+          "specifiers": [
+            "scoutEmitter"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        },
+        {
+          "source": "../scopelogic/interview",
+          "specifiers": [
+            "DAGProposal"
+          ]
+        }
+      ],
+      "exports": [
+        "validateDAGTemplate",
+        "validateDAGProposal",
+        "escalateBlockedDAGToOsTodos"
+      ],
+      "totalLines": 160,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/worker-pool.ts": {
+      "filePath": "src/core/coreexec/worker-pool.ts",
+      "contentHash": "447395decf9b9d84b7eaf1f0f9e6d11a8dbe9d22ba48f45c1091927b0ceacfdf",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "poolifier",
+          "specifiers": [
+            "DynamicThreadPool"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "* as os"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "url",
+          "specifiers": [
+            "fileURLToPath"
+          ]
+        }
+      ],
+      "exports": [
+        "safeMaxThreads",
+        "workerPool"
+      ],
+      "totalLines": 32,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/worker.test.ts": {
+      "filePath": "src/core/coreexec/worker.test.ts",
+      "contentHash": "cf5315733ec0cc8f86f20969a2b5cc9a4dfb308df59cf9e503fca6dff1e3bcae",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./dispatch",
+          "specifiers": [
+            "classifyDirective",
+            "NodeDirective"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 84,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/coreexec/worker.ts": {
+      "filePath": "src/core/coreexec/worker.ts",
+      "contentHash": "18a6df99c81714499c331e72f5182bb936db8d4e16c8ae43fb9920e812e63e8c",
+      "functions": [
+        {
+          "name": "errEnvelope",
+          "params": [
+            "error",
+            "taskId"
+          ],
+          "returnType": "WorkerOutput",
+          "exported": false,
+          "lineCount": 10
+        }
+      ],
+      "classes": [
+        {
+          "name": "CoreExecWorker",
+          "methods": [
+            "constructor"
+          ],
+          "properties": [],
+          "exported": false,
+          "lineCount": 91
+        }
+      ],
+      "imports": [
+        {
+          "source": "poolifier",
+          "specifiers": [
+            "ThreadWorker"
+          ]
+        },
+        {
+          "source": "./sandbox",
+          "specifiers": [
+            "CommandSandbox"
+          ]
+        },
+        {
+          "source": "./scraping",
+          "specifiers": [
+            "StealthScraper"
+          ]
+        },
+        {
+          "source": "./dispatch",
+          "specifiers": [
+            "classifyDirective",
+            "NodeDirective"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 145,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/memory/cerebro/habituation.test.ts": {
+      "filePath": "src/core/memory/cerebro/habituation.test.ts",
+      "contentHash": "ed4eadba2bfeb913a7bdd6caf29bcf474a4cda2b5fa7e170976bab58ecc75f0a",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./habituation",
+          "specifiers": [
+            "HabituationScorer"
+          ]
+        },
+        {
+          "source": "./vector",
+          "specifiers": [
+            "MemoryRecord"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 38,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/memory/cerebro/habituation.ts": {
+      "filePath": "src/core/memory/cerebro/habituation.ts",
+      "contentHash": "0fa66b475b99d26bcf71470c695792120a202e75e8b3e006715be3241c20c18d",
+      "functions": [],
+      "classes": [
+        {
+          "name": "HabituationScorer",
+          "methods": [
+            "rank"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 32
+        }
+      ],
+      "imports": [
+        {
+          "source": "./vector",
+          "specifiers": [
+            "MemoryRecord"
+          ]
+        }
+      ],
+      "exports": [
+        "HabituationScorer"
+      ],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/memory/cerebro/reflection.test.ts": {
+      "filePath": "src/core/memory/cerebro/reflection.test.ts",
+      "contentHash": "12a6f50dedf10d46c9b3e8fae1614bc78ce9adf9cb605cf0a091293162ef46a1",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeEach"
+          ]
+        },
+        {
+          "source": "../../basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        },
+        {
+          "source": "./reflection",
+          "specifiers": [
+            "ReflectionExecutor"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 40,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/memory/cerebro/reflection.ts": {
+      "filePath": "src/core/memory/cerebro/reflection.ts",
+      "contentHash": "628ce4b99553014cdd0b0a2e05a7df860e57ba3bf2f847233c1c6ab512d4bcec",
+      "functions": [],
+      "classes": [
+        {
+          "name": "ReflectionExecutor",
+          "methods": [
+            "pingActivity",
+            "startDaemon",
+            "stopDaemon",
+            "runReflectionCycle",
+            "_mockExtractPreferences"
+          ],
+          "properties": [
+            "lastActivityTime",
+            "timer",
+            "IDLE_THRESHOLD_MS"
+          ],
+          "exported": true,
+          "lineCount": 91
+        }
+      ],
+      "imports": [
+        {
+          "source": "../../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "./vector",
+          "specifiers": [
+            "CerebroVectorStore"
+          ]
+        }
+      ],
+      "exports": [
+        "ReflectionExecutor"
+      ],
+      "totalLines": 95,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/memory/cerebro/vector.test.ts": {
+      "filePath": "src/core/memory/cerebro/vector.test.ts",
+      "contentHash": "a772296cecdf0aaa7a5236e2c93ff4daf2196a36a7110a580ab595a6a0123c9d",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeEach"
+          ]
+        },
+        {
+          "source": "../../basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        },
+        {
+          "source": "./vector",
+          "specifiers": [
+            "CerebroVectorStore"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 50,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/memory/cerebro/vector.ts": {
+      "filePath": "src/core/memory/cerebro/vector.ts",
+      "contentHash": "85aa195705f379723c9416da6bc42b885f06052de9b3030ed31cfa656b7111cf",
+      "functions": [],
+      "classes": [
+        {
+          "name": "CerebroVectorStore",
+          "methods": [
+            "insert",
+            "search",
+            "_vectorSearch",
+            "_keywordFallbackSearch"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 99
+        }
+      ],
+      "imports": [
+        {
+          "source": "../../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [
+        "CerebroVectorStore"
+      ],
+      "totalLines": 113,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/adapters/llama-cpp.ts": {
+      "filePath": "src/core/routeswitch/adapters/llama-cpp.ts",
+      "contentHash": "1d8df75f1befb8a3e5f8029955ac27d6316aca253db6c35f98d1339640b1fc46",
+      "functions": [],
+      "classes": [
+        {
+          "name": "LlamaCppProvider",
+          "methods": [
+            "constructor",
+            "generate"
+          ],
+          "properties": [
+            "id"
+          ],
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "imports": [
+        {
+          "source": "../providers",
+          "specifiers": [
+            "LLMProvider"
+          ]
+        }
+      ],
+      "exports": [
+        "LlamaCppProvider"
+      ],
+      "totalLines": 25,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/adapters/openai-compatible.ts": {
+      "filePath": "src/core/routeswitch/adapters/openai-compatible.ts",
+      "contentHash": "2ed4fceecdb9fec5e27fde8c08c428adabd873ab8474d19c07432811ff910a05",
+      "functions": [],
+      "classes": [
+        {
+          "name": "OpenAICompatibleProvider",
+          "methods": [
+            "constructor",
+            "generate"
+          ],
+          "properties": [
+            "id"
+          ],
+          "exported": true,
+          "lineCount": 89
+        }
+      ],
+      "imports": [
+        {
+          "source": "../providers",
+          "specifiers": [
+            "LLMProvider"
+          ]
+        },
+        {
+          "source": "../../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "../../basevault/crypto",
+          "specifiers": [
+            "decrypt"
+          ]
+        }
+      ],
+      "exports": [
+        "OpenAICompatibleProvider"
+      ],
+      "totalLines": 100,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/agent-stop.test.ts": {
+      "filePath": "src/core/routeswitch/agent-stop.test.ts",
+      "contentHash": "dc02d5905550637b4a338d82d1e9e7c39fb787b38a4f5ce815d7960024363eb7",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./agent-stop",
+          "specifiers": [
+            "AgentStopSupervisor"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/agent-stop.ts": {
+      "filePath": "src/core/routeswitch/agent-stop.ts",
+      "contentHash": "df2fcb39a962e8acc610a2568e224a75eda1616eb27def6598f848c603a4b368",
+      "functions": [],
+      "classes": [
+        {
+          "name": "AgentStopSupervisor",
+          "methods": [
+            "constructor",
+            "evaluateToken",
+            "reset"
+          ],
+          "properties": [
+            "config",
+            "consecutiveLowCount"
+          ],
+          "exported": true,
+          "lineCount": 29
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "AgentStopSupervisor"
+      ],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/council.test.ts": {
+      "filePath": "src/core/routeswitch/council.test.ts",
+      "contentHash": "d8b1ba04ddd1dad5465b6e7f2f33bf77946b6e39fed457a9a16d619234dad2bd",
+      "functions": [],
+      "classes": [
+        {
+          "name": "DummyProvider",
+          "methods": [
+            "constructor",
+            "generate"
+          ],
+          "properties": [],
+          "exported": false,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "vi"
+          ]
+        },
+        {
+          "source": "./engine",
+          "specifiers": [
+            "RouteSwitchEngine"
+          ]
+        },
+        {
+          "source": "./providers",
+          "specifiers": [
+            "LLMProvider"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/council.ts": {
+      "filePath": "src/core/routeswitch/council.ts",
+      "contentHash": "2a5a7f13ea83d5a27de4683b3def960c9ea2b414684e7f1c350c9d619a29e671",
+      "functions": [],
+      "classes": [
+        {
+          "name": "ConsensusSynthesizer",
+          "methods": [
+            "executeCouncilMode"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 53
+        }
+      ],
+      "imports": [
+        {
+          "source": "./providers",
+          "specifiers": [
+            "LLMProvider"
+          ]
+        }
+      ],
+      "exports": [
+        "ConsensusSynthesizer"
+      ],
+      "totalLines": 62,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/discovery.ts": {
+      "filePath": "src/core/routeswitch/discovery.ts",
+      "contentHash": "b015a18bde2e4ba001fff2a78a6e35fbb5c04fd4cf36f18c1ee5b6317cae0f35",
+      "functions": [],
+      "classes": [
+        {
+          "name": "ModelDiscovery",
+          "methods": [
+            "fetchModels",
+            "getAvailableModels"
+          ],
+          "properties": [
+            "cachedModels"
+          ],
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "ModelDiscovery"
+      ],
+      "totalLines": 35,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/engine.ts": {
+      "filePath": "src/core/routeswitch/engine.ts",
+      "contentHash": "9ca616a07a441e9570b9b399e0b5c7c7484839c278bf93790d01c9bcf32ccd29",
+      "functions": [],
+      "classes": [
+        {
+          "name": "RouteSwitchEngine",
+          "methods": [
+            "constructor",
+            "setProvider",
+            "setCouncilProviders",
+            "execute"
+          ],
+          "properties": [
+            "governor",
+            "provider",
+            "councilProviders"
+          ],
+          "exported": true,
+          "lineCount": 58
+        }
+      ],
+      "imports": [
+        {
+          "source": "./governor",
+          "specifiers": [
+            "FreeModeGovernor"
+          ]
+        },
+        {
+          "source": "./providers",
+          "specifiers": [
+            "LLMProvider",
+            "MockProvider"
+          ]
+        },
+        {
+          "source": "./triage",
+          "specifiers": [
+            "TriageClassifier"
+          ]
+        },
+        {
+          "source": "./council",
+          "specifiers": [
+            "ConsensusSynthesizer"
+          ]
+        }
+      ],
+      "exports": [
+        "RouteSwitchEngine"
+      ],
+      "totalLines": 78,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/governor.test.ts": {
+      "filePath": "src/core/routeswitch/governor.test.ts",
+      "contentHash": "f40214aae44c3f921e6ffa2362c6075093fee86feac0b7e1f350d53f4f3ab163",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "vi",
+            "beforeEach",
+            "afterEach"
+          ]
+        },
+        {
+          "source": "./governor",
+          "specifiers": [
+            "FreeModeGovernor",
+            "ESTIMATED_COST_PER_1K_TOKENS_USD"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 114,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/governor.ts": {
+      "filePath": "src/core/routeswitch/governor.ts",
+      "contentHash": "0d4d79cf6bc3a1ff12f53b088e53de9e380ac38a96ee50077f832f83fff0cc34",
+      "functions": [],
+      "classes": [
+        {
+          "name": "FreeModeGovernor",
+          "methods": [
+            "constructor",
+            "canProceed",
+            "recordUsage",
+            "getStatus",
+            "getUsage24h"
+          ],
+          "properties": [
+            "state",
+            "history"
+          ],
+          "exported": true,
+          "lineCount": 69
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "ESTIMATED_COST_PER_1K_TOKENS_USD",
+        "FreeModeGovernor"
+      ],
+      "totalLines": 115,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/interceptor.ts": {
+      "filePath": "src/core/routeswitch/interceptor.ts",
+      "contentHash": "c0eedf7fa0052d4ed143c9dd8d9c521c7ceba7f4289f1aaf3d4c2b6109bb0df2",
+      "functions": [],
+      "classes": [
+        {
+          "name": "ProviderHealthState",
+          "methods": [
+            "getState",
+            "parseRateLimitHeaders",
+            "markExhausted"
+          ],
+          "properties": [
+            "states",
+            "EXHAUST_THRESHOLD"
+          ],
+          "exported": true,
+          "lineCount": 74
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "ProviderHealthState"
+      ],
+      "totalLines": 81,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/providers.ts": {
+      "filePath": "src/core/routeswitch/providers.ts",
+      "contentHash": "6e46d613875c5741e0140ec8c807b80b82b89a13dc734e2df728fca481a5f4c9",
+      "functions": [],
+      "classes": [
+        {
+          "name": "MockProvider",
+          "methods": [
+            "generate"
+          ],
+          "properties": [
+            "id"
+          ],
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "MockProvider"
+      ],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/router.test.ts": {
+      "filePath": "src/core/routeswitch/router.test.ts",
+      "contentHash": "0d5fb4cb5a9e8b5df7a602d1c5ca6ef6d44d20ae40ac84ec4bfddc4812ce612c",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "vi",
+            "beforeEach",
+            "afterEach"
+          ]
+        },
+        {
+          "source": "./router.js",
+          "specifiers": [
+            "executeWithFallback"
+          ]
+        },
+        {
+          "source": "./interceptor.js",
+          "specifiers": [
+            "ProviderHealthState"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/router.ts": {
+      "filePath": "src/core/routeswitch/router.ts",
+      "contentHash": "755c213d963c010816479cc7a8d94ee5a23689315cda67296c378858b5197d8d",
+      "functions": [
+        {
+          "name": "executeWithFallback",
+          "params": [
+            "prompt",
+            "fallbackChain"
+          ],
+          "returnType": "Promise<any>",
+          "exported": true,
+          "lineCount": 57
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./interceptor.js",
+          "specifiers": [
+            "ProviderHealthState"
+          ]
+        }
+      ],
+      "exports": [
+        "executeWithFallback"
+      ],
+      "totalLines": 60,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/routeswitch.test.ts": {
+      "filePath": "src/core/routeswitch/routeswitch.test.ts",
+      "contentHash": "285ebb224afb5ee7f0149b641fc8147d8090bd99438b7f46fef22e7f60a2c2f3",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./governor",
+          "specifiers": [
+            "FreeModeGovernor"
+          ]
+        },
+        {
+          "source": "./engine",
+          "specifiers": [
+            "RouteSwitchEngine"
+          ]
+        },
+        {
+          "source": "./adapters/llama-cpp",
+          "specifiers": [
+            "LlamaCppProvider"
+          ]
+        },
+        {
+          "source": "./adapters/openai-compatible",
+          "specifiers": [
+            "OpenAICompatibleProvider"
+          ]
+        },
+        {
+          "source": "vitest",
+          "specifiers": [
+            "vi"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 60,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/routeswitch/triage.ts": {
+      "filePath": "src/core/routeswitch/triage.ts",
+      "contentHash": "4a6947c0df950965edbe3edd352873cb5c456fefa4d5852dc931aac2f5fa05fa",
+      "functions": [],
+      "classes": [
+        {
+          "name": "TriageClassifier",
+          "methods": [
+            "isHighRisk"
+          ],
+          "properties": [
+            "HIGH_RISK_KEYWORDS"
+          ],
+          "exported": true,
+          "lineCount": 21
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "TriageClassifier"
+      ],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scopelogic/interview.test.ts": {
+      "filePath": "src/core/scopelogic/interview.test.ts",
+      "contentHash": "f4e46cc68e35658b73d18d47ab5113b636f77fd9efe1b5dd6befb86766eaca2e",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./interview",
+          "specifiers": [
+            "ScopeLogicSession"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 38,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scopelogic/interview.ts": {
+      "filePath": "src/core/scopelogic/interview.ts",
+      "contentHash": "e00d5086dbc49c14804312537f4672633875d667373944211f1a50b9e57f14e1",
+      "functions": [],
+      "classes": [
+        {
+          "name": "ScopeLogicSession",
+          "methods": [
+            "constructor",
+            "processUserInputAsync",
+            "processUserInput",
+            "_generateProposal",
+            "getHistory",
+            "reset"
+          ],
+          "properties": [
+            "round",
+            "isComplete",
+            "history",
+            "MAX_ROUNDS",
+            "generateFn"
+          ],
+          "exported": true,
+          "lineCount": 148
+        }
+      ],
+      "imports": [
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        },
+        {
+          "source": "./validator",
+          "specifiers": [
+            "ValidatorLogic"
+          ]
+        }
+      ],
+      "exports": [
+        "ScopeLogicSession"
+      ],
+      "totalLines": 178,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scopelogic/risk.ts": {
+      "filePath": "src/core/scopelogic/risk.ts",
+      "contentHash": "6cb36c7a210eeff61d90aea348133da91f50133565ac036837d246725b2f84a7",
+      "functions": [
+        {
+          "name": "assessWorkflowRisk",
+          "params": [
+            "nodes"
+          ],
+          "returnType": "RiskAssessment",
+          "exported": true,
+          "lineCount": 36
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "../coreexec/engine",
+          "specifiers": [
+            "DAGNode"
+          ]
+        }
+      ],
+      "exports": [
+        "assessWorkflowRisk"
+      ],
+      "totalLines": 54,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scopelogic/schemas.test.ts": {
+      "filePath": "src/core/scopelogic/schemas.test.ts",
+      "contentHash": "db905163d74b100c1e0e8a5e57a47a835ccee9253aa0196c15a015756e715976",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./schemas",
+          "specifiers": [
+            "DAGProposalSchema",
+            "InterviewResponseSchema"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scopelogic/schemas.ts": {
+      "filePath": "src/core/scopelogic/schemas.ts",
+      "contentHash": "f20b52104a3a1719e9b15d194a2596c01468ee6b617eea6f0966bdcb584417ef",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "zod",
+          "specifiers": [
+            "z"
+          ]
+        }
+      ],
+      "exports": [
+        "DAGNodeSchema",
+        "DAGProposalSchema",
+        "InterviewResponseSchema"
+      ],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scopelogic/validator.test.ts": {
+      "filePath": "src/core/scopelogic/validator.test.ts",
+      "contentHash": "761cd96633a723f76b99780c72611f31bb8451e23d763a3f0e8ffe66b50bb982",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./validator",
+          "specifiers": [
+            "ValidatorLogic"
+          ]
+        },
+        {
+          "source": "./interview",
+          "specifiers": [
+            "DAGProposal"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 96,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scopelogic/validator.ts": {
+      "filePath": "src/core/scopelogic/validator.ts",
+      "contentHash": "f12794e28bf3d3cd2bc587e6cc5dca611d00ec8f3ca52ba829e579ebd1ef6e80",
+      "functions": [],
+      "classes": [
+        {
+          "name": "ValidatorLogic",
+          "methods": [
+            "validate"
+          ],
+          "properties": [
+            "FORBIDDEN_SQL",
+            "FORBIDDEN_SHELL",
+            "ALLOWED_AGENTS"
+          ],
+          "exported": true,
+          "lineCount": 56
+        }
+      ],
+      "imports": [
+        {
+          "source": "./interview",
+          "specifiers": [
+            "DAGProposal"
+          ]
+        },
+        {
+          "source": "../system-reserved",
+          "specifiers": [
+            "isReservedDAGPrompt",
+            "findReservedLabel"
+          ]
+        }
+      ],
+      "exports": [
+        "ValidatorLogic"
+      ],
+      "totalLines": 63,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutdaemon/db-sync.test.ts": {
+      "filePath": "src/core/scoutdaemon/db-sync.test.ts",
+      "contentHash": "dacc6d6a8517a6f0eeacbfdb0aae96177c89ef377a06591871beca0177f0e2c6",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./db-sync",
+          "specifiers": [
+            "DBSync"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 24,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutdaemon/db-sync.ts": {
+      "filePath": "src/core/scoutdaemon/db-sync.ts",
+      "contentHash": "9a4aa66210d4526af8f8d9e5819358b3e006e93207ebee96da6a911336397fa0",
+      "functions": [],
+      "classes": [
+        {
+          "name": "DBSync",
+          "methods": [
+            "constructor",
+            "insertSymbols",
+            "insertBatch"
+          ],
+          "properties": [
+            "db"
+          ],
+          "exported": true,
+          "lineCount": 33
+        }
+      ],
+      "imports": [],
+      "exports": [
+        "DBSync"
+      ],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutdaemon/gitnexus-worker.ts": {
+      "filePath": "src/core/scoutdaemon/gitnexus-worker.ts",
+      "contentHash": "553f2fa3549561e157da514e6611e1636ace3239bc647cceb676593b496375fa",
+      "functions": [
+        {
+          "name": "jaroWinkler",
+          "params": [
+            "s1",
+            "s2"
+          ],
+          "returnType": "number",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "filterStopWords",
+          "params": [
+            "name"
+          ],
+          "returnType": "boolean",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "processASTNode",
+          "params": [
+            "node",
+            "symbols"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "deduplicateSymbols",
+          "params": [
+            "symbols"
+          ],
+          "returnType": "any[]",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "parseAndReduceAST",
+          "params": [
+            "sourceCode"
+          ],
+          "returnType": "any[]",
+          "exported": false,
+          "lineCount": 18
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "worker_threads",
+          "specifiers": [
+            "parentPort",
+            "isMainThread"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 95,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutdaemon/idle.ts": {
+      "filePath": "src/core/scoutdaemon/idle.ts",
+      "contentHash": "eab6ca034b2f5c99a28d9cbb702b0b306d4d4c2140ac218382d8bfe5859a78e3",
+      "functions": [],
+      "classes": [
+        {
+          "name": "IdleDetector",
+          "methods": [
+            "constructor",
+            "start",
+            "stop",
+            "ping"
+          ],
+          "properties": [
+            "lastHeartbeat",
+            "idleThresholdMs",
+            "checkInterval",
+            "isIdle",
+            "originalMaxWorkers"
+          ],
+          "exported": true,
+          "lineCount": 57
+        }
+      ],
+      "imports": [
+        {
+          "source": "events",
+          "specifiers": [
+            "EventEmitter"
+          ]
+        },
+        {
+          "source": "../coreexec/engine",
+          "specifiers": [
+            "executeRun"
+          ]
+        },
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        },
+        {
+          "source": "systeminformation",
+          "specifiers": [
+            "* as si"
+          ]
+        },
+        {
+          "source": "../../server/routes/system",
+          "specifiers": [
+            "systemConfig"
+          ]
+        }
+      ],
+      "exports": [
+        "IdleDetector",
+        "idleDetector"
+      ],
+      "totalLines": 95,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutdaemon/parser.ts": {
+      "filePath": "src/core/scoutdaemon/parser.ts",
+      "contentHash": "f2118aa75f91849c26225c7f350be02c3ddc9169f4652c266c7915cd7f7350d8",
+      "functions": [],
+      "classes": [
+        {
+          "name": "GitNexusParser",
+          "methods": [
+            "parseCodebase"
+          ],
+          "properties": [
+            "worker"
+          ],
+          "exported": true,
+          "lineCount": 48
+        }
+      ],
+      "imports": [
+        {
+          "source": "worker_threads",
+          "specifiers": [
+            "Worker"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [
+        "GitNexusParser"
+      ],
+      "totalLines": 52,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutdaemon/sse.ts": {
+      "filePath": "src/core/scoutdaemon/sse.ts",
+      "contentHash": "b3eddfce4474dad5edc244cecaa430e07a68c663a39bb26a01bd2bafba31ec86",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "hono/streaming",
+          "specifiers": [
+            "streamSSE"
+          ]
+        },
+        {
+          "source": "events",
+          "specifiers": [
+            "EventEmitter"
+          ]
+        },
+        {
+          "source": "./idle",
+          "specifiers": [
+            "idleDetector"
+          ]
+        }
+      ],
+      "exports": [
+        "scoutEmitter",
+        "scoutRouter"
+      ],
+      "totalLines": 64,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutdaemon/worker.test.ts": {
+      "filePath": "src/core/scoutdaemon/worker.test.ts",
+      "contentHash": "caa6531d1ced99ae2d2ff0d0fd0a723448d7090e40ba78d6f4165c04fed70fca",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./parser",
+          "specifiers": [
+            "GitNexusParser"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutlogic/benchmarker.ts": {
+      "filePath": "src/core/scoutlogic/benchmarker.ts",
+      "contentHash": "a26dc8438526f532385f32b815f2626b17686997c2223b250503e62fa9614797",
+      "functions": [],
+      "classes": [
+        {
+          "name": "Benchmarker",
+          "methods": [
+            "recordRun"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 35
+        }
+      ],
+      "imports": [
+        {
+          "source": "../basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        "Benchmarker"
+      ],
+      "totalLines": 38,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutlogic/classifier.test.ts": {
+      "filePath": "src/core/scoutlogic/classifier.test.ts",
+      "contentHash": "59ccff516af20ea4fa6d3da3a129f747b4a884a067e766bff37363b44c1f307d",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./classifier",
+          "specifiers": [
+            "classifyComplexity"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutlogic/classifier.ts": {
+      "filePath": "src/core/scoutlogic/classifier.ts",
+      "contentHash": "52916d861720b9246ac09bc023b946a9257bf460e2fd2b7caede41a8287824a6",
+      "functions": [
+        {
+          "name": "classifyComplexity",
+          "params": [
+            "prompt"
+          ],
+          "returnType": "'trivial' | 'logical' | 'complex'",
+          "exported": true,
+          "lineCount": 22
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "classifyComplexity"
+      ],
+      "totalLines": 23,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutlogic/dynamic-router.test.ts": {
+      "filePath": "src/core/scoutlogic/dynamic-router.test.ts",
+      "contentHash": "ad3e86424ef1907312f103c289c4c5336b74eab95d093973650d9df961e5d608",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./dynamic-router",
+          "specifiers": [
+            "selectOptimalModel"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/scoutlogic/dynamic-router.ts": {
+      "filePath": "src/core/scoutlogic/dynamic-router.ts",
+      "contentHash": "12080c6cc9f903fa6349182bea00cc02430750494f08129a431199cc6109adf8",
+      "functions": [
+        {
+          "name": "selectOptimalModel",
+          "params": [
+            "complexity",
+            "userPriority",
+            "availableModels",
+            "benchmarks"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 55
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "selectOptimalModel"
+      ],
+      "totalLines": 70,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/system-reserved.test.ts": {
+      "filePath": "src/core/system-reserved.test.ts",
+      "contentHash": "876c99e98c343aca18a6e68495eecd9a73dcc7568dc2f681551dd42b9b0d5adf",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect"
+          ]
+        },
+        {
+          "source": "./system-reserved",
+          "specifiers": [
+            "RESERVED_DAG_LABELS",
+            "isReservedDAGPrompt",
+            "findReservedLabel"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 112,
+      "hasStructuralAnalysis": true
+    },
+    "src/core/system-reserved.ts": {
+      "filePath": "src/core/system-reserved.ts",
+      "contentHash": "fb12ef5798960636959d994c3b2281c1037659d014e08c5e063c70e6358902f4",
+      "functions": [
+        {
+          "name": "findReservedLabel",
+          "params": [
+            "prompt"
+          ],
+          "returnType": "string",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "isReservedDAGPrompt",
+          "params": [
+            "prompt"
+          ],
+          "returnType": "boolean",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "RESERVED_DAG_LABELS",
+        "findReservedLabel",
+        "isReservedDAGPrompt"
+      ],
+      "totalLines": 47,
+      "hasStructuralAnalysis": true
+    },
+    "src/env.d.ts": {
+      "filePath": "src/env.d.ts",
+      "contentHash": "9c2b1bb049555c38d2ff09674e08e3bb6f8d68e1d48fda7d1dc48978197748d1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/index.ts": {
+      "filePath": "src/server/index.ts",
+      "contentHash": "b87d7bf5adf299654c01af978b9824c4e9c979bfb46ef1a624471d315c4b271c",
+      "functions": [
+        {
+          "name": "generateFn",
+          "params": [
+            "prompt"
+          ],
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@hono/node-server",
+          "specifiers": [
+            "serve"
+          ]
+        },
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "hono/cors",
+          "specifiers": [
+            "cors"
+          ]
+        },
+        {
+          "source": "../core/scopelogic/interview",
+          "specifiers": [
+            "ScopeLogicSession"
+          ]
+        },
+        {
+          "source": "../core/routeswitch/engine",
+          "specifiers": [
+            "RouteSwitchEngine"
+          ]
+        },
+        {
+          "source": "../core/routeswitch/governor",
+          "specifiers": [
+            "FreeModeGovernor"
+          ]
+        },
+        {
+          "source": "../core/routeswitch/adapters/llama-cpp",
+          "specifiers": [
+            "LlamaCppProvider"
+          ]
+        },
+        {
+          "source": "../core/routeswitch/adapters/openai-compatible",
+          "specifiers": [
+            "OpenAICompatibleProvider"
+          ]
+        },
+        {
+          "source": "../core/routeswitch/providers",
+          "specifiers": [
+            "MockProvider"
+          ]
+        },
+        {
+          "source": "../core/coreexec/engine",
+          "specifiers": [
+            "executeRun"
+          ]
+        },
+        {
+          "source": "../core/basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        },
+        {
+          "source": "../core/basevault/schema",
+          "specifiers": [
+            "WorkflowRunSchema",
+            "TaskSchema",
+            "partitionBySchema"
+          ]
+        },
+        {
+          "source": "../core/scoutdaemon/sse",
+          "specifiers": [
+            "scoutRouter"
+          ]
+        },
+        {
+          "source": "@hono/node-server/serve-static",
+          "specifiers": [
+            "serveStatic"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "../core/coreexec/scheduler",
+          "specifiers": [
+            "initScheduler"
+          ]
+        },
+        {
+          "source": "../core/scoutdaemon/idle",
+          "specifiers": [
+            "idleDetector"
+          ]
+        },
+        {
+          "source": "./routes/system",
+          "specifiers": [
+            "systemRouter"
+          ]
+        },
+        {
+          "source": "./routes/todos",
+          "specifiers": [
+            "todosRouter"
+          ]
+        },
+        {
+          "source": "./routes/projects",
+          "specifiers": [
+            "projectsRouter"
+          ]
+        },
+        {
+          "source": "./routes/llm",
+          "specifiers": [
+            "llmRouter",
+            "injectLLMEngine"
+          ]
+        },
+        {
+          "source": "./routes/cerebro",
+          "specifiers": [
+            "cerebroRouter"
+          ]
+        },
+        {
+          "source": "./routes/models",
+          "specifiers": [
+            "modelsRouter"
+          ]
+        },
+        {
+          "source": "./routes/scheduler-list",
+          "specifiers": [
+            "schedulerListRouter"
+          ]
+        },
+        {
+          "source": "./routes/coreexec-router",
+          "specifiers": [
+            "coreexecRouter"
+          ]
+        },
+        {
+          "source": "../core/routeswitch/discovery",
+          "specifiers": [
+            "ModelDiscovery"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 249,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/cerebro.test.ts": {
+      "filePath": "src/server/routes/cerebro.test.ts",
+      "contentHash": "dbf258bb79dde1384682460d0f708b968e0a7e354a96d037054e75d2a98e688d",
+      "functions": [
+        {
+          "name": "get",
+          "params": [
+            "path"
+          ],
+          "returnType": "Promise<{ status: number; body: any }>",
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll"
+          ]
+        },
+        {
+          "source": "./cerebro",
+          "specifiers": [
+            "cerebroRouter"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/cerebro.ts": {
+      "filePath": "src/server/routes/cerebro.ts",
+      "contentHash": "7f32a2f06c70314581c04aaeb9e82aeac36ead08b33253dfd459b09aff0e989f",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "../../core/memory/cerebro/vector",
+          "specifiers": [
+            "CerebroVectorStore"
+          ]
+        },
+        {
+          "source": "../../core/memory/cerebro/reflection",
+          "specifiers": [
+            "ReflectionExecutor"
+          ]
+        }
+      ],
+      "exports": [
+        "cerebroRouter"
+      ],
+      "totalLines": 138,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/coreexec-router.test.ts": {
+      "filePath": "src/server/routes/coreexec-router.test.ts",
+      "contentHash": "359f9111879a23857f3b88e3a76e066f6eacb2ffb5a9a9fa6491bd152e9bb1cb",
+      "functions": [
+        {
+          "name": "post",
+          "params": [
+            "path",
+            "body"
+          ],
+          "returnType": "Promise<{ status: number; data: any }>",
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        },
+        {
+          "source": "./coreexec-router",
+          "specifiers": [
+            "coreexecRouter"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 101,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/coreexec-router.ts": {
+      "filePath": "src/server/routes/coreexec-router.ts",
+      "contentHash": "fd5903c2f2acc140a60d0c997e9e8d19c2032c6b4c0f2be588bab65fe4a8c50a",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        },
+        {
+          "source": "../../core/coreexec/engine",
+          "specifiers": [
+            "executeRun"
+          ]
+        },
+        {
+          "source": "../../core/coreexec/validateDAG",
+          "specifiers": [
+            "validateDAGProposal",
+            "validateDAGTemplate",
+            "escalateBlockedDAGToOsTodos"
+          ]
+        }
+      ],
+      "exports": [
+        "coreexecRouter"
+      ],
+      "totalLines": 112,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/llm.ts": {
+      "filePath": "src/server/routes/llm.ts",
+      "contentHash": "fea13df03b12d60435531361b80ff47d81c9a1dfa53cdef28c534d9005782c62",
+      "functions": [
+        {
+          "name": "injectLLMEngine",
+          "params": [
+            "engine",
+            "governor"
+          ],
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "../../core/routeswitch/engine",
+          "specifiers": [
+            "RouteSwitchEngine"
+          ]
+        },
+        {
+          "source": "../../core/routeswitch/providers",
+          "specifiers": [
+            "MockProvider"
+          ]
+        },
+        {
+          "source": "../../core/routeswitch/adapters/openai-compatible",
+          "specifiers": [
+            "OpenAICompatibleProvider"
+          ]
+        },
+        {
+          "source": "../../core/routeswitch/adapters/llama-cpp",
+          "specifiers": [
+            "LlamaCppProvider"
+          ]
+        },
+        {
+          "source": "../../core/routeswitch/governor",
+          "specifiers": [
+            "FreeModeGovernor"
+          ]
+        }
+      ],
+      "exports": [
+        "llmRouter",
+        "activeEngine",
+        "activeGovernor",
+        "injectLLMEngine"
+      ],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/models.ts": {
+      "filePath": "src/server/routes/models.ts",
+      "contentHash": "575dd398a9aafcff7921daea893c0d820fcd799c5eb8bf92ef8d2d89267f8f28",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "../../core/routeswitch/discovery",
+          "specifiers": [
+            "ModelDiscovery"
+          ]
+        }
+      ],
+      "exports": [
+        "modelsRouter"
+      ],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/projects.ts": {
+      "filePath": "src/server/routes/projects.ts",
+      "contentHash": "dfd1d4ec688f062d1d64a823ae53dcdd90ae0cdfbb6ee537ce2ff490d4931be6",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "randomUUID"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        }
+      ],
+      "exports": [
+        "projectsRouter"
+      ],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/scheduler-list.test.ts": {
+      "filePath": "src/server/routes/scheduler-list.test.ts",
+      "contentHash": "80a402b6e6a9cf595f48544b28a92840cc3bca5bddbd1b651f4d74165c4f6062",
+      "functions": [
+        {
+          "name": "get",
+          "params": [
+            "path"
+          ],
+          "returnType": "Promise<{ status: number; body: any }>",
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vitest",
+          "specifiers": [
+            "describe",
+            "it",
+            "expect",
+            "beforeAll"
+          ]
+        },
+        {
+          "source": "./scheduler-list",
+          "specifiers": [
+            "schedulerListRouter"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db",
+            "initDB"
+          ]
+        },
+        {
+          "source": "crypto",
+          "specifiers": [
+            "crypto"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/scheduler-list.ts": {
+      "filePath": "src/server/routes/scheduler-list.ts",
+      "contentHash": "93b6672ca184ee911ae63f4bc30dec0425a53603fa2e9130065bec540154acbf",
+      "functions": [
+        {
+          "name": "probeNextTick",
+          "params": [
+            "expr"
+          ],
+          "returnType": "number | null",
+          "exported": false,
+          "lineCount": 13
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "node-cron",
+          "specifiers": [
+            "cron"
+          ]
+        },
+        {
+          "source": "cron-parser",
+          "specifiers": [
+            "CronExpressionParser"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        "schedulerListRouter"
+      ],
+      "totalLines": 71,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/system.ts": {
+      "filePath": "src/server/routes/system.ts",
+      "contentHash": "5cb552957f4a60a0a9c36fc888f3bcf2b33a5307aedb0499f8dc224b837b8c6d",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "hono/streaming",
+          "specifiers": [
+            "streamSSE"
+          ]
+        },
+        {
+          "source": "systeminformation",
+          "specifiers": [
+            "* as si"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "fs",
+          "specifiers": [
+            "fs"
+          ]
+        },
+        {
+          "source": "path",
+          "specifiers": [
+            "path"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db",
+            "dbPath"
+          ]
+        },
+        {
+          "source": "../../core/basevault/crypto",
+          "specifiers": [
+            "encrypt",
+            "decrypt"
+          ]
+        },
+        {
+          "source": "../../core/coreexec/worker-pool",
+          "specifiers": [
+            "workerPool"
+          ]
+        }
+      ],
+      "exports": [
+        "systemRouter",
+        "systemConfig"
+      ],
+      "totalLines": 189,
+      "hasStructuralAnalysis": true
+    },
+    "src/server/routes/todos.ts": {
+      "filePath": "src/server/routes/todos.ts",
+      "contentHash": "11cb654cb55b725f572fd4758602a17cd3f780a544bf7e0a32e5bac3199d58b3",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hono",
+          "specifiers": [
+            "Hono"
+          ]
+        },
+        {
+          "source": "../../core/basevault/db",
+          "specifiers": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        "todosRouter"
+      ],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/App.tsx": {
+      "filePath": "src/ui/App.tsx",
+      "contentHash": "dfb9273c9230533b31908c66f2655a182d77b03c0854ab00865a0e74dc818cd8",
+      "functions": [
+        {
+          "name": "CustomNode",
+          "params": [
+            "{ data, isConnectable }"
+          ],
+          "exported": false,
+          "lineCount": 19
+        },
+        {
+          "name": "App",
+          "params": [],
+          "exported": true,
+          "lineCount": 426
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useCallback",
+            "useEffect",
+            "useRef"
+          ]
+        },
+        {
+          "source": "@xyflow/react",
+          "specifiers": [
+            "ReactFlow",
+            "Controls",
+            "Background",
+            "useNodesState",
+            "useEdgesState",
+            "addEdge",
+            "Handle",
+            "Position",
+            "BackgroundVariant"
+          ]
+        },
+        {
+          "source": "@xyflow/react",
+          "specifiers": [
+            "Connection",
+            "Edge",
+            "Node"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Cpu",
+            "Database",
+            "Network",
+            "Sun",
+            "Moon",
+            "Settings"
+          ]
+        },
+        {
+          "source": "../../Logos/PORTGRIDLogo.png",
+          "specifiers": [
+            "portGridLogo"
+          ]
+        },
+        {
+          "source": "./components/ScopeLogicChat",
+          "specifiers": [
+            "ScopeLogicChat"
+          ]
+        },
+        {
+          "source": "./components/RunHistory",
+          "specifiers": [
+            "RunHistory"
+          ]
+        },
+        {
+          "source": "./components/SettingsModal",
+          "specifiers": [
+            "SettingsModal"
+          ]
+        },
+        {
+          "source": "./components/ScopeLogicChat",
+          "specifiers": [
+            "DAGProposalPayload"
+          ]
+        },
+        {
+          "source": "./components/ApprovalCockpit",
+          "specifiers": [
+            "ApprovalCockpit"
+          ]
+        },
+        {
+          "source": "./components/NodeOutputInspector",
+          "specifiers": [
+            "NodeOutputInspector"
+          ]
+        },
+        {
+          "source": "../core/system-reserved",
+          "specifiers": [
+            "isReservedDAGPrompt"
+          ]
+        },
+        {
+          "source": "./components/Statusline",
+          "specifiers": [
+            "Statusline"
+          ]
+        }
+      ],
+      "exports": [
+        "App"
+      ],
+      "totalLines": 493,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/AgentKPIStrip.tsx": {
+      "filePath": "src/ui/components/AgentKPIStrip.tsx",
+      "contentHash": "cf39336f20cb180821ade43f5e1a62cb788d312765311e57cd2dc096abb00fcd",
+      "functions": [
+        {
+          "name": "Stat",
+          "params": [
+            "{ icon, label, value, accent }"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "AgentKPIStrip",
+          "params": [],
+          "exported": true,
+          "lineCount": 41
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useEffect",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Cpu",
+            "Zap",
+            "Layers",
+            "Users"
+          ]
+        }
+      ],
+      "exports": [
+        "AgentKPIStrip"
+      ],
+      "totalLines": 73,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/ApprovalCockpit.tsx": {
+      "filePath": "src/ui/components/ApprovalCockpit.tsx",
+      "contentHash": "5958c1734f7a4802d61645e175724177adbd975887271739718fe79a05cf6fb0",
+      "functions": [
+        {
+          "name": "ApprovalCockpit",
+          "params": [
+            "{ proposal, onApprove, onReject }"
+          ],
+          "exported": true,
+          "lineCount": 97
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "../../core/coreexec/engine",
+          "specifiers": [
+            "DAGNode"
+          ]
+        },
+        {
+          "source": "../../core/scopelogic/risk",
+          "specifiers": [
+            "assessWorkflowRisk",
+            "RiskAssessment"
+          ]
+        }
+      ],
+      "exports": [
+        "ApprovalCockpit"
+      ],
+      "totalLines": 108,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/AutonomyDials.tsx": {
+      "filePath": "src/ui/components/AutonomyDials.tsx",
+      "contentHash": "6614a6be0e0f4d57636d510985d6920c68bc8ac058c18a6c3b22cd1665a2292f",
+      "functions": [
+        {
+          "name": "AutonomyDials",
+          "params": [],
+          "exported": true,
+          "lineCount": 95
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect",
+            "useRef"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Sliders",
+            "Shield",
+            "Zap"
+          ]
+        }
+      ],
+      "exports": [
+        "AutonomyDials"
+      ],
+      "totalLines": 99,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/CerebroHealthWidget.tsx": {
+      "filePath": "src/ui/components/CerebroHealthWidget.tsx",
+      "contentHash": "1762039521f50d2a043906cd9f3f99334033f510f567730c6bbd177f5d56beb3",
+      "functions": [
+        {
+          "name": "formatLast",
+          "params": [
+            "ts"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "CerebroHealthWidget",
+          "params": [],
+          "exported": true,
+          "lineCount": 61
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useEffect",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "BrainCircuit",
+            "Database",
+            "Activity"
+          ]
+        }
+      ],
+      "exports": [
+        "CerebroHealthWidget"
+      ],
+      "totalLines": 97,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/CronSummary.tsx": {
+      "filePath": "src/ui/components/CronSummary.tsx",
+      "contentHash": "3d009422aaeb4d86f80d6f0ab8dc6149d8c288453a1037968d751c9669b4a41b",
+      "functions": [
+        {
+          "name": "msCountdown",
+          "params": [
+            "target",
+            "now"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "formatTick",
+          "params": [
+            "ts"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "CronSummary",
+          "params": [],
+          "exported": true,
+          "lineCount": 76
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useEffect",
+            "useState",
+            "useCallback"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Clock",
+            "RefreshCw"
+          ]
+        }
+      ],
+      "exports": [
+        "CronSummary"
+      ],
+      "totalLines": 117,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/GovernorUI.tsx": {
+      "filePath": "src/ui/components/GovernorUI.tsx",
+      "contentHash": "20cac909786a64e28a3abc12287eef3ae37273cae392e6f71643d6b26fbeda77",
+      "functions": [
+        {
+          "name": "GovernorUI",
+          "params": [],
+          "exported": true,
+          "lineCount": 106
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useEffect",
+            "useState"
+          ]
+        }
+      ],
+      "exports": [
+        "GovernorUI"
+      ],
+      "totalLines": 116,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/IntentPreview.tsx": {
+      "filePath": "src/ui/components/IntentPreview.tsx",
+      "contentHash": "d445e13c98e8860324f2a0da9925baad243e319c13f2368f7f57ea8cc23573a6",
+      "functions": [
+        {
+          "name": "IntentPreview",
+          "params": [
+            "{ logs, onClose }"
+          ],
+          "exported": true,
+          "lineCount": 72
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "X",
+            "CheckCircle",
+            "AlertTriangle",
+            "Clock"
+          ]
+        }
+      ],
+      "exports": [
+        "IntentPreview"
+      ],
+      "totalLines": 76,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/LearningApprovalsQueue.tsx": {
+      "filePath": "src/ui/components/LearningApprovalsQueue.tsx",
+      "contentHash": "623fbbe05190bec7c8d328e4b6605979e1b8df0503ebdb0c6f6e16a6fd5a10df",
+      "functions": [
+        {
+          "name": "LearningApprovalsQueue",
+          "params": [],
+          "exported": true,
+          "lineCount": 99
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Check",
+            "X",
+            "Database"
+          ]
+        }
+      ],
+      "exports": [
+        "LearningApprovalsQueue"
+      ],
+      "totalLines": 112,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/NodeOutputInspector.tsx": {
+      "filePath": "src/ui/components/NodeOutputInspector.tsx",
+      "contentHash": "0dbcde14503551fee50a231b16ba670cdaccb59e83cb4c5ffc7613b49a088cbe",
+      "functions": [
+        {
+          "name": "NodeOutputInspector",
+          "params": [
+            "{\n  runId,\n  nodeId,\n  status,\n  outputData,\n  onClose,\n  onRetryFailedNodes,\n  onEditRerun,\n  onRefresh,\n}"
+          ],
+          "exported": true,
+          "lineCount": 164
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "X",
+            "RotateCcw",
+            "RefreshCw",
+            "Edit3"
+          ]
+        }
+      ],
+      "exports": [
+        "NodeOutputInspector"
+      ],
+      "totalLines": 185,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/NotificationCenter.tsx": {
+      "filePath": "src/ui/components/NotificationCenter.tsx",
+      "contentHash": "4036e7200ed30fa5ef5591363fd81b8eb32cf45b73ac9d89502f00f94b20a621",
+      "functions": [
+        {
+          "name": "NotificationCenter",
+          "params": [],
+          "exported": true,
+          "lineCount": 136
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useEffect",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "CheckCircle",
+            "AlertTriangle",
+            "Key",
+            "FileUp"
+          ]
+        }
+      ],
+      "exports": [
+        "NotificationCenter"
+      ],
+      "totalLines": 150,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/ProjectManager.tsx": {
+      "filePath": "src/ui/components/ProjectManager.tsx",
+      "contentHash": "8f6ae8d3ed33ad060c106a1f85294e06bc8df2f421a8d93bc4af706dcde33703",
+      "functions": [
+        {
+          "name": "ProjectManager",
+          "params": [],
+          "exported": true,
+          "lineCount": 100
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Folder",
+            "Plus",
+            "Code"
+          ]
+        }
+      ],
+      "exports": [
+        "ProjectManager"
+      ],
+      "totalLines": 104,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/RouteSwitchConfig.tsx": {
+      "filePath": "src/ui/components/RouteSwitchConfig.tsx",
+      "contentHash": "6467184cb929609c4046ae11553eab2cf1717fdeb702b484ad7df8f3ed0f6c51",
+      "functions": [
+        {
+          "name": "RouteSwitchConfig",
+          "params": [],
+          "exported": true,
+          "lineCount": 131
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        }
+      ],
+      "exports": [
+        "RouteSwitchConfig"
+      ],
+      "totalLines": 140,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/RoutingDials.tsx": {
+      "filePath": "src/ui/components/RoutingDials.tsx",
+      "contentHash": "d810847e4d90cdc4a753202a10a0f7e7e2b16cadfb608bef051a3c6795dc1608",
+      "functions": [
+        {
+          "name": "RoutingDials",
+          "params": [],
+          "exported": true,
+          "lineCount": 98
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        }
+      ],
+      "exports": [
+        "RoutingDials"
+      ],
+      "totalLines": 103,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/RunHistory.tsx": {
+      "filePath": "src/ui/components/RunHistory.tsx",
+      "contentHash": "2f333271f69cd1f477d3dbbfcb7730b2b630084ac9534fa9b4fa8106582b8fda",
+      "functions": [
+        {
+          "name": "formatTime",
+          "params": [
+            "epochMs"
+          ],
+          "returnType": "string",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "RunHistory",
+          "params": [
+            "{ onSelectRun, activeRunId }"
+          ],
+          "exported": true,
+          "lineCount": 97
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "../../core/basevault/schema",
+          "specifiers": [
+            "WorkflowRun"
+          ]
+        }
+      ],
+      "exports": [
+        "RunHistory"
+      ],
+      "totalLines": 137,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/ScopeLogicChat.tsx": {
+      "filePath": "src/ui/components/ScopeLogicChat.tsx",
+      "contentHash": "8131b8ccf90850786fee5f244531c41af9b2f3e7d6b334ebc4a7cf9d9a81f74a",
+      "functions": [
+        {
+          "name": "ScopeLogicChat",
+          "params": [
+            "{ onProposal }"
+          ],
+          "exported": true,
+          "lineCount": 122
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Minimize2",
+            "Maximize2"
+          ]
+        }
+      ],
+      "exports": [
+        "ScopeLogicChat"
+      ],
+      "totalLines": 136,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/SettingsModal.tsx": {
+      "filePath": "src/ui/components/SettingsModal.tsx",
+      "contentHash": "93dc853426581ea21d2668214b35a1c3414a9e50b6ca89e45987601ed95539e3",
+      "functions": [
+        {
+          "name": "SettingsModal",
+          "params": [
+            "{ isOpen, onClose }"
+          ],
+          "exported": true,
+          "lineCount": 290
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "./RouteSwitchConfig",
+          "specifiers": [
+            "RouteSwitchConfig"
+          ]
+        },
+        {
+          "source": "./RoutingDials",
+          "specifiers": [
+            "RoutingDials"
+          ]
+        }
+      ],
+      "exports": [
+        "SettingsModal"
+      ],
+      "totalLines": 300,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/Statusline.tsx": {
+      "filePath": "src/ui/components/Statusline.tsx",
+      "contentHash": "0a986f3b6c430bb6d775d03eb00104671119d34bb31a0431935dff283fa7c3e0",
+      "functions": [
+        {
+          "name": "Statusline",
+          "params": [],
+          "exported": true,
+          "lineCount": 85
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "./IntentPreview",
+          "specifiers": [
+            "IntentPreview"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Activity",
+            "ShieldAlert",
+            "Cpu"
+          ]
+        }
+      ],
+      "exports": [
+        "Statusline"
+      ],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/ThemeContext.tsx": {
+      "filePath": "src/ui/components/ThemeContext.tsx",
+      "contentHash": "e51ac786fa6e27119cd4333dbec3604f3b6c3c7549da2109a7e40958e8191d2a",
+      "functions": [
+        {
+          "name": "ThemeProvider",
+          "params": [
+            "{ children }"
+          ],
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "useTheme",
+          "params": [],
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "createContext",
+            "useContext",
+            "useEffect",
+            "useState"
+          ]
+        }
+      ],
+      "exports": [
+        "ThemeProvider",
+        "useTheme"
+      ],
+      "totalLines": 62,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/components/ThemeToggle.tsx": {
+      "filePath": "src/ui/components/ThemeToggle.tsx",
+      "contentHash": "50f0c14403d67c814f1fa9ce0276aa0e75a95cf514f02a264748049695a66610",
+      "functions": [
+        {
+          "name": "ThemeToggle",
+          "params": [],
+          "exported": true,
+          "lineCount": 43
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Sun",
+            "Moon",
+            "Monitor"
+          ]
+        },
+        {
+          "source": "./ThemeContext",
+          "specifiers": [
+            "useTheme"
+          ]
+        }
+      ],
+      "exports": [
+        "ThemeToggle"
+      ],
+      "totalLines": 48,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/index.css": {
+      "filePath": "src/ui/index.css",
+      "contentHash": "51c6679b31b391b8e624912d9a846ee13194f2326ef5c64403565d722a2593ff",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 50,
+      "hasStructuralAnalysis": false
+    },
+    "src/ui/layouts/OSLayout.tsx": {
+      "filePath": "src/ui/layouts/OSLayout.tsx",
+      "contentHash": "9cd52186c0206c6d4ea74afc5340a137e591bdb1e13022b057a3259e48f07056",
+      "functions": [
+        {
+          "name": "OSLayout",
+          "params": [],
+          "exported": true,
+          "lineCount": 82
+        },
+        {
+          "name": "NavItem",
+          "params": [
+            "{ id, active, onClick, icon, label, glowColor }"
+          ],
+          "exported": false,
+          "lineCount": 25
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Activity",
+            "BrainCircuit",
+            "Cpu",
+            "ShieldCheck",
+            "LayoutDashboard",
+            "Database"
+          ]
+        },
+        {
+          "source": "../views/UnifiedMasterDashboard",
+          "specifiers": [
+            "UnifiedMasterDashboard"
+          ]
+        },
+        {
+          "source": "../views/CoreExecDashboard",
+          "specifiers": [
+            "CoreExecDashboard"
+          ]
+        },
+        {
+          "source": "../views/RouteSwitchDashboard",
+          "specifiers": [
+            "RouteSwitchDashboard"
+          ]
+        },
+        {
+          "source": "../views/CerebroDashboard",
+          "specifiers": [
+            "CerebroDashboard"
+          ]
+        },
+        {
+          "source": "../views/BaseVaultDashboard",
+          "specifiers": [
+            "BaseVaultDashboard"
+          ]
+        },
+        {
+          "source": "../views/ScopeLogicDashboard",
+          "specifiers": [
+            "ScopeLogicDashboard"
+          ]
+        },
+        {
+          "source": "../views/ScoutDaemonDashboard",
+          "specifiers": [
+            "ScoutDaemonDashboard"
+          ]
+        },
+        {
+          "source": "../components/ThemeToggle",
+          "specifiers": [
+            "ThemeToggle"
+          ]
+        }
+      ],
+      "exports": [
+        "OSLayout"
+      ],
+      "totalLines": 120,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/main.tsx": {
+      "filePath": "src/ui/main.tsx",
+      "contentHash": "ee83ebad778e6874b44490959a80e541fc72ed5debf48fa519035db58c2613d0",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "react-dom/client",
+          "specifiers": [
+            "ReactDOM"
+          ]
+        },
+        {
+          "source": "./layouts/OSLayout",
+          "specifiers": [
+            "OSLayout"
+          ]
+        },
+        {
+          "source": "./components/ThemeContext",
+          "specifiers": [
+            "ThemeProvider"
+          ]
+        },
+        {
+          "source": "./index.css",
+          "specifiers": []
+        },
+        {
+          "source": "@xyflow/react/dist/style.css",
+          "specifiers": []
+        }
+      ],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/views/BaseVaultDashboard.tsx": {
+      "filePath": "src/ui/views/BaseVaultDashboard.tsx",
+      "contentHash": "21d47a34f83fcdebe5991b8ce123635b4bc1c6c80fa94b6044be41dd07f5bfee",
+      "functions": [
+        {
+          "name": "BaseVaultDashboard",
+          "params": [],
+          "exported": true,
+          "lineCount": 115
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState"
+          ]
+        }
+      ],
+      "exports": [
+        "BaseVaultDashboard"
+      ],
+      "totalLines": 118,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/views/CerebroDashboard.tsx": {
+      "filePath": "src/ui/views/CerebroDashboard.tsx",
+      "contentHash": "2331ad2af6f7e5b7066acbfc646a3fbcabe11aeb43a3cc3d5619d07659e845cd",
+      "functions": [
+        {
+          "name": "CerebroDashboard",
+          "params": [],
+          "exported": true,
+          "lineCount": 142
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState"
+          ]
+        },
+        {
+          "source": "../components/LearningApprovalsQueue",
+          "specifiers": [
+            "LearningApprovalsQueue"
+          ]
+        }
+      ],
+      "exports": [
+        "CerebroDashboard"
+      ],
+      "totalLines": 146,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/views/CoreExecDashboard.tsx": {
+      "filePath": "src/ui/views/CoreExecDashboard.tsx",
+      "contentHash": "ce4a92c05c8d73558415dbdcb75a8e32bd26ba5dad4693ff6d90ecf638fcc93f",
+      "functions": [
+        {
+          "name": "CoreExecDashboard",
+          "params": [],
+          "exported": true,
+          "lineCount": 170
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        },
+        {
+          "source": "../App",
+          "specifiers": [
+            "App"
+          ]
+        }
+      ],
+      "exports": [
+        "CoreExecDashboard"
+      ],
+      "totalLines": 174,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/views/RouteSwitchDashboard.tsx": {
+      "filePath": "src/ui/views/RouteSwitchDashboard.tsx",
+      "contentHash": "b0f3a751b9e8e4378a4a5b72dc7de1903202024226ba7b1a4ec3287e2d197044",
+      "functions": [
+        {
+          "name": "RouteSwitchDashboard",
+          "params": [],
+          "exported": true,
+          "lineCount": 281
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState",
+            "useEffect"
+          ]
+        }
+      ],
+      "exports": [
+        "RouteSwitchDashboard"
+      ],
+      "totalLines": 284,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/views/ScopeLogicDashboard.tsx": {
+      "filePath": "src/ui/views/ScopeLogicDashboard.tsx",
+      "contentHash": "493cd0d47914a333e79e0178d3c9bb926c99501b2cee654f45a1b84c837b7155",
+      "functions": [
+        {
+          "name": "ScopeLogicDashboard",
+          "params": [],
+          "exported": true,
+          "lineCount": 81
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState"
+          ]
+        }
+      ],
+      "exports": [
+        "ScopeLogicDashboard"
+      ],
+      "totalLines": 84,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/views/ScoutDaemonDashboard.tsx": {
+      "filePath": "src/ui/views/ScoutDaemonDashboard.tsx",
+      "contentHash": "abea8d507e29689f0f7527b1d439d43385433aea733305d6a5ebf2a124db307b",
+      "functions": [
+        {
+          "name": "ScoutDaemonDashboard",
+          "params": [],
+          "exported": true,
+          "lineCount": 74
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React",
+            "useState"
+          ]
+        }
+      ],
+      "exports": [
+        "ScoutDaemonDashboard"
+      ],
+      "totalLines": 77,
+      "hasStructuralAnalysis": true
+    },
+    "src/ui/views/UnifiedMasterDashboard.tsx": {
+      "filePath": "src/ui/views/UnifiedMasterDashboard.tsx",
+      "contentHash": "f16d09a00683c16b0712dbc696d1407354f256c3bb11808df84ad3de1fd942f9",
+      "functions": [
+        {
+          "name": "UnifiedMasterDashboard",
+          "params": [
+            "{ onNavigate }"
+          ],
+          "exported": true,
+          "lineCount": 134
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "React"
+          ]
+        },
+        {
+          "source": "../components/NotificationCenter",
+          "specifiers": [
+            "NotificationCenter"
+          ]
+        },
+        {
+          "source": "../components/GovernorUI",
+          "specifiers": [
+            "GovernorUI"
+          ]
+        },
+        {
+          "source": "../components/RunHistory",
+          "specifiers": [
+            "RunHistory"
+          ]
+        },
+        {
+          "source": "../components/AgentKPIStrip",
+          "specifiers": [
+            "AgentKPIStrip"
+          ]
+        },
+        {
+          "source": "../components/CronSummary",
+          "specifiers": [
+            "CronSummary"
+          ]
+        },
+        {
+          "source": "../components/CerebroHealthWidget",
+          "specifiers": [
+            "CerebroHealthWidget"
+          ]
+        },
+        {
+          "source": "../components/AutonomyDials",
+          "specifiers": [
+            "AutonomyDials"
+          ]
+        },
+        {
+          "source": "../components/ProjectManager",
+          "specifiers": [
+            "ProjectManager"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "Globe",
+            "Activity",
+            "Cpu",
+            "Folder"
+          ]
+        }
+      ],
+      "exports": [
+        "UnifiedMasterDashboard"
+      ],
+      "totalLines": 146,
+      "hasStructuralAnalysis": true
+    },
+    "tailwind.config.js": {
+      "filePath": "tailwind.config.js",
+      "contentHash": "acb924db7d0b70f241809be9d546e1567785ba8753e212510f8871e6f3f07c20",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "tsconfig.json": {
+      "filePath": "tsconfig.json",
+      "contentHash": "f3a6f3fb87e5499250de202daaca5bf56c3fb3f3eb13f8bf72c6c57c2a126bf1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 45,
+      "hasStructuralAnalysis": true
+    },
+    "vite.config.ts": {
+      "filePath": "vite.config.ts",
+      "contentHash": "a4d61a1fd725a336170fc7bffe2208855b54b1b8c15f84d4735186094145d606",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "vite",
+          "specifiers": [
+            "defineConfig"
+          ]
+        },
+        {
+          "source": "@vitejs/plugin-react",
+          "specifiers": [
+            "react"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 14,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

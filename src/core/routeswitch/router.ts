@@ -1,4 +1,5 @@
 import { ProviderHealthState } from './interceptor.js';
+import { ZenDiscoveryService } from './discovery';
 
 export async function executeWithFallback(
   prompt: string,
@@ -6,8 +7,18 @@ export async function executeWithFallback(
 ): Promise<any> {
   const apiKey = process.env.OPENROUTER_API_KEY || '';
 
-  for (let i = 0; i < fallbackChain.length; i++) {
-    const model = fallbackChain[i];
+  let currentChain = [...fallbackChain];
+  try {
+    const freeModels = await ZenDiscoveryService.getFreeModels();
+    if (freeModels && freeModels.length > 0) {
+      currentChain = Array.from(new Set([...fallbackChain, ...freeModels.map(m => m.id)]));
+    }
+  } catch (e) {
+    console.warn('[RouteSwitch] Failed to fetch dynamic free models:', e);
+  }
+
+  for (let i = 0; i < currentChain.length; i++) {
+    const model = currentChain[i];
     const state = ProviderHealthState.getState(model);
     
     if (state.isExhausted) {

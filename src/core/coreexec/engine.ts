@@ -3,6 +3,7 @@ import { claimTask } from './queue';
 import { scoutEmitter } from '../scoutdaemon/sse';
 import { workerPool } from './worker-pool';
 import { systemConfig } from '../../server/routes/system';
+import { SensitiveDataRedactor, DataTier } from '../basevault/redactor';
 export interface DAGNode {
   id: string;
   dependencies: string[];
@@ -114,13 +115,15 @@ export async function executeRun(
           taskId: node.id,
           prompt: node.prompt ?? '',
         });
+        const redactedResult = SensitiveDataRedactor.redactObject(result, DataTier.INTERNAL);
         const updateTask = db.prepare("UPDATE tasks SET status = 'completed', output_data = ? WHERE id = ?");
-        updateTask.run(JSON.stringify(result), node.id);
-        scoutEmitter.emit('update', { type: 'TASK_STATUS', runId, taskId: node.id, status: 'completed', output: result });
+        updateTask.run(JSON.stringify(redactedResult), node.id);
+        scoutEmitter.emit('update', { type: 'TASK_STATUS', runId, taskId: node.id, status: 'completed', output: redactedResult });
       } catch (error) {
         const errorMsg = String(error);
+        const redactedErrorMsg = SensitiveDataRedactor.redact(errorMsg, DataTier.INTERNAL);
         const updateTask = db.prepare("UPDATE tasks SET status = 'parked', output_data = ? WHERE id = ?");
-        updateTask.run(JSON.stringify({ error: errorMsg }), node.id);
+        updateTask.run(JSON.stringify({ error: redactedErrorMsg }), node.id);
         
         const todoId = crypto.randomUUID();
         const insertTodo = db.prepare("INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");

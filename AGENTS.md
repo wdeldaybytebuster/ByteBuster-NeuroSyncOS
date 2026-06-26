@@ -5,7 +5,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **NeuroSyncMega** (1358 symbols, 2205 relationships, 36 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ByteBuster-NeuroSyncOS** (1545 symbols, 2500 relationships, 39 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -29,10 +29,10 @@ This project is indexed by GitNexus as **NeuroSyncMega** (1358 symbols, 2205 rel
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/NeuroSyncMega/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/NeuroSyncMega/clusters` | All functional areas |
-| `gitnexus://repo/NeuroSyncMega/processes` | All execution flows |
-| `gitnexus://repo/NeuroSyncMega/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/ByteBuster-NeuroSyncOS/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/ByteBuster-NeuroSyncOS/clusters` | All functional areas |
+| `gitnexus://repo/ByteBuster-NeuroSyncOS/processes` | All execution flows |
+| `gitnexus://repo/ByteBuster-NeuroSyncOS/process/{name}` | Step-by-step execution trace |
 
 ## CLI
 

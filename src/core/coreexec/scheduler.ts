@@ -7,10 +7,10 @@ import { validateDAGTemplate, escalateBlockedDAGToOsTodos } from './validateDAG'
 
 const activeJobs = new Map<string, ScheduledTask>();
 
-// Module-level handle for the periodic refresh interval. Stored so tests can
-// stop it cleanly — vitest workers otherwise keep timers alive past their
-// lifetime and would leak the daemon past the test process exit.
+// Module-level handles
 let refreshInterval: NodeJS.Timeout | null = null;
+let reflectionInterval: NodeJS.Timeout | null = null;
+let reflectionWorker: import('worker_threads').Worker | null = null;
 
 /**
  * Test-only helper: clears the periodic refresh interval and stops every
@@ -21,6 +21,14 @@ export function _stopSchedulerLoopForTests(): void {
   if (refreshInterval) {
     clearInterval(refreshInterval);
     refreshInterval = null;
+  }
+  if (reflectionInterval) {
+    clearInterval(reflectionInterval);
+    reflectionInterval = null;
+  }
+  if (reflectionWorker) {
+    reflectionWorker.terminate();
+    reflectionWorker = null;
   }
   for (const job of activeJobs.values()) {
     job.stop();
@@ -35,6 +43,39 @@ export function initScheduler() {
 
   // Periodically refresh jobs from DB to catch new/updated schedules.
   refreshInterval = setInterval(refreshJobs, 60000);
+
+  // Initialize background reflection worker
+  try {
+    const { Worker } = require('worker_threads');
+    const path = require('path');
+    const workerPath = path.join(__dirname, '../basevault/reflection-worker.ts');
+    
+    // We use execArgv to allow tsx/ts-node to run the typescript worker if needed
+    // Usually the main process is already spawned with tsx in this project.
+    reflectionWorker = new Worker(workerPath);
+    
+    reflectionWorker.on('message', (msg) => {
+      if (msg.type === 'reflection_done') {
+        console.log(`[CoreExec] Reflection cycle complete. Pruned ${msg.pruned} memories.`);
+      } else if (msg.type === 'reflection_error') {
+        console.error(`[CoreExec] Reflection cycle failed: ${msg.error}`);
+      }
+    });
+
+    reflectionWorker.on('error', (err) => {
+      console.error('[CoreExec] Reflection worker encountered an error:', err);
+    });
+
+    // Run every 10 minutes
+    reflectionInterval = setInterval(() => {
+      reflectionWorker?.postMessage({ type: 'run_reflection' });
+    }, 10 * 60 * 1000);
+    
+    // Trigger initial run
+    reflectionWorker.postMessage({ type: 'run_reflection' });
+  } catch (err) {
+    console.error('[CoreExec] Failed to initialize reflection worker:', err);
+  }
 }
 
 /**

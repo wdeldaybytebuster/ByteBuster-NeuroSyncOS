@@ -24,3 +24,4 @@ Full architecture specification for NeuroSync Sovereign OS. Covers: tech stack (
   - Validation architecture pipeline diagram (§3.4).
   - Full server route map with endpoint details.
   - Full UI component registry (19 components + 7 views).
+- Transitioning to Phase 13 (Free-tier testing).

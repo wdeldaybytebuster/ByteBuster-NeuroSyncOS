@@ -71,9 +71,9 @@ export class CommandSandbox {
       PathValidator.validateContainment(this.baseDir, arg);
     }
 
-    // 3. Execute
+    // 3. Execute with strict network isolation using bubblewrap (since unshare --net fails locally)
     return new Promise((resolve, reject) => {
-      const child = spawn(rootCommand, parts.slice(1), {
+      const child = spawn('bwrap', ['--unshare-net', '--dev-bind', '/', '/', rootCommand, ...parts.slice(1)], {
         cwd: this.baseDir,
         env: { ...process.env },
         shell: false

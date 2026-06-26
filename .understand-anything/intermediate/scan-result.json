@@ -1,0 +1,2302 @@
+{
+  "projectName": "neurosyncmega",
+  "name": "neurosyncmega",
+  "description": "NeuroSyncMega project",
+  "rawDescription": "NeuroSyncMega project",
+  "languages": [
+    "markdown",
+    "typescript",
+    "json",
+    "html",
+    "python",
+    "javascript",
+    "config",
+    "gbnf",
+    "css"
+  ],
+  "frameworks": [
+    "React",
+    "Vite",
+    "Tailwind CSS",
+    "TypeScript"
+  ],
+  "scriptCompleted": true,
+  "files": [
+    {
+      "path": ".antigravity/mcp.json",
+      "language": "json",
+      "sizeLines": 12,
+      "fileCategory": "config"
+    },
+    {
+      "path": ".claude/skills/gitnexus/gitnexus-cli/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 85,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/gitnexus/gitnexus-debugging/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 101,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/gitnexus/gitnexus-exploring/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 78,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/gitnexus/gitnexus-guide/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 128,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 97,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".claude/skills/gitnexus/gitnexus-refactoring/SKILL.md",
+      "language": "markdown",
+      "sizeLines": 121,
+      "fileCategory": "docs"
+    },
+    {
+      "path": ".env.example",
+      "language": "config",
+      "sizeLines": 23,
+      "fileCategory": "config"
+    },
+    {
+      "path": "AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 113,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 44,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/AGENTS.md",
+      "language": "markdown",
+      "sizeLines": 136,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/CLAUDE.md",
+      "language": "markdown",
+      "sizeLines": 29,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/ai-workflow-rules_working.md",
+      "language": "markdown",
+      "sizeLines": 20,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/ai-workflow-rules.md",
+      "language": "markdown",
+      "sizeLines": 190,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/architecture_working.md",
+      "language": "markdown",
+      "sizeLines": 26,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/architecture.md",
+      "language": "markdown",
+      "sizeLines": 339,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/code-standards_working.md",
+      "language": "markdown",
+      "sizeLines": 22,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/code-standards.md",
+      "language": "markdown",
+      "sizeLines": 192,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/phase8-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 0,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/progress-tracker_working.md",
+      "language": "markdown",
+      "sizeLines": 88,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/progress-tracker.md",
+      "language": "markdown",
+      "sizeLines": 113,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/project-overview_working.md",
+      "language": "markdown",
+      "sizeLines": 21,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/project-overview.md",
+      "language": "markdown",
+      "sizeLines": 164,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/00-build-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 3,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/00-build-plan.md",
+      "language": "markdown",
+      "sizeLines": 72,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/MASTER_STATUS.md",
+      "language": "markdown",
+      "sizeLines": 168,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/NN-unit-spec-template_working.md",
+      "language": "markdown",
+      "sizeLines": 3,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/NN-unit-spec-template.md",
+      "language": "markdown",
+      "sizeLines": 25,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase10-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 89,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase11-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 57,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase12-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 60,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase3-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 3,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase4-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 3,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase4-plan.md",
+      "language": "markdown",
+      "sizeLines": 32,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase5-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 3,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase5-plan.md",
+      "language": "markdown",
+      "sizeLines": 35,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase6-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 3,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase6-plan.md",
+      "language": "markdown",
+      "sizeLines": 39,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase7-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase7-plan.md",
+      "language": "markdown",
+      "sizeLines": 26,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase8-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 74,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase8-plan.md",
+      "language": "markdown",
+      "sizeLines": 277,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/phase9-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 202,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/specs/swarm-testing-prompts.md",
+      "language": "markdown",
+      "sizeLines": 187,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/ui-context_working.md",
+      "language": "markdown",
+      "sizeLines": 23,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/context/ui-context.md",
+      "language": "markdown",
+      "sizeLines": 239,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/dashboard-drift-plan.md",
+      "language": "markdown",
+      "sizeLines": 47,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/00-foundation/master-index_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/00-foundation/master-index.md",
+      "language": "markdown",
+      "sizeLines": 79,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/00-foundation/project-charter_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/00-foundation/project-charter.md",
+      "language": "markdown",
+      "sizeLines": 53,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/00-foundation/research-foundation_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/00-foundation/research-foundation.md",
+      "language": "markdown",
+      "sizeLines": 46,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/audience-and-personas_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/audience-and-personas.md",
+      "language": "markdown",
+      "sizeLines": 28,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/market-and-competitor-analysis_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/market-and-competitor-analysis.md",
+      "language": "markdown",
+      "sizeLines": 228,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/mvp-definition_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/mvp-definition.md",
+      "language": "markdown",
+      "sizeLines": 34,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/problem-statement_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/problem-statement.md",
+      "language": "markdown",
+      "sizeLines": 22,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/requirements-catalog_working.md",
+      "language": "markdown",
+      "sizeLines": 12,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/requirements-catalog.md",
+      "language": "markdown",
+      "sizeLines": 35,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/scope-boundaries_working.md",
+      "language": "markdown",
+      "sizeLines": 12,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/scope-boundaries.md",
+      "language": "markdown",
+      "sizeLines": 26,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/success-metrics_working.md",
+      "language": "markdown",
+      "sizeLines": 10,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/01-product/success-metrics.md",
+      "language": "markdown",
+      "sizeLines": 23,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/architecture-blueprint_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/architecture-blueprint.md",
+      "language": "markdown",
+      "sizeLines": 22,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/c4-component-view_working.md",
+      "language": "markdown",
+      "sizeLines": 18,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/c4-component-view.md",
+      "language": "markdown",
+      "sizeLines": 32,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/c4-container-view_working.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/c4-container-view.md",
+      "language": "markdown",
+      "sizeLines": 30,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/c4-system-context_working.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/c4-system-context.md",
+      "language": "markdown",
+      "sizeLines": 31,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/data-architecture_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/data-architecture.md",
+      "language": "markdown",
+      "sizeLines": 40,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/integration-map_working.md",
+      "language": "markdown",
+      "sizeLines": 10,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/integration-map.md",
+      "language": "markdown",
+      "sizeLines": 27,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/runtime-flows_working.md",
+      "language": "markdown",
+      "sizeLines": 22,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/runtime-flows.md",
+      "language": "markdown",
+      "sizeLines": 37,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/sqlite-5-tier-design.md",
+      "language": "markdown",
+      "sizeLines": 293,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/sqlite-vector-retrieval.md",
+      "language": "markdown",
+      "sizeLines": 292,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/system-boundaries_working.md",
+      "language": "markdown",
+      "sizeLines": 14,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/02-architecture/system-boundaries.md",
+      "language": "markdown",
+      "sizeLines": 23,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/api-contracts_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/api-contracts.md",
+      "language": "markdown",
+      "sizeLines": 42,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/codebase-standards_working.md",
+      "language": "markdown",
+      "sizeLines": 12,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/codebase-standards.md",
+      "language": "markdown",
+      "sizeLines": 17,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/dependency-policy_working.md",
+      "language": "markdown",
+      "sizeLines": 12,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/dependency-policy.md",
+      "language": "markdown",
+      "sizeLines": 19,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/environment-config_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/03-engineering/environment-config.md",
+      "language": "markdown",
+      "sizeLines": 19,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/access-control-matrix_working.md",
+      "language": "markdown",
+      "sizeLines": 11,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/access-control-matrix.md",
+      "language": "markdown",
+      "sizeLines": 18,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/security-privacy-model_working.md",
+      "language": "markdown",
+      "sizeLines": 10,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/security-privacy-model.md",
+      "language": "markdown",
+      "sizeLines": 17,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/security-verification-checklist_working.md",
+      "language": "markdown",
+      "sizeLines": 12,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/security-verification-checklist.md",
+      "language": "markdown",
+      "sizeLines": 19,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/threat-model_working.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/04-security/threat-model.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/05-delivery/change-control_working.md",
+      "language": "markdown",
+      "sizeLines": 12,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/05-delivery/change-control.md",
+      "language": "markdown",
+      "sizeLines": 19,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/05-delivery/implementation-plan-reliability.md",
+      "language": "markdown",
+      "sizeLines": 189,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/05-delivery/milestone-roadmap_working.md",
+      "language": "markdown",
+      "sizeLines": 14,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/05-delivery/milestone-roadmap.md",
+      "language": "markdown",
+      "sizeLines": 25,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/05-delivery/release-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 13,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/05-delivery/release-plan.md",
+      "language": "markdown",
+      "sizeLines": 20,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/06-quality/acceptance-checklists_working.md",
+      "language": "markdown",
+      "sizeLines": 12,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/06-quality/acceptance-checklists.md",
+      "language": "markdown",
+      "sizeLines": 19,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/06-quality/test-strategy_working.md",
+      "language": "markdown",
+      "sizeLines": 10,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/06-quality/test-strategy.md",
+      "language": "markdown",
+      "sizeLines": 17,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/07-operations/incident-response-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/07-operations/incident-response-plan.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/07-operations/observability-plan_working.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/07-operations/observability-plan.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/07-operations/runbook_working.md",
+      "language": "markdown",
+      "sizeLines": 18,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/07-operations/runbook.md",
+      "language": "markdown",
+      "sizeLines": 25,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/ai-os-architecture-brief.md",
+      "language": "markdown",
+      "sizeLines": 339,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/cost-model_working.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/cost-model.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/emerging-ux-patterns.md",
+      "language": "markdown",
+      "sizeLines": 258,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/grammar-constrained-decoding.md",
+      "language": "markdown",
+      "sizeLines": 182,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/llm-provider-integration-research_working.md",
+      "language": "markdown",
+      "sizeLines": 83,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/local-ai-os-deep-dive.md",
+      "language": "markdown",
+      "sizeLines": 245,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/research-log_working.md",
+      "language": "markdown",
+      "sizeLines": 8,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/research-log.md",
+      "language": "markdown",
+      "sizeLines": 15,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/vendor-tool-evaluation_working.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/08-research/vendor-tool-evaluation.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/assumption-log_working.md",
+      "language": "markdown",
+      "sizeLines": 8,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/assumption-log.md",
+      "language": "markdown",
+      "sizeLines": 15,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/decision-log_working.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/decision-log.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/dependency-register_working.md",
+      "language": "markdown",
+      "sizeLines": 10,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/dependency-register.md",
+      "language": "markdown",
+      "sizeLines": 17,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/glossary_working.md",
+      "language": "markdown",
+      "sizeLines": 14,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/glossary.md",
+      "language": "markdown",
+      "sizeLines": 21,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/open-questions_working.md",
+      "language": "markdown",
+      "sizeLines": 8,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/open-questions.md",
+      "language": "markdown",
+      "sizeLines": 15,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/risk-register_working.md",
+      "language": "markdown",
+      "sizeLines": 9,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/docs/09-governance/risk-register.md",
+      "language": "markdown",
+      "sizeLines": 16,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/grammar/dag.gbnf",
+      "language": "gbnf",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "docs/MANIFEST.md",
+      "language": "markdown",
+      "sizeLines": 219,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/phase8-expansion-ideas_working.md",
+      "language": "markdown",
+      "sizeLines": 7,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/phase8-expansion-ideas.md",
+      "language": "markdown",
+      "sizeLines": 61,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/Phase9/phase-9-expansion-neurosync-architecture-the-blueprint-for-sovereignos-implement.md",
+      "language": "markdown",
+      "sizeLines": 64,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/Phase9/research-for-implementation-review-neurosync-architecture-research-blueprint.md",
+      "language": "markdown",
+      "sizeLines": 231,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/README.md",
+      "language": "markdown",
+      "sizeLines": 119,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/scopelogic-research-proposal.md",
+      "language": "markdown",
+      "sizeLines": 29,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/scopelogic-weekly-proposal.md",
+      "language": "markdown",
+      "sizeLines": 861,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/skill-routing-map.html",
+      "language": "html",
+      "sizeLines": 801,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "docs/templates/adr/ADR-0000-template.md",
+      "language": "markdown",
+      "sizeLines": 63,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/feature-spec-template.md",
+      "language": "markdown",
+      "sizeLines": 51,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/reviews/ai-output-review-checklist.md",
+      "language": "markdown",
+      "sizeLines": 19,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/reviews/architecture-review-checklist.md",
+      "language": "markdown",
+      "sizeLines": 21,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/reviews/postmortem-template.md",
+      "language": "markdown",
+      "sizeLines": 61,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/reviews/product-review-checklist.md",
+      "language": "markdown",
+      "sizeLines": 19,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/reviews/release-review-checklist.md",
+      "language": "markdown",
+      "sizeLines": 20,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/reviews/security-review-checklist.md",
+      "language": "markdown",
+      "sizeLines": 21,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/rfc/RFC-0000-template.md",
+      "language": "markdown",
+      "sizeLines": 65,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "docs/templates/technical-spec-template.md",
+      "language": "markdown",
+      "sizeLines": 55,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "generate_working_docs.py",
+      "language": "python",
+      "sizeLines": 50,
+      "fileCategory": "code"
+    },
+    {
+      "path": "index.html",
+      "language": "html",
+      "sizeLines": 43,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "Logos/NeuroSyncBrandBook.html",
+      "language": "html",
+      "sizeLines": 1181,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "sizeLines": 56,
+      "fileCategory": "config"
+    },
+    {
+      "path": "postcss.config.js",
+      "language": "javascript",
+      "sizeLines": 6,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/crypto-test.ts",
+      "language": "typescript",
+      "sizeLines": 68,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/dag-test.ts",
+      "language": "typescript",
+      "sizeLines": 104,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/e2e-test.ts",
+      "language": "typescript",
+      "sizeLines": 89,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/auth.ts",
+      "language": "typescript",
+      "sizeLines": 64,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/crypto.test.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/crypto.ts",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/db.test.ts",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/db.ts",
+      "language": "typescript",
+      "sizeLines": 130,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/schema.test.ts",
+      "language": "typescript",
+      "sizeLines": 265,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/schema.ts",
+      "language": "typescript",
+      "sizeLines": 93,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/basevault/write-queue.ts",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/dispatch.ts",
+      "language": "typescript",
+      "sizeLines": 65,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/engine.test.ts",
+      "language": "typescript",
+      "sizeLines": 106,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/engine.ts",
+      "language": "typescript",
+      "sizeLines": 139,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/memory-sweep.test.ts",
+      "language": "typescript",
+      "sizeLines": 73,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/memory-sweep.ts",
+      "language": "typescript",
+      "sizeLines": 41,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/path-validator.ts",
+      "language": "typescript",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/python_scripts/scraper.py",
+      "language": "python",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/queue.test.ts",
+      "language": "typescript",
+      "sizeLines": 71,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/queue.ts",
+      "language": "typescript",
+      "sizeLines": 66,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/sandbox.test.ts",
+      "language": "typescript",
+      "sizeLines": 58,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/sandbox.ts",
+      "language": "typescript",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/scheduler.test.ts",
+      "language": "typescript",
+      "sizeLines": 166,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/scheduler.ts",
+      "language": "typescript",
+      "sizeLines": 126,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/scraping.ts",
+      "language": "typescript",
+      "sizeLines": 30,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/test-fix-retest.test.ts",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/validateDAG.test.ts",
+      "language": "typescript",
+      "sizeLines": 185,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/validateDAG.ts",
+      "language": "typescript",
+      "sizeLines": 159,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/worker-pool.ts",
+      "language": "typescript",
+      "sizeLines": 31,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/worker.test.ts",
+      "language": "typescript",
+      "sizeLines": 83,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/coreexec/worker.ts",
+      "language": "typescript",
+      "sizeLines": 144,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/memory/cerebro/habituation.test.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/memory/cerebro/habituation.ts",
+      "language": "typescript",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/memory/cerebro/reflection.test.ts",
+      "language": "typescript",
+      "sizeLines": 39,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/memory/cerebro/reflection.ts",
+      "language": "typescript",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/memory/cerebro/vector.test.ts",
+      "language": "typescript",
+      "sizeLines": 49,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/memory/cerebro/vector.ts",
+      "language": "typescript",
+      "sizeLines": 112,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/adapters/llama-cpp.ts",
+      "language": "typescript",
+      "sizeLines": 24,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/adapters/openai-compatible.ts",
+      "language": "typescript",
+      "sizeLines": 99,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/agent-stop.test.ts",
+      "language": "typescript",
+      "sizeLines": 42,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/agent-stop.ts",
+      "language": "typescript",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/council.test.ts",
+      "language": "typescript",
+      "sizeLines": 42,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/council.ts",
+      "language": "typescript",
+      "sizeLines": 61,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/discovery.ts",
+      "language": "typescript",
+      "sizeLines": 34,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/engine.ts",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/governor.test.ts",
+      "language": "typescript",
+      "sizeLines": 113,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/governor.ts",
+      "language": "typescript",
+      "sizeLines": 114,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/interceptor.ts",
+      "language": "typescript",
+      "sizeLines": 80,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/providers.ts",
+      "language": "typescript",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/router.test.ts",
+      "language": "typescript",
+      "sizeLines": 65,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/router.ts",
+      "language": "typescript",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/routeswitch.test.ts",
+      "language": "typescript",
+      "sizeLines": 59,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/routeswitch/triage.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scopelogic/interview.test.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scopelogic/interview.ts",
+      "language": "typescript",
+      "sizeLines": 177,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scopelogic/risk.ts",
+      "language": "typescript",
+      "sizeLines": 53,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scopelogic/schemas.test.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scopelogic/schemas.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scopelogic/validator.test.ts",
+      "language": "typescript",
+      "sizeLines": 95,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scopelogic/validator.ts",
+      "language": "typescript",
+      "sizeLines": 62,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutdaemon/db-sync.test.ts",
+      "language": "typescript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutdaemon/db-sync.ts",
+      "language": "typescript",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutdaemon/gitnexus-worker.ts",
+      "language": "typescript",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutdaemon/idle.ts",
+      "language": "typescript",
+      "sizeLines": 94,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutdaemon/parser.ts",
+      "language": "typescript",
+      "sizeLines": 51,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutdaemon/sse.ts",
+      "language": "typescript",
+      "sizeLines": 63,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutdaemon/worker.test.ts",
+      "language": "typescript",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutlogic/benchmarker.ts",
+      "language": "typescript",
+      "sizeLines": 37,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutlogic/classifier.test.ts",
+      "language": "typescript",
+      "sizeLines": 33,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutlogic/classifier.ts",
+      "language": "typescript",
+      "sizeLines": 22,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutlogic/dynamic-router.test.ts",
+      "language": "typescript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/scoutlogic/dynamic-router.ts",
+      "language": "typescript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/system-reserved.test.ts",
+      "language": "typescript",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/core/system-reserved.ts",
+      "language": "typescript",
+      "sizeLines": 46,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/env.d.ts",
+      "language": "typescript",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/index.ts",
+      "language": "typescript",
+      "sizeLines": 248,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/cerebro.test.ts",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/cerebro.ts",
+      "language": "typescript",
+      "sizeLines": 137,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/coreexec-router.test.ts",
+      "language": "typescript",
+      "sizeLines": 100,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/coreexec-router.ts",
+      "language": "typescript",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/llm.ts",
+      "language": "typescript",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/models.ts",
+      "language": "typescript",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/projects.ts",
+      "language": "typescript",
+      "sizeLines": 38,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/scheduler-list.test.ts",
+      "language": "typescript",
+      "sizeLines": 78,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/scheduler-list.ts",
+      "language": "typescript",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/system.ts",
+      "language": "typescript",
+      "sizeLines": 188,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/server/routes/todos.ts",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/App.tsx",
+      "language": "typescript",
+      "sizeLines": 492,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/AgentKPIStrip.tsx",
+      "language": "typescript",
+      "sizeLines": 72,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/ApprovalCockpit.tsx",
+      "language": "typescript",
+      "sizeLines": 107,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/AutonomyDials.tsx",
+      "language": "typescript",
+      "sizeLines": 98,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/CerebroHealthWidget.tsx",
+      "language": "typescript",
+      "sizeLines": 96,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/CronSummary.tsx",
+      "language": "typescript",
+      "sizeLines": 116,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/GovernorUI.tsx",
+      "language": "typescript",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/IntentPreview.tsx",
+      "language": "typescript",
+      "sizeLines": 75,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/LearningApprovalsQueue.tsx",
+      "language": "typescript",
+      "sizeLines": 111,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/NodeOutputInspector.tsx",
+      "language": "typescript",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/NotificationCenter.tsx",
+      "language": "typescript",
+      "sizeLines": 149,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/ProjectManager.tsx",
+      "language": "typescript",
+      "sizeLines": 103,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/RouteSwitchConfig.tsx",
+      "language": "typescript",
+      "sizeLines": 139,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/RoutingDials.tsx",
+      "language": "typescript",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/RunHistory.tsx",
+      "language": "typescript",
+      "sizeLines": 136,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/ScopeLogicChat.tsx",
+      "language": "typescript",
+      "sizeLines": 135,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/SettingsModal.tsx",
+      "language": "typescript",
+      "sizeLines": 299,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/Statusline.tsx",
+      "language": "typescript",
+      "sizeLines": 89,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/ThemeContext.tsx",
+      "language": "typescript",
+      "sizeLines": 61,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/components/ThemeToggle.tsx",
+      "language": "typescript",
+      "sizeLines": 47,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/index.css",
+      "language": "css",
+      "sizeLines": 49,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "src/ui/layouts/OSLayout.tsx",
+      "language": "typescript",
+      "sizeLines": 119,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/main.tsx",
+      "language": "typescript",
+      "sizeLines": 14,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/views/BaseVaultDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 117,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/views/CerebroDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 145,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/views/CoreExecDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 173,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/views/RouteSwitchDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 283,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/views/ScopeLogicDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 83,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/views/ScoutDaemonDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 76,
+      "fileCategory": "code"
+    },
+    {
+      "path": "src/ui/views/UnifiedMasterDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 145,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tailwind.config.js",
+      "language": "javascript",
+      "sizeLines": 44,
+      "fileCategory": "code"
+    },
+    {
+      "path": "tsconfig.json",
+      "language": "json",
+      "sizeLines": 44,
+      "fileCategory": "config"
+    },
+    {
+      "path": "vite.config.ts",
+      "language": "typescript",
+      "sizeLines": 13,
+      "fileCategory": "code"
+    }
+  ],
+  "totalFiles": 286,
+  "filteredByIgnore": 0,
+  "estimatedComplexity": "large",
+  "stats": {
+    "filesScanned": 286,
+    "byCategory": {
+      "config": 4,
+      "docs": 157,
+      "code": 121,
+      "markup": 4
+    },
+    "byLanguage": {
+      "json": 3,
+      "markdown": 157,
+      "config": 1,
+      "unknown": 0,
+      "gbnf": 1,
+      "html": 3,
+      "python": 2,
+      "javascript": 2,
+      "typescript": 116,
+      "css": 1
+    }
+  },
+  "importMap": {
+    ".antigravity/mcp.json": [],
+    ".claude/skills/gitnexus/gitnexus-cli/SKILL.md": [],
+    ".claude/skills/gitnexus/gitnexus-debugging/SKILL.md": [],
+    ".claude/skills/gitnexus/gitnexus-exploring/SKILL.md": [],
+    ".claude/skills/gitnexus/gitnexus-guide/SKILL.md": [],
+    ".claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md": [],
+    ".claude/skills/gitnexus/gitnexus-refactoring/SKILL.md": [],
+    ".env.example": [],
+    "AGENTS.md": [],
+    "CLAUDE.md": [],
+    "docs/AGENTS.md": [],
+    "docs/CLAUDE.md": [],
+    "docs/context/ai-workflow-rules_working.md": [],
+    "docs/context/ai-workflow-rules.md": [],
+    "docs/context/architecture_working.md": [],
+    "docs/context/architecture.md": [],
+    "docs/context/code-standards_working.md": [],
+    "docs/context/code-standards.md": [],
+    "docs/context/phase8-plan_working.md": [],
+    "docs/context/progress-tracker_working.md": [],
+    "docs/context/progress-tracker.md": [],
+    "docs/context/project-overview_working.md": [],
+    "docs/context/project-overview.md": [],
+    "docs/context/specs/00-build-plan_working.md": [],
+    "docs/context/specs/00-build-plan.md": [],
+    "docs/context/specs/MASTER_STATUS.md": [],
+    "docs/context/specs/NN-unit-spec-template_working.md": [],
+    "docs/context/specs/NN-unit-spec-template.md": [],
+    "docs/context/specs/phase10-plan_working.md": [],
+    "docs/context/specs/phase11-plan_working.md": [],
+    "docs/context/specs/phase12-plan_working.md": [],
+    "docs/context/specs/phase3-plan_working.md": [],
+    "docs/context/specs/phase4-plan_working.md": [],
+    "docs/context/specs/phase4-plan.md": [],
+    "docs/context/specs/phase5-plan_working.md": [],
+    "docs/context/specs/phase5-plan.md": [],
+    "docs/context/specs/phase6-plan_working.md": [],
+    "docs/context/specs/phase6-plan.md": [],
+    "docs/context/specs/phase7-plan_working.md": [],
+    "docs/context/specs/phase7-plan.md": [],
+    "docs/context/specs/phase8-plan_working.md": [],
+    "docs/context/specs/phase8-plan.md": [],
+    "docs/context/specs/phase9-plan_working.md": [],
+    "docs/context/specs/swarm-testing-prompts.md": [],
+    "docs/context/ui-context_working.md": [],
+    "docs/context/ui-context.md": [],
+    "docs/dashboard-drift-plan.md": [],
+    "docs/docs/00-foundation/master-index_working.md": [],
+    "docs/docs/00-foundation/master-index.md": [],
+    "docs/docs/00-foundation/project-charter_working.md": [],
+    "docs/docs/00-foundation/project-charter.md": [],
+    "docs/docs/00-foundation/research-foundation_working.md": [],
+    "docs/docs/00-foundation/research-foundation.md": [],
+    "docs/docs/01-product/audience-and-personas_working.md": [],
+    "docs/docs/01-product/audience-and-personas.md": [],
+    "docs/docs/01-product/market-and-competitor-analysis_working.md": [],
+    "docs/docs/01-product/market-and-competitor-analysis.md": [],
+    "docs/docs/01-product/mvp-definition_working.md": [],
+    "docs/docs/01-product/mvp-definition.md": [],
+    "docs/docs/01-product/problem-statement_working.md": [],
+    "docs/docs/01-product/problem-statement.md": [],
+    "docs/docs/01-product/requirements-catalog_working.md": [],
+    "docs/docs/01-product/requirements-catalog.md": [],
+    "docs/docs/01-product/scope-boundaries_working.md": [],
+    "docs/docs/01-product/scope-boundaries.md": [],
+    "docs/docs/01-product/success-metrics_working.md": [],
+    "docs/docs/01-product/success-metrics.md": [],
+    "docs/docs/02-architecture/architecture-blueprint_working.md": [],
+    "docs/docs/02-architecture/architecture-blueprint.md": [],
+    "docs/docs/02-architecture/c4-component-view_working.md": [],
+    "docs/docs/02-architecture/c4-component-view.md": [],
+    "docs/docs/02-architecture/c4-container-view_working.md": [],
+    "docs/docs/02-architecture/c4-container-view.md": [],
+    "docs/docs/02-architecture/c4-system-context_working.md": [],
+    "docs/docs/02-architecture/c4-system-context.md": [],
+    "docs/docs/02-architecture/data-architecture_working.md": [],
+    "docs/docs/02-architecture/data-architecture.md": [],
+    "docs/docs/02-architecture/integration-map_working.md": [],
+    "docs/docs/02-architecture/integration-map.md": [],
+    "docs/docs/02-architecture/runtime-flows_working.md": [],
+    "docs/docs/02-architecture/runtime-flows.md": [],
+    "docs/docs/02-architecture/sqlite-5-tier-design.md": [],
+    "docs/docs/02-architecture/sqlite-vector-retrieval.md": [],
+    "docs/docs/02-architecture/system-boundaries_working.md": [],
+    "docs/docs/02-architecture/system-boundaries.md": [],
+    "docs/docs/03-engineering/api-contracts_working.md": [],
+    "docs/docs/03-engineering/api-contracts.md": [],
+    "docs/docs/03-engineering/codebase-standards_working.md": [],
+    "docs/docs/03-engineering/codebase-standards.md": [],
+    "docs/docs/03-engineering/dependency-policy_working.md": [],
+    "docs/docs/03-engineering/dependency-policy.md": [],
+    "docs/docs/03-engineering/environment-config_working.md": [],
+    "docs/docs/03-engineering/environment-config.md": [],
+    "docs/docs/04-security/access-control-matrix_working.md": [],
+    "docs/docs/04-security/access-control-matrix.md": [],
+    "docs/docs/04-security/security-privacy-model_working.md": [],
+    "docs/docs/04-security/security-privacy-model.md": [],
+    "docs/docs/04-security/security-verification-checklist_working.md": [],
+    "docs/docs/04-security/security-verification-checklist.md": [],
+    "docs/docs/04-security/threat-model_working.md": [],
+    "docs/docs/04-security/threat-model.md": [],
+    "docs/docs/05-delivery/change-control_working.md": [],
+    "docs/docs/05-delivery/change-control.md": [],
+    "docs/docs/05-delivery/implementation-plan-reliability.md": [],
+    "docs/docs/05-delivery/milestone-roadmap_working.md": [],
+    "docs/docs/05-delivery/milestone-roadmap.md": [],
+    "docs/docs/05-delivery/release-plan_working.md": [],
+    "docs/docs/05-delivery/release-plan.md": [],
+    "docs/docs/06-quality/acceptance-checklists_working.md": [],
+    "docs/docs/06-quality/acceptance-checklists.md": [],
+    "docs/docs/06-quality/test-strategy_working.md": [],
+    "docs/docs/06-quality/test-strategy.md": [],
+    "docs/docs/07-operations/incident-response-plan_working.md": [],
+    "docs/docs/07-operations/incident-response-plan.md": [],
+    "docs/docs/07-operations/observability-plan_working.md": [],
+    "docs/docs/07-operations/observability-plan.md": [],
+    "docs/docs/07-operations/runbook_working.md": [],
+    "docs/docs/07-operations/runbook.md": [],
+    "docs/docs/08-research/ai-os-architecture-brief.md": [],
+    "docs/docs/08-research/cost-model_working.md": [],
+    "docs/docs/08-research/cost-model.md": [],
+    "docs/docs/08-research/emerging-ux-patterns.md": [],
+    "docs/docs/08-research/grammar-constrained-decoding.md": [],
+    "docs/docs/08-research/llm-provider-integration-research_working.md": [],
+    "docs/docs/08-research/local-ai-os-deep-dive.md": [],
+    "docs/docs/08-research/research-log_working.md": [],
+    "docs/docs/08-research/research-log.md": [],
+    "docs/docs/08-research/vendor-tool-evaluation_working.md": [],
+    "docs/docs/08-research/vendor-tool-evaluation.md": [],
+    "docs/docs/09-governance/assumption-log_working.md": [],
+    "docs/docs/09-governance/assumption-log.md": [],
+    "docs/docs/09-governance/decision-log_working.md": [],
+    "docs/docs/09-governance/decision-log.md": [],
+    "docs/docs/09-governance/dependency-register_working.md": [],
+    "docs/docs/09-governance/dependency-register.md": [],
+    "docs/docs/09-governance/glossary_working.md": [],
+    "docs/docs/09-governance/glossary.md": [],
+    "docs/docs/09-governance/open-questions_working.md": [],
+    "docs/docs/09-governance/open-questions.md": [],
+    "docs/docs/09-governance/risk-register_working.md": [],
+    "docs/docs/09-governance/risk-register.md": [],
+    "docs/grammar/dag.gbnf": [],
+    "docs/MANIFEST.md": [],
+    "docs/phase8-expansion-ideas_working.md": [],
+    "docs/phase8-expansion-ideas.md": [],
+    "docs/Phase9/phase-9-expansion-neurosync-architecture-the-blueprint-for-sovereignos-implement.md": [],
+    "docs/Phase9/research-for-implementation-review-neurosync-architecture-research-blueprint.md": [],
+    "docs/README.md": [],
+    "docs/scopelogic-research-proposal.md": [],
+    "docs/scopelogic-weekly-proposal.md": [],
+    "docs/skill-routing-map.html": [],
+    "docs/templates/adr/ADR-0000-template.md": [],
+    "docs/templates/feature-spec-template.md": [],
+    "docs/templates/reviews/ai-output-review-checklist.md": [],
+    "docs/templates/reviews/architecture-review-checklist.md": [],
+    "docs/templates/reviews/postmortem-template.md": [],
+    "docs/templates/reviews/product-review-checklist.md": [],
+    "docs/templates/reviews/release-review-checklist.md": [],
+    "docs/templates/reviews/security-review-checklist.md": [],
+    "docs/templates/rfc/RFC-0000-template.md": [],
+    "docs/templates/technical-spec-template.md": [],
+    "generate_working_docs.py": [],
+    "index.html": [],
+    "Logos/NeuroSyncBrandBook.html": [],
+    "package.json": [],
+    "postcss.config.js": [],
+    "scripts/crypto-test.ts": [
+      "src/core/basevault/crypto.ts"
+    ],
+    "scripts/dag-test.ts": [],
+    "scripts/e2e-test.ts": [],
+    "src/core/basevault/auth.ts": [],
+    "src/core/basevault/crypto.test.ts": [
+      "src/core/basevault/crypto.ts"
+    ],
+    "src/core/basevault/crypto.ts": [],
+    "src/core/basevault/db.test.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/core/basevault/db.ts": [],
+    "src/core/basevault/schema.test.ts": [
+      "src/core/basevault/schema.ts"
+    ],
+    "src/core/basevault/schema.ts": [],
+    "src/core/basevault/write-queue.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/core/coreexec/dispatch.ts": [
+      "src/core/coreexec/sandbox.ts"
+    ],
+    "src/core/coreexec/engine.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/engine.ts"
+    ],
+    "src/core/coreexec/engine.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/queue.ts",
+      "src/core/coreexec/worker-pool.ts",
+      "src/core/scoutdaemon/sse.ts",
+      "src/server/routes/system.ts"
+    ],
+    "src/core/coreexec/memory-sweep.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/memory-sweep.ts"
+    ],
+    "src/core/coreexec/memory-sweep.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/core/coreexec/path-validator.ts": [],
+    "src/core/coreexec/python_scripts/scraper.py": [],
+    "src/core/coreexec/queue.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/queue.ts"
+    ],
+    "src/core/coreexec/queue.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/core/coreexec/sandbox.test.ts": [
+      "src/core/coreexec/sandbox.ts"
+    ],
+    "src/core/coreexec/sandbox.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/path-validator.ts"
+    ],
+    "src/core/coreexec/scheduler.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/scheduler.ts",
+      "src/core/scoutdaemon/sse.ts"
+    ],
+    "src/core/coreexec/scheduler.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/engine.ts",
+      "src/core/coreexec/memory-sweep.ts",
+      "src/core/coreexec/validateDAG.ts"
+    ],
+    "src/core/coreexec/scraping.ts": [
+      "src/core/coreexec/sandbox.ts"
+    ],
+    "src/core/coreexec/test-fix-retest.test.ts": [],
+    "src/core/coreexec/validateDAG.test.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/core/coreexec/validateDAG.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/scopelogic/interview.ts",
+      "src/core/scopelogic/validator.ts",
+      "src/core/scoutdaemon/sse.ts"
+    ],
+    "src/core/coreexec/worker-pool.ts": [],
+    "src/core/coreexec/worker.test.ts": [
+      "src/core/coreexec/dispatch.ts"
+    ],
+    "src/core/coreexec/worker.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/dispatch.ts",
+      "src/core/coreexec/sandbox.ts",
+      "src/core/coreexec/scraping.ts"
+    ],
+    "src/core/memory/cerebro/habituation.test.ts": [
+      "src/core/memory/cerebro/habituation.ts",
+      "src/core/memory/cerebro/vector.ts"
+    ],
+    "src/core/memory/cerebro/habituation.ts": [
+      "src/core/memory/cerebro/vector.ts"
+    ],
+    "src/core/memory/cerebro/reflection.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/memory/cerebro/reflection.ts"
+    ],
+    "src/core/memory/cerebro/reflection.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/memory/cerebro/vector.ts"
+    ],
+    "src/core/memory/cerebro/vector.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/memory/cerebro/vector.ts"
+    ],
+    "src/core/memory/cerebro/vector.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/core/routeswitch/adapters/llama-cpp.ts": [
+      "src/core/routeswitch/providers.ts"
+    ],
+    "src/core/routeswitch/adapters/openai-compatible.ts": [
+      "src/core/basevault/crypto.ts",
+      "src/core/basevault/db.ts",
+      "src/core/routeswitch/providers.ts"
+    ],
+    "src/core/routeswitch/agent-stop.test.ts": [
+      "src/core/routeswitch/agent-stop.ts"
+    ],
+    "src/core/routeswitch/agent-stop.ts": [],
+    "src/core/routeswitch/council.test.ts": [
+      "src/core/routeswitch/engine.ts",
+      "src/core/routeswitch/providers.ts"
+    ],
+    "src/core/routeswitch/council.ts": [
+      "src/core/routeswitch/providers.ts"
+    ],
+    "src/core/routeswitch/discovery.ts": [],
+    "src/core/routeswitch/engine.ts": [
+      "src/core/routeswitch/council.ts",
+      "src/core/routeswitch/governor.ts",
+      "src/core/routeswitch/providers.ts",
+      "src/core/routeswitch/triage.ts"
+    ],
+    "src/core/routeswitch/governor.test.ts": [
+      "src/core/routeswitch/governor.ts"
+    ],
+    "src/core/routeswitch/governor.ts": [],
+    "src/core/routeswitch/interceptor.ts": [],
+    "src/core/routeswitch/providers.ts": [],
+    "src/core/routeswitch/router.test.ts": [
+      "src/core/routeswitch/interceptor.ts",
+      "src/core/routeswitch/router.ts"
+    ],
+    "src/core/routeswitch/router.ts": [
+      "src/core/routeswitch/interceptor.ts"
+    ],
+    "src/core/routeswitch/routeswitch.test.ts": [
+      "src/core/routeswitch/adapters/llama-cpp.ts",
+      "src/core/routeswitch/adapters/openai-compatible.ts",
+      "src/core/routeswitch/engine.ts",
+      "src/core/routeswitch/governor.ts"
+    ],
+    "src/core/routeswitch/triage.ts": [],
+    "src/core/scopelogic/interview.test.ts": [
+      "src/core/scopelogic/interview.ts"
+    ],
+    "src/core/scopelogic/interview.ts": [
+      "src/core/scopelogic/validator.ts"
+    ],
+    "src/core/scopelogic/risk.ts": [
+      "src/core/coreexec/engine.ts"
+    ],
+    "src/core/scopelogic/schemas.test.ts": [
+      "src/core/scopelogic/schemas.ts"
+    ],
+    "src/core/scopelogic/schemas.ts": [],
+    "src/core/scopelogic/validator.test.ts": [
+      "src/core/scopelogic/interview.ts",
+      "src/core/scopelogic/validator.ts"
+    ],
+    "src/core/scopelogic/validator.ts": [
+      "src/core/scopelogic/interview.ts",
+      "src/core/system-reserved.ts"
+    ],
+    "src/core/scoutdaemon/db-sync.test.ts": [
+      "src/core/scoutdaemon/db-sync.ts"
+    ],
+    "src/core/scoutdaemon/db-sync.ts": [],
+    "src/core/scoutdaemon/gitnexus-worker.ts": [],
+    "src/core/scoutdaemon/idle.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/engine.ts",
+      "src/server/routes/system.ts"
+    ],
+    "src/core/scoutdaemon/parser.ts": [],
+    "src/core/scoutdaemon/sse.ts": [
+      "src/core/scoutdaemon/idle.ts"
+    ],
+    "src/core/scoutdaemon/worker.test.ts": [
+      "src/core/scoutdaemon/parser.ts"
+    ],
+    "src/core/scoutlogic/benchmarker.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/core/scoutlogic/classifier.test.ts": [
+      "src/core/scoutlogic/classifier.ts"
+    ],
+    "src/core/scoutlogic/classifier.ts": [],
+    "src/core/scoutlogic/dynamic-router.test.ts": [
+      "src/core/scoutlogic/dynamic-router.ts"
+    ],
+    "src/core/scoutlogic/dynamic-router.ts": [],
+    "src/core/system-reserved.test.ts": [
+      "src/core/system-reserved.ts"
+    ],
+    "src/core/system-reserved.ts": [],
+    "src/env.d.ts": [],
+    "src/server/index.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/basevault/schema.ts",
+      "src/core/coreexec/engine.ts",
+      "src/core/coreexec/scheduler.ts",
+      "src/core/routeswitch/adapters/llama-cpp.ts",
+      "src/core/routeswitch/adapters/openai-compatible.ts",
+      "src/core/routeswitch/discovery.ts",
+      "src/core/routeswitch/engine.ts",
+      "src/core/routeswitch/governor.ts",
+      "src/core/routeswitch/providers.ts",
+      "src/core/scopelogic/interview.ts",
+      "src/core/scoutdaemon/idle.ts",
+      "src/core/scoutdaemon/sse.ts",
+      "src/server/routes/cerebro.ts",
+      "src/server/routes/coreexec-router.ts",
+      "src/server/routes/llm.ts",
+      "src/server/routes/models.ts",
+      "src/server/routes/projects.ts",
+      "src/server/routes/scheduler-list.ts",
+      "src/server/routes/system.ts",
+      "src/server/routes/todos.ts"
+    ],
+    "src/server/routes/cerebro.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/server/routes/cerebro.ts"
+    ],
+    "src/server/routes/cerebro.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/memory/cerebro/reflection.ts",
+      "src/core/memory/cerebro/vector.ts"
+    ],
+    "src/server/routes/coreexec-router.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/server/routes/coreexec-router.ts"
+    ],
+    "src/server/routes/coreexec-router.ts": [
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/engine.ts",
+      "src/core/coreexec/validateDAG.ts"
+    ],
+    "src/server/routes/llm.ts": [
+      "src/core/routeswitch/adapters/llama-cpp.ts",
+      "src/core/routeswitch/adapters/openai-compatible.ts",
+      "src/core/routeswitch/engine.ts",
+      "src/core/routeswitch/governor.ts",
+      "src/core/routeswitch/providers.ts"
+    ],
+    "src/server/routes/models.ts": [
+      "src/core/routeswitch/discovery.ts"
+    ],
+    "src/server/routes/projects.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/server/routes/scheduler-list.test.ts": [
+      "src/core/basevault/db.ts",
+      "src/server/routes/scheduler-list.ts"
+    ],
+    "src/server/routes/scheduler-list.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/server/routes/system.ts": [
+      "src/core/basevault/crypto.ts",
+      "src/core/basevault/db.ts",
+      "src/core/coreexec/worker-pool.ts"
+    ],
+    "src/server/routes/todos.ts": [
+      "src/core/basevault/db.ts"
+    ],
+    "src/ui/App.tsx": [
+      "src/core/system-reserved.ts",
+      "src/ui/components/ApprovalCockpit.tsx",
+      "src/ui/components/NodeOutputInspector.tsx",
+      "src/ui/components/RunHistory.tsx",
+      "src/ui/components/ScopeLogicChat.tsx",
+      "src/ui/components/SettingsModal.tsx",
+      "src/ui/components/Statusline.tsx"
+    ],
+    "src/ui/components/AgentKPIStrip.tsx": [],
+    "src/ui/components/ApprovalCockpit.tsx": [
+      "src/core/coreexec/engine.ts",
+      "src/core/scopelogic/risk.ts"
+    ],
+    "src/ui/components/AutonomyDials.tsx": [],
+    "src/ui/components/CerebroHealthWidget.tsx": [],
+    "src/ui/components/CronSummary.tsx": [],
+    "src/ui/components/GovernorUI.tsx": [],
+    "src/ui/components/IntentPreview.tsx": [],
+    "src/ui/components/LearningApprovalsQueue.tsx": [],
+    "src/ui/components/NodeOutputInspector.tsx": [],
+    "src/ui/components/NotificationCenter.tsx": [],
+    "src/ui/components/ProjectManager.tsx": [],
+    "src/ui/components/RouteSwitchConfig.tsx": [],
+    "src/ui/components/RoutingDials.tsx": [],
+    "src/ui/components/RunHistory.tsx": [
+      "src/core/basevault/schema.ts"
+    ],
+    "src/ui/components/ScopeLogicChat.tsx": [],
+    "src/ui/components/SettingsModal.tsx": [
+      "src/ui/components/RouteSwitchConfig.tsx",
+      "src/ui/components/RoutingDials.tsx"
+    ],
+    "src/ui/components/Statusline.tsx": [
+      "src/ui/components/IntentPreview.tsx"
+    ],
+    "src/ui/components/ThemeContext.tsx": [],
+    "src/ui/components/ThemeToggle.tsx": [
+      "src/ui/components/ThemeContext.tsx"
+    ],
+    "src/ui/index.css": [],
+    "src/ui/layouts/OSLayout.tsx": [
+      "src/ui/components/ThemeToggle.tsx",
+      "src/ui/views/BaseVaultDashboard.tsx",
+      "src/ui/views/CerebroDashboard.tsx",
+      "src/ui/views/CoreExecDashboard.tsx",
+      "src/ui/views/RouteSwitchDashboard.tsx",
+      "src/ui/views/ScopeLogicDashboard.tsx",
+      "src/ui/views/ScoutDaemonDashboard.tsx",
+      "src/ui/views/UnifiedMasterDashboard.tsx"
+    ],
+    "src/ui/main.tsx": [
+      "src/ui/components/ThemeContext.tsx",
+      "src/ui/index.css",
+      "src/ui/layouts/OSLayout.tsx"
+    ],
+    "src/ui/views/BaseVaultDashboard.tsx": [],
+    "src/ui/views/CerebroDashboard.tsx": [
+      "src/ui/components/LearningApprovalsQueue.tsx"
+    ],
+    "src/ui/views/CoreExecDashboard.tsx": [
+      "src/ui/App.tsx"
+    ],
+    "src/ui/views/RouteSwitchDashboard.tsx": [],
+    "src/ui/views/ScopeLogicDashboard.tsx": [],
+    "src/ui/views/ScoutDaemonDashboard.tsx": [],
+    "src/ui/views/UnifiedMasterDashboard.tsx": [
+      "src/ui/components/AgentKPIStrip.tsx",
+      "src/ui/components/AutonomyDials.tsx",
+      "src/ui/components/CerebroHealthWidget.tsx",
+      "src/ui/components/CronSummary.tsx",
+      "src/ui/components/GovernorUI.tsx",
+      "src/ui/components/NotificationCenter.tsx",
+      "src/ui/components/ProjectManager.tsx",
+      "src/ui/components/RunHistory.tsx"
+    ],
+    "tailwind.config.js": [],
+    "tsconfig.json": [],
+    "vite.config.ts": []
+  },
+  "projectRoot": "/home/williamdeldaymarketing/Projects/NeuroSyncMega",
+  "importStats": {
+    "filesScanned": 287,
+    "filesWithImports": 74,
+    "totalEdges": 168
+  }
+}

@@ -70,6 +70,20 @@ export class FreeModeGovernor {
     return { ...this.state };
   }
 
+  public forecastDagTokens(nodes: { prompt?: string }[]): number {
+    return nodes.reduce((sum, n) => {
+      const promptChars = n.prompt?.length || 0;
+      return sum + Math.ceil(promptChars / 4) + 1000;
+    }, 0);
+  }
+
+  public assertCanProceedDAG(nodes: { prompt?: string }[]): void {
+    const estimated = this.forecastDagTokens(nodes);
+    if (!this.canProceed(estimated)) {
+      throw new Error(`Governor blocked execution: Estimated DAG tokens (${estimated}) combined with current usage exceeds available free tier quota.`);
+    }
+  }
+
   /**
    * Aggregate history over the trailing `windowMs` (default 24h). Records
    * older than `now - windowMs` are pruned in-place on read so the buffer
@@ -112,3 +126,5 @@ export class FreeModeGovernor {
     };
   }
 }
+
+export const systemGovernor = new FreeModeGovernor(100000);

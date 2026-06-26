@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ScopeLogicSession } from '../core/scopelogic/interview';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
-import { FreeModeGovernor } from '../core/routeswitch/governor';
+import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
 import { LlamaCppProvider } from '../core/routeswitch/adapters/llama-cpp';
 import { OpenAICompatibleProvider } from '../core/routeswitch/adapters/openai-compatible';
 import { MockProvider } from '../core/routeswitch/providers';
@@ -15,10 +15,56 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import path from 'path';
 import fs from 'fs';
 
+import { readiness } from '../core/basevault/readiness';
+
 const app = new Hono();
 
 // Global CORS to allow Vite frontend to access API
 app.use('/*', cors());
+
+// Rate Limiter Memory Store
+const rateLimits = new Map<string, { count: number, resetTime: number }>();
+
+app.use('/*', async (c, next) => {
+  // 1. Payload Size Limit (64 KB)
+  const contentLength = c.req.header('content-length');
+  if (contentLength && parseInt(contentLength, 10) > 64 * 1024) {
+    return c.json({ error: 'Payload Too Large' }, 413);
+  }
+
+  // 2. Rate Limiting (120 req/min per client)
+  const ip = c.req.header('x-forwarded-for') || '127.0.0.1';
+  const now = Date.now();
+  let limit = rateLimits.get(ip);
+  if (!limit || limit.resetTime < now) {
+    limit = { count: 0, resetTime: now + 60000 };
+  }
+  if (limit.count >= 120) {
+    return c.json({ error: 'Too Many Requests' }, 429);
+  }
+  limit.count++;
+  rateLimits.set(ip, limit);
+
+  // 3. Authentication & Exemptions
+  const path = c.req.path;
+  if (path.startsWith('/health') || path.startsWith('/api/config')) {
+    return next();
+  }
+  
+  if (!readiness.configured) {
+    return next();
+  }
+
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader) {
+    // If we're hitting API routes but missing auth
+    if (path.startsWith('/api/')) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+  }
+
+  await next();
+});
 
 // Initialize Database
 initDB();
@@ -52,11 +98,10 @@ import { projectsRouter } from './routes/projects';
 // Mount Projects
 app.route('/api/projects', projectsRouter);
 // Initialize singletons for MVP
-const governor = new FreeModeGovernor(10000);
-const routeSwitch = new RouteSwitchEngine(governor);
+const routeSwitch = new RouteSwitchEngine(systemGovernor);
 
 import { llmRouter, injectLLMEngine } from './routes/llm';
-injectLLMEngine(routeSwitch, governor);
+injectLLMEngine(routeSwitch, systemGovernor);
 app.route('/api/llm', llmRouter);
 
 import { cerebroRouter } from './routes/cerebro';

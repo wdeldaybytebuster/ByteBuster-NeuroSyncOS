@@ -110,4 +110,26 @@ describe('FreeModeGovernor() — §3.2 24h usage tracking + cost derivation', ()
     const usage = g.getUsage24h();
     expect(usage.byProvider).toEqual({ unknown: { tokens: 100, requests: 1 } });
   });
+
+  it('forecastDagTokens correctly estimates token burn', () => {
+    const g = new FreeModeGovernor(100000);
+    const nodes = [
+      { prompt: 'a'.repeat(400) }, // 100 tokens + 1000 = 1100
+      { prompt: 'a'.repeat(800) }, // 200 tokens + 1000 = 1200
+      {} // 0 tokens + 1000 = 1000
+    ];
+    const estimated = g.forecastDagTokens(nodes);
+    expect(estimated).toBe(3300);
+  });
+
+  it('assertCanProceedDAG throws error if forecast exceeds quota', () => {
+    const g = new FreeModeGovernor(3000); // Only 3000 tokens available
+    const nodes = [
+      { prompt: 'a'.repeat(400) }, // 1100
+      { prompt: 'a'.repeat(800) }, // 1200
+      {} // 1000
+    ]; // Total = 3300
+
+    expect(() => g.assertCanProceedDAG(nodes)).toThrow(/Governor blocked execution: Estimated DAG tokens \(3300\)/);
+  });
 });

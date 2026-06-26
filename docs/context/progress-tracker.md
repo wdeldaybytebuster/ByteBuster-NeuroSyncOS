@@ -13,18 +13,18 @@ Update this file after every meaningful planning, implementation, architecture, 
 
 ## Current Phase
 
-**Phase 12 Complete — Documentation Audit & Free-Tier Model Transition Preparation**
+**Phase 13 (Free-tier testing)**
 
-All implementation phases §1.2 through §3.4 are shipped, verified by vitest, and tsc-clean. The system is in a beta-stable state. The current focus is completing the documentation audit so that free-tier LLM models have fully accurate context before being used for further development sessions.
+All implementation phases §1.2 through §3.4, Phase 11, and Phase 12 are shipped, verified by vitest, and tsc-clean. The system is in a beta-stable state. The documentation audit is complete and accurate context is loaded. The current focus is testing the system with free-tier LLM models.
 
 ## Current Goal
 
-- Complete full documentation audit: update all docs to precisely reflect implemented codebase (§1.2–§3.4).
-- Prepare for free-tier LLM model testing with accurate, up-to-date context files.
+- Begin free-tier LLM model testing to validate semantic routing, fallback chain resilience, and real-world latency.
+- Evaluate Phase 11 and Phase 12 module reliability in real-world scenarios.
 
 ## Active Implementation Unit
 
-- Unit: `doc-audit-phase-12`
+- Unit: `phase-13-free-tier-testing`
 - Status: `in progress`
 
 ---
@@ -39,6 +39,9 @@ All implementation phases §1.2 through §3.4 are shipped, verified by vitest, a
 | §3.2 — RouteSwitch 24h Counters | 2026-06-26 | Buffy | `FreeModeGovernor.getUsage24h()` prune-on-read with per-provider breakdown. `/api/llm/usage` endpoint. RouteSwitchDashboard 5s poll fix. `ESTIMATED_COST_PER_1K_TOKENS_USD = 0.002`. | `governor.ts`, `llm.ts`, `RouteSwitchDashboard.tsx` |
 | §3.3 — Runtime Parse Gate | 2026-06-26 | Buffy | `partitionBySchema<T>()` helper in `schema.ts`. `/api/basevault/runs` + `/api/basevault/run/:runId` use it. `RunHistory.tsx` updated to `blocked-by-validation` status. 9 new partitionBySchema vitest cases. | `schema.ts`, `server/index.ts`, `RunHistory.tsx` |
 | §3.4 — Shared DAG Validator Gate | 2026-06-26 | Buffy | `validateDAG.ts`: `validateDAGTemplate`, `validateDAGProposal`, `escalateBlockedDAGToOsTodos` (FK-safe sentinel). `coreexec-router.ts` replaces inline handlers. `scheduler.ts` validator gate pre-registration. `retry/:runId` re-validates `dag_layout`. 26/26 vitest green. | `validateDAG.ts`, `coreexec-router.ts`, `scheduler.ts`, `server/index.ts` |
+| Phase 11 — RouteSwitch Inference Engine | 2026-06-25 | Buffy | Auto-discovering model registry, rate-limit interceptor, fallback chain. | `discovery.ts`, `interceptor.ts`, `router.ts` |
+| Phase 12 — ScoutLogic Dynamic Routing | 2026-06-25 | Buffy | Live benchmarks, complexity classifier, dynamic optimal model routing. | `benchmarker.ts`, `classifier.ts`, `dynamic-router.ts` |
+| Phase 12 — Documentation Audit | 2026-06-26 | Doc Agent | Full sync of all documentation context to reflect beta-stable state. | All `docs/` files |
 | Phase 3–7 Architectural Implementation | 2026-06-25 | Buffy | Council Mode (ConsensusSynthesizer), Cerebro Vector Memory (sqlite-vec), Tiered UI Approvals, Zero-Trust Sandbox, RouteSwitch provider adapters. | Multiple source files |
 | UI Styling Regression Fix | 2026-06-25 | Buffy | Re-established Tailwind/PostCSS, glassmorphism branding, PortGrid logo, dark/light theme. | `index.css`, `App.tsx`, `tailwind.config.js` |
 | GitNexus Index | 2026-06-25 | System | Repository indexed (1358 symbols, 2205 relationships). | `.gitnexus/` |
@@ -51,15 +54,15 @@ All implementation phases §1.2 through §3.4 are shipped, verified by vitest, a
 
 | Item | Owner | Started | Next Action |
 | --- | --- | --- | --- |
-| Documentation audit (all context docs) | Doc Agent | 2026-06-26 | Update architecture.md, project-overview.md, progress-tracker.md, ui-context.md, code-standards.md, ai-workflow-rules.md, _working variants, docs/README.md, docs/MANIFEST.md, docs/AGENTS.md |
+| Phase 13 (Free-tier testing) | Free-Tier Tester | 2026-06-26 | Run tests and workflows using free-tier LLM models to observe real-world performance. |
 
 ---
 
 ## Next Up
 
-1. Begin free-tier LLM testing sessions with accurate context docs loaded.
+1. Complete free-tier LLM testing sessions.
 2. Implement any gaps surfaced by free-tier model behavior (new Open Questions below).
-3. Run full vitest suite to confirm no regressions after documentation session.
+3. Monitor Phase 11 fallback routing and Phase 12 dynamic model selections.
 
 ---
 
@@ -101,11 +104,14 @@ All implementation phases §1.2 through §3.4 are shipped, verified by vitest, a
 
 ## Session Notes
 
+### 2026-06-26 (Phase 13 — Free-tier LLM Testing)
+- Context: Documentation sync is complete. Phase 11 (RouteSwitch) and Phase 12 (ScoutLogic) have been completed. Entering Phase 13.
+- Resume from: Free-tier LLM testing session.
+
 ### 2026-06-26 (Phase 12 — Documentation Audit)
 - Context: All §1.2–§3.4 implementation phases are complete and verified. Starting documentation audit before transitioning to free-tier LLM testing.
 - Decisions made: Full rewrite of all context docs to ground truth from source files.
 - Files changed: `docs/context/architecture.md`, `docs/context/project-overview.md`, `docs/context/progress-tracker.md`, `docs/context/ui-context.md`, `docs/context/code-standards.md`, `docs/context/ai-workflow-rules.md`, all `_working` variants, `docs/README.md`, `docs/MANIFEST.md`, `docs/AGENTS.md`.
-- Resume from: Free-tier LLM testing session with accurate context loaded.
 
 ### 2026-06-25 (Phase 3–7 + Setup)
 - Context: Initialized session, MCP config, extracted NotebookLM data, implemented Council Mode, Cerebro, UI styling, ScoutDaemon.

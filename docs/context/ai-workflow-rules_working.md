@@ -18,3 +18,4 @@ Operating rules for AI agents working on NeuroSync Sovereign OS. Spec-driven, in
 - ADDED: High-Risk Symbols list (executeRun, validateDAGProposal, partitionBySchema, FreeModeGovernor.recordUsage, scoutEmitter.emit, db.transaction in escalateBlockedDAGToOsTodos, WorkflowRunSchema/TaskSchema).
 - UPDATED: Verification checklist now includes gitnexus_detect_changes as mandatory pre-commit step.
 - NO CONFLICTS: All pre-existing GitNexus workflow rules (PHASE 1–5) confirmed accurate.
+- Transitioning to Phase 13 (Free-tier testing).

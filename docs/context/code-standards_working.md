@@ -20,3 +20,4 @@ Coding conventions for NeuroSync Sovereign OS. Covers: general rules, TypeScript
   - ScoutLogic module folder mapping.
   - Module CamelCase Branding rules (exact casing for CoreExec, BaseVault, RouteSwitch, etc.).
   - `gitnexus wiki` prohibition.
+- Transitioning to Phase 13 (Free-tier testing).

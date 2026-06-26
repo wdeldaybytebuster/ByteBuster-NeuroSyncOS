@@ -86,3 +86,11 @@
 ===
 
 <!-- Append-only log of changes managed by BaseVault -->
+
+**Date:** 2026-06-26
+**Agent:** Doc Agent
+
+- Phase 11 (RouteSwitch Inference Engine) COMPLETE: Implemented `discovery.ts` (OpenRouter auto-discovery), `interceptor.ts` (rate-limit telemetry), `router.ts` (fallback chain), and populated `RouteSwitchConfig.tsx` UI.
+- Phase 12 (ScoutLogic Dynamic Routing) COMPLETE: Implemented `benchmarker.ts` (EMA latency/TPS), `classifier.ts` (deterministic complexity heuristics), `dynamic-router.ts` (composite scoring math), and `RoutingDials.tsx` (Speed/Cost/IQ sliders).
+- Phase 12 (Documentation Audit) COMPLETE: Synced all context files and documentation to reflect the actual implemented state of the beta-stable system.
+- Transitioning to Phase 13 (Free-tier testing).

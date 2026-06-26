@@ -21,3 +21,4 @@ Visual and component standards for NeuroSync Sovereign OS PortGrid UI. Dark-them
   - Glass panel CSS variables reference (--primary-glow, --bg-glass, --border-glass, --bg-dots, --accent).
   - Run history status map (blocked-by-validation, completed, failed, running, pending).
   - SSE connection lifecycle description.
+- Transitioning to Phase 13 (Free-tier testing).

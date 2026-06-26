@@ -7,6 +7,7 @@ import {
   validateDAGTemplate,
   escalateBlockedDAGToOsTodos,
 } from '../../core/coreexec/validateDAG';
+import { systemGovernor } from '../../core/routeswitch/governor';
 
 export const coreexecRouter = new Hono();
 
@@ -35,6 +36,14 @@ coreexecRouter.post('/approve', async (c) => {
     const placeholderRunId = `pending-approve-${crypto.randomUUID()}`;
     escalateBlockedDAGToOsTodos(placeholderRunId, error, 'approve-route');
     return c.json({ error }, 400);
+  }
+
+  try {
+    systemGovernor.assertCanProceedDAG(proposal.nodes);
+  } catch (err: any) {
+    const placeholderRunId = `pending-approve-${crypto.randomUUID()}`;
+    escalateBlockedDAGToOsTodos(placeholderRunId, err.message, 'approve-route');
+    return c.json({ error: err.message }, 400);
   }
 
   const runId = crypto.randomUUID();
