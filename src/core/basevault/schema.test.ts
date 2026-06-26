@@ -206,7 +206,7 @@ describe('BaseVault Zod Schemas — §3.3 workflow_run / task / project canonica
       const dirty = { ...validRun, id: '77777777-8888-4999-8aaa-bbbbbbbbbbbb', status: 'terraformed' };
       const result = partitionBySchema([validRun, dirty], WorkflowRunSchema, 'mixed-test');
       expect(result.clean.length).toBe(1);
-      expect(result.clean[0].id).toBe(validRun.id);
+      expect(result.clean[0]!.id).toBe(validRun.id);
       expect(result.dirtyIds).toEqual(['77777777-8888-4999-8aaa-bbbbbbbbbbbb']);
     });
 

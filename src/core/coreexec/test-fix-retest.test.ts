@@ -40,7 +40,7 @@ describe('Test-Fix-Retest Mechanics', () => {
     expect(iterations).toBe(max_iterations + 1);
     
     // Assert error injection logic
-    expect(taskLoopMock.mock.calls[1][0]).toContain('Previous error:\nCommand failed on iteration 1');
-    expect(taskLoopMock.mock.calls[2][0]).toContain('Previous error:\nCommand failed on iteration 2');
+    expect(taskLoopMock.mock.calls[1]?.[0]).toContain('Previous error:\nCommand failed on iteration 1');
+    expect(taskLoopMock.mock.calls[2]?.[0]).toContain('Previous error:\nCommand failed on iteration 2');
   });
 });

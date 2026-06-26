@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { db, initDB } from '../basevault/db';
+import { validateDAGTemplate, validateDAGProposal, escalateBlockedDAGToOsTodos } from './validateDAG';
+import { scoutEmitter } from '../scoutdaemon/sse';
 
 beforeAll(() => {
   initDB();
@@ -7,42 +9,42 @@ beforeAll(() => {
 
 describe('validateDAGTemplate() — §3.4 cron-path structural + semantic gate', () => {
   it('returns SA-06 error for empty string', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate('');
     expect(result.error).toMatch(/SA-06/);
     expect(result.proposal).toBeNull();
   });
 
   it('returns SA-06 error for whitespace-only string', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate('   \n\t  ');
     expect(result.error).toMatch(/SA-06/);
     expect(result.proposal).toBeNull();
   });
 
   it('returns Parse Violation error for non-JSON string', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate('NOT JSON {{{');
     expect(result.error).toMatch(/Parse Violation/);
     expect(result.proposal).toBeNull();
   });
 
   it('returns SA-06 error for JSON without nodes array', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate(JSON.stringify({ hello: 'world' }));
     expect(result.error).toMatch(/SA-06/);
     expect(result.proposal).toBeNull();
   });
 
   it('returns SA-06 error for JSON with empty nodes', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate(JSON.stringify({ nodes: [] }));
     expect(result.error).toMatch(/SA-06/);
     expect(result.proposal).toBeNull();
   });
 
   it('returns SA-07 error for a valid DAG that uses a reserved label', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate(
       JSON.stringify({
         nodes: [{ id: 'n1', dependencies: [], prompt: 'CoreExec restart' }],
@@ -53,7 +55,7 @@ describe('validateDAGTemplate() — §3.4 cron-path structural + semantic gate',
   });
 
   it('returns SA-05 error for a valid DAG that uses a rogue agent', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate(
       JSON.stringify({
         nodes: [{ id: 'n1', dependencies: [], prompt: 'agent: RogueEngine' }],
@@ -63,7 +65,7 @@ describe('validateDAGTemplate() — §3.4 cron-path structural + semantic gate',
   });
 
   it('returns null error for a clean valid DAG', async () => {
-    const { validateDAGTemplate } = await import('./validateDAG');
+
     const result = validateDAGTemplate(
       JSON.stringify({
         nodes: [{ id: 'n1', dependencies: [], prompt: 'fetch the weather' }],
@@ -76,26 +78,26 @@ describe('validateDAGTemplate() — §3.4 cron-path structural + semantic gate',
 
 describe('validateDAGProposal() — §3.4 approve-path object gate', () => {
   it('returns SA-06 for null input', async () => {
-    const { validateDAGProposal } = await import('./validateDAG');
+
     const result = validateDAGProposal(null);
     expect(result.error).toMatch(/SA-06/);
   });
 
   it('returns SA-06 for non-object input', async () => {
-    const { validateDAGProposal } = await import('./validateDAG');
+
     expect(validateDAGProposal('a string').error).toMatch(/SA-06/);
     expect(validateDAGProposal(42).error).toMatch(/SA-06/);
     expect(validateDAGProposal(undefined).error).toMatch(/SA-06/);
   });
 
   it('returns SA-06 for object without nodes array', async () => {
-    const { validateDAGProposal } = await import('./validateDAG');
+
     const result = validateDAGProposal({ id: 'x' });
     expect(result.error).toMatch(/SA-06/);
   });
 
   it('returns null for a proposal with a clean node', async () => {
-    const { validateDAGProposal } = await import('./validateDAG');
+
     const result = validateDAGProposal({
       nodes: [{ id: 'n1', dependencies: [], prompt: 'fetch the weather' }],
     });
@@ -105,7 +107,7 @@ describe('validateDAGProposal() — §3.4 approve-path object gate', () => {
 
 describe('escalateBlockedDAGToOsTodos() — §3.4 FK-satisfying escalation', () => {
   it('writes a workflow_runs + tasks + os_todos triple that satisfies all FKs', async () => {
-    const { escalateBlockedDAGToOsTodos } = await import('./validateDAG');
+
 
     const beforeRuns = (db.prepare('SELECT COUNT(*) AS n FROM workflow_runs').get() as any).n;
     const beforeTasks = (db.prepare('SELECT COUNT(*) AS n FROM tasks').get() as any).n;
@@ -150,8 +152,8 @@ describe('escalateBlockedDAGToOsTodos() — §3.4 FK-satisfying escalation', () 
   });
 
   it('emits a TODO_ESCALATED scout event with origin and workflowId', async () => {
-    const { scoutEmitter } = await import('../scoutdaemon/sse');
-    const { escalateBlockedDAGToOsTodos } = await import('./validateDAG');
+
+
     const events: any[] = [];
     const handler = (e: any) => events.push(e);
     scoutEmitter.on('update', handler);
@@ -177,7 +179,7 @@ describe('escalateBlockedDAGToOsTodos() — §3.4 FK-satisfying escalation', () 
   });
 
   it('does NOT throw when WF + task + todo write succeeds (FK constraint relaxed via sentinel)', async () => {
-    const { escalateBlockedDAGToOsTodos } = await import('./validateDAG');
+
     expect(() =>
       escalateBlockedDAGToOsTodos('wf-no-throw', 'Parse Violation test'),
     ).not.toThrow();

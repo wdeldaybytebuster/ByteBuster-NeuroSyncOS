@@ -22,7 +22,7 @@ export function selectOptimalModel(
     throw new Error('No models available');
   }
 
-  let bestModelId = availableModels[0].id;
+  let bestModelId = availableModels[0]!.id;
   let maxScore = -Infinity;
 
   for (const model of availableModels) {

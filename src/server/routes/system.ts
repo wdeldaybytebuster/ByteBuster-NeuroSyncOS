@@ -131,10 +131,10 @@ systemRouter.get('/backup', async (c) => {
   return streamSSE(c, async (stream) => {
     try {
       const backupPath = path.resolve(process.cwd(), `backup-${Date.now()}.db`);
-      await db.backup(backupPath, {
-        progress: async ({ totalPages, remainingPages }) => {
+      db.backup(backupPath, {
+        progress: ({ totalPages, remainingPages }) => {
           const percent = totalPages > 0 ? Math.round(((totalPages - remainingPages) / totalPages) * 100) : 0;
-          await stream.writeSSE({
+          stream.writeSSE({
             data: JSON.stringify({ progress: percent, file: backupPath }),
             event: 'backup-progress'
           });

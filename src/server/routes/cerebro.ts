@@ -34,9 +34,6 @@ cerebroRouter.get('/health', (c) => {
   }
 });
 
-// Instantiate Cerebro services
-const reflectionExecutor = new ReflectionExecutor();
-
 // Execute raw SQL query (Admin / Explorer)
 cerebroRouter.post('/query', async (c) => {
   try {
@@ -56,7 +53,7 @@ cerebroRouter.post('/query', async (c) => {
 cerebroRouter.post('/habituate', async (c) => {
   try {
     // Run reflection asynchronously
-    setTimeout(() => reflectionExecutor.runCycle().catch(console.error), 0);
+    setTimeout(() => ReflectionExecutor.runReflectionCycle().catch(console.error), 0);
     return c.json({ success: true, message: 'Reflection cycle initiated' });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -75,7 +72,8 @@ cerebroRouter.post('/vector-search', async (c) => {
     const mockQueryVector = new Float32Array(1536).fill(0.1);
     
     // We'll perform a dummy search to show the pipeline is wired
-    const results = CerebroVectorStore.search(mockQueryVector, 3);
+    // CerebroVectorStore expects a query string
+    const results = CerebroVectorStore.search(query, undefined, undefined, 3);
     
     return c.json({ 
       success: true, 

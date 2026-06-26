@@ -18,7 +18,7 @@ export function AutonomyDials() {
   }, []);
 
   const initialRender = useRef(true);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (initialRender.current) {

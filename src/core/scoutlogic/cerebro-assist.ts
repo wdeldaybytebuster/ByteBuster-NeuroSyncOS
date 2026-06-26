@@ -20,10 +20,9 @@ Do not provide general-purpose knowledge or external hallucinations. Your univer
       throw new Error("No free models available in the cognitive nexus.");
     }
     
-    // By default getFreeModels sorts by context length. The prompt specifies to dynamically target 
     // the free-tier model with the lowest latency by querying ZenDiscoveryService.getFreeModels().
     // We assume the first available model meets our needs or is the default choice from that service.
-    return freeModels[0].id;
+    return freeModels[0]!.id;
   }
 
   public static async generateResponse(userMessage: string): Promise<string> {

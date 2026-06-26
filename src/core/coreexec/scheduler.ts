@@ -54,7 +54,7 @@ export function initScheduler() {
     // Usually the main process is already spawned with tsx in this project.
     reflectionWorker = new Worker(workerPath);
     
-    reflectionWorker.on('message', (msg) => {
+    reflectionWorker?.on('message', (msg) => {
       if (msg.type === 'reflection_done') {
         console.log(`[CoreExec] Reflection cycle complete. Pruned ${msg.pruned} memories.`);
       } else if (msg.type === 'reflection_error') {
@@ -62,7 +62,7 @@ export function initScheduler() {
       }
     });
 
-    reflectionWorker.on('error', (err) => {
+    reflectionWorker?.on('error', (err) => {
       console.error('[CoreExec] Reflection worker encountered an error:', err);
     });
 
@@ -72,7 +72,7 @@ export function initScheduler() {
     }, 10 * 60 * 1000);
     
     // Trigger initial run
-    reflectionWorker.postMessage({ type: 'run_reflection' });
+    reflectionWorker?.postMessage({ type: 'run_reflection' });
   } catch (err) {
     console.error('[CoreExec] Failed to initialize reflection worker:', err);
   }

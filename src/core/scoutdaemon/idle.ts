@@ -29,10 +29,10 @@ export class IdleDetector extends EventEmitter {
           // Save original config if not already yielding
           if (!this.originalMaxWorkers) this.originalMaxWorkers = systemConfig.maxWorkers;
           systemConfig.maxWorkers = 0; // Suspend coreexec engine
-        } else if (this.originalMaxWorkers && temp.main < 75) {
+        } else if (this.originalMaxWorkers !== undefined && temp.main < 75) {
           console.log('[ScoutDaemon] Thermals recovered. Restoring worker config.');
           systemConfig.maxWorkers = this.originalMaxWorkers;
-          this.originalMaxWorkers = undefined;
+          delete this.originalMaxWorkers;
         }
       } catch (err) {
         // ignore
