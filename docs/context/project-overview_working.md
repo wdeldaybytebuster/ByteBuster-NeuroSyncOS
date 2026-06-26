@@ -19,3 +19,4 @@ Product definition for NeuroSync Sovereign OS: local-first, single-user, multi-p
   - Complete "Implemented Feature Set" section covering all confirmed modules.
   - Cerebro memory system in feature set.
   - Failure criteria updated to include schema-dirty rows and cron-bypass scenarios.
+- Transitioning to Phase 13 (Free-tier testing).

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { db } from '../../core/basevault/db';
+import { SensitiveDataRedactor, DataTier } from '../../core/basevault/redactor';
 
 export const todosRouter = new Hono();
 
@@ -29,8 +30,9 @@ todosRouter.post('/resolve', async (c) => {
       if (todo) {
         // 3. Update task status back to unclaimed so the engine will re-queue it
         // We inject the resolutionData into the task's output_data so the worker has context on retry
+        const redactedResolution = SensitiveDataRedactor.redactObject(resolutionData, DataTier.INTERNAL);
         const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
-        updateTask.run(JSON.stringify({ resolution: resolutionData }), todo.dag_node_id);
+        updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
         
         // 4. Update the parent workflow_run status from 'parked' to 'running'
         const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;

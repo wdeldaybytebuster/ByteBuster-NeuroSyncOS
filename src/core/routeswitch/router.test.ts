@@ -2,14 +2,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { executeWithFallback } from './router.js';
 import { ProviderHealthState } from './interceptor.js';
 
+import { ZenDiscoveryService } from './discovery';
+
 describe('Fallback Router Integration Testing', () => {
   let fetchMock: any;
+  let discoveryMock: any;
 
   beforeEach(() => {
     vi.useFakeTimers();
     // @ts-ignore
     ProviderHealthState.states.clear();
     fetchMock = vi.spyOn(global, 'fetch');
+    discoveryMock = vi.spyOn(ZenDiscoveryService, 'getFreeModels').mockResolvedValue([]);
   });
 
   afterEach(() => {

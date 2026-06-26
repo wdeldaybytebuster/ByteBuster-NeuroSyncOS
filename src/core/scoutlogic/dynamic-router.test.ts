@@ -1,4 +1,5 @@
 import { selectOptimalModel } from './dynamic-router';
+import { describe, it, expect } from 'vitest';
 
 describe('selectOptimalModel', () => {
   const models = [

@@ -117,6 +117,15 @@ export function initDB() {
       failure_rate REAL,
       total_runs INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS discovered_models (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      context_length INTEGER,
+      pricing_prompt TEXT,
+      pricing_completion TEXT,
+      fetched_at INTEGER NOT NULL
+    );
   `);
 
   try {
