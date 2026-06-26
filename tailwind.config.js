@@ -2,7 +2,7 @@
 module.exports = {
   content: [
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./src/ui/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
   theme: {
@@ -16,15 +16,26 @@ module.exports = {
         primary: 'var(--color-primary)',
         gunmetal: 'var(--color-gunmetal)',
         foreground: 'var(--color-foreground)',
+        gray: {
+          100: 'var(--color-gray-100)',
+          200: 'var(--color-gray-200)',
+          300: 'var(--color-gray-300)',
+          400: 'var(--color-gray-400)',
+          500: 'var(--color-gray-500)',
+          600: 'var(--color-gray-600)',
+          700: 'var(--color-gray-700)',
+          800: 'var(--color-gray-800)',
+          900: 'var(--color-gray-900)',
+        },
         'brand-navy': '#0A1B3A', 
-        'sovereign-gold': '#D4AF37',
-        'sterling-silver': '#C0C0C0',
-        'core-exec': '#00E5FF',
-        'port-grid': '#00FFCC',
-        'route-switch': '#FFB300',
-        'scout-daemon': '#8E24AA',
-        'neural-blue': '#3882F6',
-        'report-green': '#00FF41'
+        'sovereign-gold': 'var(--color-sovereign-gold, #D4AF37)',
+        'sterling-silver': 'var(--color-sterling-silver, #C0C0C0)',
+        'core-exec': 'var(--color-core-exec, #00E5FF)',
+        'port-grid': 'var(--color-port-grid, #00FFCC)',
+        'route-switch': 'var(--color-route-switch, #FFB300)',
+        'scout-daemon': 'var(--color-scout-daemon, #8E24AA)',
+        'neural-blue': 'var(--color-neural-blue, #3882F6)',
+        'report-green': 'var(--color-report-green, #00FF41)'
       },
       backgroundImage: {
         'void-gradient': 'radial-gradient(circle at top center, var(--color-primary) 0%, var(--color-void) 100%)',
