@@ -5,6 +5,7 @@ export interface LlamaCppConfig {
   contextSize?: number;
   gpuLayers?: number;
   temperature?: number;
+  grammar?: string; // GBNF grammar for constrained decoding
 }
 
 export class LlamaCppProvider implements LLMProvider {
@@ -17,8 +18,12 @@ export class LlamaCppProvider implements LLMProvider {
     // const { getLlama } = await import('node-llama-cpp');
     // const llama = await getLlama();
     // const model = await llama.loadModel({ modelPath: this.config.modelPath });
-    // ... setup context and generate.
+    // const context = await model.createContext();
+    // if (this.config.grammar) {
+    //   const grammar = await llama.createGrammar({ grammar: this.config.grammar });
+    //   // use grammar in completion
+    // }
     
-    return `[LOCAL GGUF RESPONSE via ${this.config.modelPath}] Processed prompt: "${prompt.substring(0, 30)}..." locally.`;
+    return `[LOCAL GGUF RESPONSE via ${this.config.modelPath}${this.config.grammar ? ' with GBNF' : ''}] Processed prompt: "${prompt.substring(0, 30)}..." locally.`;
   }
 }
