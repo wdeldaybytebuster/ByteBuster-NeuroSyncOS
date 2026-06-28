@@ -95,7 +95,7 @@ export function NotificationCenter() {
                 <input 
                   type="text" 
                   placeholder="Enter 2FA Code..." 
-                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-1 text-white text-sm focus:border-blue-500 outline-none"
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded px-3 py-1 text-[var(--color-foreground)] text-sm focus:border-blue-500 outline-none"
                   value={resolutionInputs[todo.id] || ''}
                   onChange={(e) => setResolutionInputs({...resolutionInputs, [todo.id]: e.target.value})}
                 />
@@ -109,7 +109,7 @@ export function NotificationCenter() {
                 <input 
                   type="text" 
                   placeholder="/path/to/file.pdf" 
-                  className="flex-1 bg-transparent text-white outline-none"
+                  className="flex-1 bg-transparent text-[var(--color-foreground)] outline-none"
                   value={resolutionInputs[todo.id] || ''}
                   onChange={(e) => setResolutionInputs({...resolutionInputs, [todo.id]: e.target.value})}
                 />
@@ -122,7 +122,7 @@ export function NotificationCenter() {
                 <input 
                   type="text" 
                   placeholder="Optional context..." 
-                  className="w-full mt-1 bg-gray-900 border border-gray-600 rounded px-3 py-1 text-white text-sm focus:border-blue-500 outline-none"
+                  className="w-full mt-1 bg-gray-900 border border-gray-600 rounded px-3 py-1 text-[var(--color-foreground)] text-sm focus:border-blue-500 outline-none"
                   value={resolutionInputs[todo.id] || ''}
                   onChange={(e) => setResolutionInputs({...resolutionInputs, [todo.id]: e.target.value})}
                 />

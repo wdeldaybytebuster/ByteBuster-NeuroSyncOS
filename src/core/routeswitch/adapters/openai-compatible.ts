@@ -9,9 +9,11 @@ export interface OpenAICompatibleConfig {
 }
 
 export class OpenAICompatibleProvider implements LLMProvider {
-  id = 'openai-compatible';
+  id: string;
   
-  constructor(private config: OpenAICompatibleConfig) {}
+  constructor(private config: OpenAICompatibleConfig, customId?: string) {
+    this.id = customId || 'openai-compatible';
+  }
 
   async generate(prompt: string, _estimatedTokens: number, schema?: any): Promise<string> {
     const { baseUrl, apiKey, modelId } = this.config;

@@ -4,22 +4,57 @@ export enum DataTier {
   CONFIDENTIAL = 'Confidential'
 }
 
+export interface RedactionEvent {
+  timestamp: number;
+  tier: string;
+  patternType: string;
+  context: string;
+}
+
 export class SensitiveDataRedactor {
   private static apiKeysPattern = /(sk-[A-Za-z0-9_-]{20,}|Bearer\s+[A-Za-z0-9_-]{20,})/gi;
   private static emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
   private static phonePattern = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/gi;
+
+  // In-memory ring buffer for redaction events (max 50)
+  private static eventLog: RedactionEvent[] = [];
+  private static MAX_EVENTS = 50;
+
+  private static logEvent(tier: string, patternType: string, context: string) {
+    SensitiveDataRedactor.eventLog.unshift({ timestamp: Date.now(), tier, patternType, context });
+    if (SensitiveDataRedactor.eventLog.length > SensitiveDataRedactor.MAX_EVENTS) {
+      SensitiveDataRedactor.eventLog.pop();
+    }
+  }
+
+  public static getRecentEvents(): RedactionEvent[] {
+    return SensitiveDataRedactor.eventLog;
+  }
 
   public static redact(text: string | null | undefined, tier: DataTier): string {
     if (!text) return text === null ? 'null' : (text === undefined ? 'undefined' : '');
     let redactedText = text;
 
     if (tier === DataTier.CONFIDENTIAL) {
+      SensitiveDataRedactor.logEvent(tier, 'CONFIDENTIAL_BLOCK', 'Full payload redacted');
       return '[REDACTED CONFIDENTIAL DATA]';
     }
 
+    const apiMatches = text.match(this.apiKeysPattern);
+    if (apiMatches) {
+      SensitiveDataRedactor.logEvent(tier, 'API_KEY', `${apiMatches.length} key pattern(s) scrubbed`);
+    }
     redactedText = redactedText.replace(this.apiKeysPattern, '[REDACTED API KEY]');
 
     if (tier === DataTier.INTERNAL) {
+      const emailMatches = text.match(this.emailPattern);
+      if (emailMatches) {
+        SensitiveDataRedactor.logEvent(tier, 'EMAIL', `${emailMatches.length} email(s) scrubbed`);
+      }
+      const phoneMatches = text.match(this.phonePattern);
+      if (phoneMatches) {
+        SensitiveDataRedactor.logEvent(tier, 'PHONE', `${phoneMatches.length} phone number(s) scrubbed`);
+      }
       redactedText = redactedText.replace(this.emailPattern, '[REDACTED EMAIL]');
       redactedText = redactedText.replace(this.phonePattern, '[REDACTED PHONE]');
     }

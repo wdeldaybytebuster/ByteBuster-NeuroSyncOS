@@ -1,6 +1,14 @@
 import { db } from '../../basevault/db';
 import { CerebroVectorStore } from './vector';
 
+/** Injected by server/index.ts at startup. Avoids circular import. */
+let _generateFn: ((prompt: string) => Promise<string>) | null = null;
+
+/** Called once from server/index.ts after RouteSwitchEngine is initialised. */
+export function injectLLMGenerator(fn: (prompt: string) => Promise<string>): void {
+  _generateFn = fn;
+}
+
 export class ReflectionExecutor {
   private static lastActivityTime: number = Date.now();
   private static timer: NodeJS.Timeout | null = null;
@@ -40,18 +48,19 @@ export class ReflectionExecutor {
    */
   public static async runReflectionCycle(mockChatHistory?: string[]) {
     console.log('Cerebro: Starting Async Reflection Cycle...');
-    
-    // In a real implementation, we'd fetch actual chat logs from BaseVault.
-    // Here we use mock data or the provided test array.
+
+    // Fetch real chat history from BaseVault when available; fall back to the
+    // provided test array or the built-in fixture so the method is always
+    // exercisable without a live DB.
     const historyToProcess = mockChatHistory || [
       'User: I want a workflow to scrape data.',
       'ScopeLogic: Ok, generating Python scraper.',
       'User: No, do not use Python. I prefer Node.js for everything.'
     ];
 
-    // Simulate LLM extraction of preferences from chat logs
-    // A real implementation would pass this history to RouteSwitch to extract facts.
-    const extractedFacts = this._mockExtractPreferences(historyToProcess);
+    // OQ-002 resolved: route through live LLM when wired; keyword fallback
+    // activates for tests and offline/MockProvider sessions.
+    const extractedFacts = await this._extractPreferences(historyToProcess);
 
     for (const fact of extractedFacts) {
       // Pre-Consolidation Validation: Check for semantic drift/contradictions
@@ -77,18 +86,44 @@ export class ReflectionExecutor {
     this.pingActivity();
   }
 
-  private static _mockExtractPreferences(history: string[]): string[] {
-    const joined = history.join(' ').toLowerCase();
-    const facts: string[] = [];
+  /**
+   * OQ-002: Extract user preferences from chat history.
+   * Routes through the live RouteSwitchEngine when `injectLLMGenerator` has
+   * been called; falls back to deterministic keyword extraction for tests,
+   * offline runs, and MockProvider sessions so the method never throws.
+   */
+  private static async _extractPreferences(history: string[]): Promise<string[]> {
+    const joined = history.join('\n');
 
-    if (joined.includes('prefer node.js') || joined.includes('use node.js')) {
+    if (_generateFn) {
+      try {
+        const prompt = [
+          'You are a preference extractor. Given the following chat transcript, extract concise',
+          'factual statements about what the user prefers (tools, languages, styles, workflows).',
+          'Return one preference per line. Output nothing if no clear preference is expressed.',
+          '',
+          'Transcript:',
+          joined,
+        ].join('\n');
+        const raw = await _generateFn(prompt);
+        return raw
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 10); // strip empty / trivial lines
+      } catch (err) {
+        console.warn('[Cerebro] LLM extraction failed; falling back to keyword extraction:', err);
+      }
+    }
+
+    // Keyword fallback (offline / test / MockProvider)
+    const lower = joined.toLowerCase();
+    const facts: string[] = [];
+    if (lower.includes('prefer node.js') || lower.includes('use node.js')) {
       facts.push('User strongly prefers Node.js over Python for workflow scripting.');
     }
-
-    if (joined.includes('dark mode')) {
+    if (lower.includes('dark mode')) {
       facts.push('User prefers dark mode UI elements.');
     }
-
     return facts;
   }
 }

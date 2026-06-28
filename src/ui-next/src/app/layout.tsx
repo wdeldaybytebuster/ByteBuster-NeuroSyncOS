@@ -1,12 +1,20 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ 
+  subsets: ["latin"],
+  variable: "--font-sans"
+});
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  variable: "--font-heading"
+});
 
 export const metadata: Metadata = {
-  title: "PortGrid Cockpit",
-  description: "Next.js Autonomous Agent Dashboard",
+  title: "NeuroSync Sovereign OS",
+  description: "Autonomous Agent Dashboard",
 };
 
 export default function RootLayout({
@@ -15,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} min-h-full flex flex-col antialiased`}>
+    <html lang="en" className="dark">
+      <body className={`${inter.variable} ${montserrat.variable} min-h-full flex flex-col antialiased`}>
         {children}
       </body>
     </html>

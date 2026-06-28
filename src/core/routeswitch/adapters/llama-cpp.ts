@@ -9,9 +9,11 @@ export interface LlamaCppConfig {
 }
 
 export class LlamaCppProvider implements LLMProvider {
-  id = 'llama-cpp';
+  id: string;
 
-  constructor(private config: LlamaCppConfig) {}
+  constructor(private config: LlamaCppConfig, customId?: string) {
+    this.id = customId || 'llama-cpp';
+  }
 
   async generate(prompt: string, estimatedTokens: number): Promise<string> {
     // In a real environment, this would initialize the node-llama-cpp binding

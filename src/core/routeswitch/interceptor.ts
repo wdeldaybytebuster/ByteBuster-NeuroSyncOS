@@ -77,4 +77,18 @@ export class ProviderHealthState {
       console.log(`[RouteSwitch] Model ${providerModel} is back online.`);
     }, Math.max(resetDelayMs, 1000));
   }
+
+  /** Manually clear all exhaustion states — used by the operator's "Clear Provider Error" button */
+  public static clearAllErrors(): number {
+    let cleared = 0;
+    for (const [key, state] of this.states.entries()) {
+      if (state.isExhausted) {
+        state.isExhausted = false;
+        state.tokensRemaining = Number.MAX_SAFE_INTEGER;
+        if (state.resetTimeoutId) { clearTimeout(state.resetTimeoutId); state.resetTimeoutId = null; }
+        cleared++;
+      }
+    }
+    return cleared;
+  }
 }

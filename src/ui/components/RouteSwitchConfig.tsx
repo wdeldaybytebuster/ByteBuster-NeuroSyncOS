@@ -78,7 +78,7 @@ export function RouteSwitchConfig() {
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-gray-400">Primary Model</label>
           <select 
-            className="input-base bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 outline-none focus:border-blue-500 transition-colors"
+            className="input-base"
             value={primary}
             onChange={e => setPrimary(e.target.value)}
           >
@@ -92,7 +92,7 @@ export function RouteSwitchConfig() {
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-gray-400">Secondary Model (Fallback 1)</label>
           <select 
-            className="input-base bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 outline-none focus:border-blue-500 transition-colors"
+            className="input-base"
             value={fallback1}
             onChange={e => setFallback1(e.target.value)}
           >
@@ -106,7 +106,7 @@ export function RouteSwitchConfig() {
         <div className="flex flex-col gap-1">
           <label className="text-xs font-semibold text-gray-400">Tertiary Model (Fallback 2)</label>
           <select 
-            className="input-base bg-gray-900 border border-gray-700 text-white rounded px-3 py-2 outline-none focus:border-blue-500 transition-colors"
+            className="input-base"
             value={fallback2}
             onChange={e => setFallback2(e.target.value)}
           >

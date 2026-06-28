@@ -67,7 +67,7 @@ export function ProjectManager() {
           value={newProjectName}
           onChange={(e) => setNewProjectName(e.target.value)}
           placeholder="New Project Name..."
-          className="flex-1 bg-void/60 border border-white/10 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-sovereign-gold/50"
+          className="input-base"
         />
         <button
           type="submit"

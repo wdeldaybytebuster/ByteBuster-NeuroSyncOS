@@ -56,8 +56,20 @@ describe('cerebroRouter /health', () => {
     const oldTs = Date.now() - 25 * 60 * 60 * 1000; // 25h ago
     const id = 'test-mem-old';
 
+    // Snapshot and remove all pre-existing rows so MAX(last_accessed_at) is
+    // deterministically the stale probe, regardless of shared DB state from
+    // other test files or initDB() seeding.
+    type MetaRow = {
+      id: string; content: string; type: string;
+      last_accessed_at: number; access_count: number; created_at: number;
+    };
+    const snapshot = db
+      .prepare('SELECT * FROM cerebro_memories_meta')
+      .all() as MetaRow[];
+    db.prepare('DELETE FROM cerebro_memories_meta').run();
+
     db.prepare(`
-      INSERT OR REPLACE INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
+      INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, 'stale probe', 'episodic', oldTs, 1, oldTs);
 
@@ -66,7 +78,19 @@ describe('cerebroRouter /health', () => {
       expect(body.lastReflection).toBe(oldTs);
       expect(body.status).toBe('warning');
     } finally {
-      db.prepare('DELETE FROM cerebro_memories_meta WHERE id = ?').run(id);
+      // Restore pre-existing rows and remove the stale probe.
+      db.prepare('DELETE FROM cerebro_memories_meta').run();
+      const restore = db.prepare(`
+        INSERT OR REPLACE INTO cerebro_memories_meta
+          (id, content, type, last_accessed_at, access_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      const restoreAll = db.transaction((rows: MetaRow[]) => {
+        for (const r of rows) {
+          restore.run(r.id, r.content, r.type, r.last_accessed_at, r.access_count, r.created_at);
+        }
+      });
+      restoreAll(snapshot);
     }
   });
 });

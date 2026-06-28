@@ -37,10 +37,10 @@ export default function DeferenceUI({ tasks, onApproveAll, onRejectAll }: Defere
       role="region" 
       aria-live="polite" 
       aria-label="Pending Approvals"
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-zinc-900/90 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 shadow-2xl z-50"
+      className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 glass-enclave px-6 py-3 rounded-full shadow-2xl z-50 dynamic-interactive"
     >
-      <div className="text-sm font-medium text-zinc-300" id="approval-count">
-        <span className="text-white">{tasks.length}</span> high-confidence {tasks.length === 1 ? 'task' : 'tasks'} pending approval
+      <div className="text-sm font-medium opacity-80" id="approval-count">
+        <span className="font-bold text-[var(--color-sovereign-gold)]">{tasks.length}</span> high-confidence {tasks.length === 1 ? 'task' : 'tasks'} pending approval
       </div>
       
       <div className="flex gap-2 ml-4" aria-describedby="approval-count">
@@ -57,7 +57,7 @@ export default function DeferenceUI({ tasks, onApproveAll, onRejectAll }: Defere
           onClick={handleApprove}
           disabled={loading}
           aria-label={`Approve all ${tasks.length} pending tasks`}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold text-[var(--color-report-green)] bg-[var(--color-report-green)]/10 hover:bg-[var(--color-report-green)]/20 transition-colors disabled:opacity-50"
         >
           <CheckCircle size={16} aria-hidden="true" />
           Approve All

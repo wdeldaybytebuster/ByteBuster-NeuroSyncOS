@@ -126,6 +126,29 @@ export function initDB() {
       pricing_completion TEXT,
       fetched_at INTEGER NOT NULL
     );
+
+    -- LLM Provider Registry: named provider entries with encrypted API keys
+    CREATE TABLE IF NOT EXISTS llm_providers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      api_key_encrypted TEXT,
+      is_enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    -- LLM Routing Rules: per-scope fallback chains
+    CREATE TABLE IF NOT EXISTS llm_routing_rules (
+      id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      scope_id TEXT,
+      provider_chain TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(scope, scope_id)
+    );
   `);
 
   try {

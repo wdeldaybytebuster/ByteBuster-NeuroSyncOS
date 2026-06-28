@@ -60,24 +60,22 @@ cerebroRouter.post('/habituate', async (c) => {
   }
 });
 
-// Test Vector Search Tuner
+// Vector Search — routes through CerebroVectorStore keyword/semantic search.
+// When a real embedding pipeline is wired (Phase 8+), VectorStore will use
+// the float[1536] path automatically; for now it operates in keyword-fallback
+// mode which is fully functional for free-tier testing.
 cerebroRouter.post('/vector-search', async (c) => {
   try {
     const { query } = await c.req.json();
     if (!query) return c.json({ success: false, error: 'No query provided' }, 400);
 
-    // Normally this hits LLM to embed the query first.
-    // For local tuning, if LLM is mock, we just do a mock return or keyword search
-    // Since VectorStore requires a Float32Array vector, we'll mock it if needed.
-    const mockQueryVector = new Float32Array(1536).fill(0.1);
-    
-    // We'll perform a dummy search to show the pipeline is wired
-    // CerebroVectorStore expects a query string
     const results = CerebroVectorStore.search(query, undefined, undefined, 3);
-    
-    return c.json({ 
-      success: true, 
-      results: results.length ? results : [{ id: 'mock-1', text: 'No semantic matches found. Keyword fallback activated.', distance: 0.99 }] 
+
+    return c.json({
+      success: true,
+      results: results.length
+        ? results
+        : [{ id: 'no-match', text: 'No semantic matches found. Keyword fallback returned empty.', distance: 1.0 }],
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -131,5 +129,97 @@ cerebroRouter.post('/learning-approvals/:id/reject', (c) => {
     return c.json({ success: true, message: 'Fact rejected.' });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Pin high-confidence memories — resets last_accessed_at to now for all memories with access_count > threshold
+cerebroRouter.post('/pin-high-confidence', (c) => {
+  try {
+    const threshold = 3; // memories accessed 3+ times are considered high-confidence
+    const now = Date.now();
+    const result = db.prepare('UPDATE cerebro_memories_meta SET last_accessed_at = ? WHERE access_count >= ?').run(now, threshold);
+    return c.json({ success: true, message: `Pinned ${result.changes} high-confidence memories.`, pinned: result.changes });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CEREBRO CHAT — Floating assistant endpoint
+// Routes user questions through the LLM with system context about NeuroSync
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { RouteSwitchEngine } from '../../core/routeswitch/engine';
+
+let chatEngine: RouteSwitchEngine | null = null;
+export function injectChatEngine(engine: RouteSwitchEngine) { chatEngine = engine; }
+
+const CEREBRO_SYSTEM_PROMPT = `You are Cerebro, the intelligent assistant for NeuroSync Sovereign OS. You help users navigate the system and answer questions about how to use it.
+
+SYSTEM MODULES:
+- CoreExec: Workflow orchestration engine. DAG task runner with retries and scheduling. Go here for: running workflows, viewing task status, setting up cron schedules.
+- RouteSwitch: LLM provider management. Go here for: adding LLM providers (OpenAI, local GGUF), setting fallback chains, configuring defaults per scope (Global/Cerebro/Project/Agent), managing API keys, cost limits.
+- ScopeLogic: Requirements interview engine. Go here for: starting a new workflow proposal via a guided interview, generating DAG blueprints.
+- PortGrid: Skills hub and approval gateway. Go here for: reviewing workflow proposals visually before execution, managing tool permissions, approving/rejecting staged workflows.
+- BaseVault: Database management. Go here for: viewing stored workflow runs, backup/restore, schema migrations, redaction settings, retention policies.
+- ScoutDaemon: Background foresight engine. Go here for: hardware monitoring, idle-detection, predictive early termination settings, kill switch.
+- Cerebro: Long-term memory and learning. Go here for: memory search, reflection cycles, learning approvals.
+
+NAVIGATION COMMANDS:
+When the user asks how to do something, tell them which module to go to and whether it's in the Dashboard view (operational/monitoring) or Set-up view (configuration). Use format: "Navigate to [MODULE] → [Dashboard/Set-up]" to guide them.
+
+COMMON TASKS:
+- Add an LLM provider: RouteSwitch → Set-up → Provider Registry → Add Provider
+- Set fallback order: RouteSwitch → Set-up → Default & Fallback Chain → select scope → order providers
+- Create a new project: Right sidebar (click sidebar icon) → + New Workspace
+- Start a workflow interview: ScopeLogic → Dashboard → type in the interview chat
+- Approve a proposal: PortGrid → Dashboard → review the visual flowchart → Approve
+- Check workflow status: CoreExec → Dashboard → select a run
+- Set up cron scheduling: CoreExec → Set-up → Workflow Cron Scheduler
+- Backup database: BaseVault → Set-up → Sovereign Portability → Execute Live Backup
+- Configure redaction: BaseVault → Set-up → Zero-Trust Redaction Engine
+
+Keep answers concise and actionable. If the user asks something you can't help with, say so honestly.`;
+
+cerebroRouter.post('/chat', async (c) => {
+  try {
+    const { message, history } = await c.req.json();
+    if (!message) return c.json({ success: false, error: 'message is required' }, 400);
+
+    if (!chatEngine) {
+      return c.json({ success: false, error: 'Chat engine not initialized' }, 500);
+    }
+
+    // Build prompt with conversation history for context
+    const historyContext = (history || []).slice(-6).map((m: any) =>
+      `${m.role === 'user' ? 'User' : 'Cerebro'}: ${m.text}`
+    ).join('\n');
+
+    const fullPrompt = `${CEREBRO_SYSTEM_PROMPT}\n\n${historyContext ? `CONVERSATION HISTORY:\n${historyContext}\n\n` : ''}User: ${message}\n\nCerebro:`;
+
+    const result = await chatEngine.execute({
+      prompt: fullPrompt,
+      estimatedTokens: 300,
+      scope: 'cerebro',
+    });
+
+    // Extract navigation hints from the response
+    const navMatch = result.content.match(/Navigate to (\w+)/i);
+    const suggestedNav = navMatch ? navMatch[1]!.toLowerCase() : null;
+
+    return c.json({
+      success: true,
+      reply: result.content,
+      suggestedNavigation: suggestedNav,
+      provider: result.provider,
+    });
+  } catch (err: any) {
+    // Graceful fallback for when LLM is not configured
+    return c.json({
+      success: true,
+      reply: "I'm currently running in offline mode without an active LLM provider. To enable me, go to RouteSwitch → Set-up → Provider Registry and add an LLM provider, then set up a routing rule for the Cerebro scope.",
+      suggestedNavigation: 'routeswitch',
+      provider: 'fallback',
+    });
   }
 });

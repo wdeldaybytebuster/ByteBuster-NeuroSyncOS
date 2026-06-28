@@ -12,6 +12,7 @@ import { db, initDB } from '../core/basevault/db';
 import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
 import { scoutRouter } from '../core/scoutdaemon/sse';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { injectLLMGenerator, ReflectionExecutor } from '../core/memory/cerebro/reflection';
 import path from 'path';
 import fs from 'fs';
 
@@ -85,6 +86,11 @@ app.route('/api/scout', scoutRouter);
 
 import { idleDetector } from '../core/scoutdaemon/idle';
 idleDetector.start();
+// OQ-004 resolved: wire idle events to Cerebro reflection lifecycle.
+// 'idle'   → start the reflection daemon so memories are consolidated during downtime.
+// 'active' → ping activity so the 30-min reflection idle threshold resets correctly.
+idleDetector.on('idle', () => ReflectionExecutor.startDaemon());
+idleDetector.on('active', () => ReflectionExecutor.pingActivity());
 
 import telemetryRouter from './routes/telemetry';
 // Mount Telemetry
@@ -108,7 +114,7 @@ import { llmRouter, injectLLMEngine } from './routes/llm';
 injectLLMEngine(routeSwitch, systemGovernor);
 app.route('/api/llm', llmRouter);
 
-import { cerebroRouter } from './routes/cerebro';
+import { cerebroRouter, injectChatEngine } from './routes/cerebro';
 app.route('/api/cerebro', cerebroRouter);
 
 import { modelsRouter } from './routes/models';
@@ -125,20 +131,109 @@ import { coreexecRouter } from './routes/coreexec-router';
 // routes mounted by app.route take precedence and the inline variants bypass the gate.
 app.route('/api/coreexec', coreexecRouter);
 
-// Auto-configure provider from env vars if set
-const envBaseUrl = process.env.NEUROSYNC_LLM_BASE_URL;
-const envApiKey = process.env.NEUROSYNC_LLM_API_KEY;
-const envModel = process.env.NEUROSYNC_LLM_MODEL || 'auto';
-if (envBaseUrl) {
-  console.log(`[NeuroSync] Auto-configuring OpenAI-compatible provider from env: ${envBaseUrl}`);
-  routeSwitch.setProvider(new OpenAICompatibleProvider({ baseUrl: envBaseUrl, apiKey: envApiKey || '', modelId: envModel }));
-} else {
-  routeSwitch.setProvider(new MockProvider());
+// ─── LLM Provider Boot Sequence ──────────────────────────────────────────────
+// Load all enabled providers from the llm_providers DB table into the engine's
+// providerRegistry. Then set the global routing rule's position-0 as the active
+// primary. Falls back to env vars or MockProvider if no DB entries exist.
+import { decrypt } from '../core/basevault/crypto';
+
+function bootProviderRegistry() {
+  try {
+    const rows = db.prepare(`SELECT id, type, config_json, api_key_encrypted FROM llm_providers WHERE is_enabled = 1`).all() as any[];
+    for (const row of rows) {
+      const config = JSON.parse(row.config_json || '{}');
+      const apiKey = row.api_key_encrypted ? decrypt(row.api_key_encrypted) : '';
+      let provider;
+      if (row.type === 'openai-compatible') {
+        provider = new OpenAICompatibleProvider({ baseUrl: config.baseUrl, modelId: config.modelId || 'Auto', apiKey }, row.id);
+      } else if (row.type === 'llama-cpp') {
+        provider = new LlamaCppProvider({ modelPath: config.modelPath, contextSize: config.contextSize, gpuLayers: config.gpuLayers }, row.id);
+      } else {
+        provider = new MockProvider();
+      }
+      routeSwitch.registerProvider(provider);
+    }
+
+    // Set primary provider from global routing rule (position 0)
+    const globalRule = db.prepare(`SELECT provider_chain FROM llm_routing_rules WHERE scope = 'global' AND scope_id IS NULL`).get() as { provider_chain: string } | undefined;
+    if (globalRule) {
+      const chain: string[] = JSON.parse(globalRule.provider_chain);
+      if (chain.length > 0 && chain[0]) {
+        const primaryId = chain[0];
+        const registeredIds = routeSwitch.getRegisteredProviderIds();
+        if (registeredIds.includes(primaryId)) {
+          // Instantiate and set as active primary
+          const pRow = rows.find((r: any) => r.id === primaryId);
+          if (pRow) {
+            const pConfig = JSON.parse(pRow.config_json || '{}');
+            const pKey = pRow.api_key_encrypted ? decrypt(pRow.api_key_encrypted) : '';
+            let primary;
+            if (pRow.type === 'openai-compatible') {
+              primary = new OpenAICompatibleProvider({ baseUrl: pConfig.baseUrl, modelId: pConfig.modelId || 'Auto', apiKey: pKey }, pRow.id);
+            } else if (pRow.type === 'llama-cpp') {
+              primary = new LlamaCppProvider({ modelPath: pConfig.modelPath, contextSize: pConfig.contextSize, gpuLayers: pConfig.gpuLayers }, pRow.id);
+            } else {
+              primary = new MockProvider();
+            }
+            routeSwitch.setProvider(primary);
+          }
+          console.log(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
+          return;
+        }
+      }
+    }
+
+    // If we got DB providers but no global rule, set the first one as active primary
+    if (rows.length > 0) {
+      const firstRow = rows[0];
+      const firstConfig = JSON.parse(firstRow.config_json || '{}');
+      const firstKey = firstRow.api_key_encrypted ? decrypt(firstRow.api_key_encrypted) : '';
+      let firstProvider;
+      if (firstRow.type === 'openai-compatible') {
+        firstProvider = new OpenAICompatibleProvider({ baseUrl: firstConfig.baseUrl, modelId: firstConfig.modelId || 'Auto', apiKey: firstKey }, firstRow.id);
+      } else if (firstRow.type === 'llama-cpp') {
+        firstProvider = new LlamaCppProvider({ modelPath: firstConfig.modelPath, contextSize: firstConfig.contextSize, gpuLayers: firstConfig.gpuLayers }, firstRow.id);
+      } else {
+        firstProvider = new MockProvider();
+      }
+      routeSwitch.setProvider(firstProvider);
+      console.log(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
+      return;
+    }
+  } catch (err) {
+    console.warn('[NeuroSync] Boot: Failed to load providers from DB, falling back to env/mock:', err);
+  }
+
+  // Legacy fallback: env vars or mock
+  const envBaseUrl = process.env.NEUROSYNC_LLM_BASE_URL;
+  const envApiKey = process.env.NEUROSYNC_LLM_API_KEY;
+  const envModel = process.env.NEUROSYNC_LLM_MODEL || 'auto';
+  if (envBaseUrl) {
+    console.log(`[NeuroSync] Boot: Auto-configuring from env: ${envBaseUrl}`);
+    routeSwitch.setProvider(new OpenAICompatibleProvider({ baseUrl: envBaseUrl, apiKey: envApiKey || '', modelId: envModel }));
+  } else {
+    routeSwitch.setProvider(new MockProvider());
+  }
 }
+
+bootProviderRegistry();
+
+// Inject RouteSwitchEngine into Cerebro chat endpoint
+injectChatEngine(routeSwitch);
+
+// OQ-002 resolved: inject live RouteSwitch generate function into Cerebro
+// ReflectionExecutor so preference extraction routes through the real LLM
+// instead of keyword heuristics. Falls back to keyword extraction automatically
+// when MockProvider is active (offline / free-tier quota exhausted).
+const _cerebroGenerateFn = async (prompt: string) => {
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 150, scope: 'cerebro' });
+  return result.content;
+};
+injectLLMGenerator(_cerebroGenerateFn);
 
 // Pass RouteSwitch generateFn into ScopeLogic so interview uses real LLM when available
 const generateFn = async (prompt: string) => {
-  const result = await routeSwitch.execute({ prompt, estimatedTokens: 200 });
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 200, scope: 'agent', scopeId: 'scopelogic-interview' });
   return result.content;
 };
 let session = new ScopeLogicSession(generateFn);
@@ -211,7 +306,7 @@ app.post('/api/routeswitch/provider', async (c) => {
 app.get('/api/basevault/runs', (c) => {
   try {
     const raw = db.prepare(`
-      SELECT id, status, created_at
+      SELECT id, project_id, dag_layout, status, created_at
       FROM workflow_runs
       ORDER BY created_at DESC
       LIMIT 50

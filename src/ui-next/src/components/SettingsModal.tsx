@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Settings, Key, Cpu, Save, Loader2 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -15,9 +15,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasExistingKey, setHasExistingKey] = useState(false);
+  
+  const hasFetched = useRef(false);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !hasFetched.current) {
       setLoading(true);
       fetch('/api/system/settings')
         .then(res => res.json())
@@ -25,6 +27,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           if (data.model_name) setModelName(data.model_name);
           if (data.provider) setProvider(data.provider);
           if (data.llm_api_key_configured) setHasExistingKey(true);
+          hasFetched.current = true;
         })
         .catch(err => console.error('Failed to load settings', err))
         .finally(() => setLoading(false));
@@ -73,18 +76,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         onClick={onClose}
       />
       
-      <div className="relative w-full max-w-md bg-gray-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col transform transition-all">
+      <div className="relative w-full max-w-md glass-enclave rounded-2xl shadow-2xl overflow-hidden flex flex-col transform transition-all">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10 bg-white/5">
+        <div className="flex items-center justify-between p-6 border-b border-[var(--color-glass-border)] bg-[var(--bg-dots)]">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-500/20 rounded-lg border border-purple-500/30">
-              <Settings className="w-5 h-5 text-purple-400" />
+            <div className="p-2 bg-[var(--color-scout-daemon)]/20 rounded-lg border border-[var(--color-scout-daemon)]/30">
+              <Settings className="w-5 h-5 text-[var(--color-scout-daemon)]" />
             </div>
-            <h2 className="text-xl font-medium text-white">System Settings</h2>
+            <h2 className="text-xl font-heading font-medium">System Settings</h2>
           </div>
           <button 
             onClick={onClose}
-            className="text-white/50 hover:text-white hover:bg-white/10 p-2 rounded-full transition-colors"
+            className="opacity-50 hover:opacity-100 p-2 rounded-full transition-colors hover:bg-[var(--color-glass-border)]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -94,19 +97,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <div className="p-6 space-y-6">
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 text-white/30 animate-spin" />
+              <Loader2 className="w-6 h-6 opacity-30 animate-spin" />
             </div>
           ) : (
             <>
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-white/70">
+                <label className="flex items-center gap-2 text-sm font-medium opacity-70">
                   <Cpu className="w-4 h-4" />
                   Provider
                 </label>
                 <select
                   value={provider}
                   onChange={(e) => setProvider(e.target.value)}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+                  className="w-full bg-[var(--color-void)]/50 border border-[var(--color-glass-border)] rounded-xl px-4 py-3 appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--color-scout-daemon)] transition-all text-[var(--color-foreground)]"
                 >
                   <option value="openai">OpenAI</option>
                   <option value="anthropic">Anthropic</option>
@@ -116,7 +119,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
 
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-white/70">
+                <label className="flex items-center gap-2 text-sm font-medium opacity-70">
                   <Cpu className="w-4 h-4" />
                   Model Name
                 </label>
@@ -124,13 +127,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   type="text"
                   value={modelName}
                   onChange={(e) => setModelName(e.target.value)}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder-white/20"
+                  className="w-full bg-[var(--color-void)]/50 border border-[var(--color-glass-border)] rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--color-scout-daemon)] transition-all placeholder-[var(--color-foreground-muted)] text-[var(--color-foreground)]"
                   placeholder="e.g., gpt-4o"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-medium text-white/70">
+                <label className="flex items-center gap-2 text-sm font-medium opacity-70">
                   <Key className="w-4 h-4" />
                   API Key
                 </label>
@@ -139,10 +142,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={hasExistingKey ? "sk-••••••••••••••••••••••••" : "Enter API key"}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all placeholder-white/20 font-mono text-sm"
+                  className="w-full bg-[var(--color-void)]/50 border border-[var(--color-glass-border)] rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--color-scout-daemon)] transition-all placeholder-[var(--color-foreground-muted)] font-mono text-sm text-[var(--color-foreground)]"
                 />
                 {hasExistingKey && !apiKey && (
-                  <p className="text-xs text-green-400/80 mt-1 pl-1">Key is currently configured.</p>
+                  <p className="text-xs text-[var(--color-report-green)]/80 mt-1 pl-1">Key is currently configured.</p>
                 )}
               </div>
             </>
@@ -150,17 +153,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-white/10 bg-black/20 flex justify-end gap-3">
+        <div className="p-6 border-t border-[var(--color-glass-border)] bg-[var(--color-void)]/30 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-300"
+            className="px-5 py-2.5 text-sm font-medium opacity-70 hover:opacity-100 hover:bg-[var(--color-glass-border)] rounded-xl transition-all duration-300"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={loading || saving}
-            className="px-5 py-2.5 text-sm font-medium bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded-xl transition-all duration-300 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 text-sm font-medium bg-[var(--color-scout-daemon)]/20 hover:bg-[var(--color-scout-daemon)]/30 text-[var(--color-scout-daemon)] border border-[var(--color-scout-daemon)]/30 rounded-xl transition-all duration-300 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed dynamic-interactive"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Settings
