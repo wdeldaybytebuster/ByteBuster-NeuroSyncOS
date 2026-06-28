@@ -68,3 +68,47 @@ schedulerListRouter.get('/jobs', (c) => {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
+
+// Create or update a workflow's cron schedule
+schedulerListRouter.post('/jobs', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { projectId, name, cronSchedule, dagTemplate } = body;
+
+    if (!projectId || !name || !cronSchedule) {
+      return c.json({ success: false, error: 'projectId, name, and cronSchedule are required' }, 400);
+    }
+
+    // Validate cron expression
+    if (!cron.validate(cronSchedule)) {
+      return c.json({ success: false, error: `Invalid cron expression: "${cronSchedule}"` }, 400);
+    }
+
+    const id = require('crypto').randomUUID();
+    const template = dagTemplate || JSON.stringify({ nodes: [{ id: require('crypto').randomUUID(), dependencies: [], prompt: `Scheduled: ${name}` }] });
+
+    // Ensure project exists
+    db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(projectId, 'Cron Project', Date.now());
+
+    // Insert workflow with cron schedule
+    db.prepare('INSERT INTO workflows (id, project_id, name, dag_template, cron_schedule, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+      id, projectId, name, template, cronSchedule, Date.now()
+    );
+
+    return c.json({ success: true, id, message: `Workflow "${name}" scheduled with cron: ${cronSchedule}` });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Delete a scheduled workflow
+schedulerListRouter.delete('/jobs/:id', (c) => {
+  try {
+    const id = c.req.param('id');
+    const result = db.prepare('DELETE FROM workflows WHERE id = ?').run(id);
+    if (result.changes === 0) return c.json({ success: false, error: 'Workflow not found' }, 404);
+    return c.json({ success: true, message: 'Scheduled workflow deleted.' });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});

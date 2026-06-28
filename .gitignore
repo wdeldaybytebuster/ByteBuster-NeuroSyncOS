@@ -10,13 +10,17 @@ cookies2.txt
 # GitNexus
 .gitnexus/
 
+# Antigravity (contains local MCP tokens)
+.antigravity/
+
+# Understand-Anything (local analysis cache)
+.understand-anything/
+
 # Build output
 dist/
 
 # Data files (SQLite)
-.data/*.db
-.data/*.db-shm
-.data/*.db-wal
+.data/
 
 # OS files
 .DS_Store
@@ -36,4 +40,17 @@ npm-debug.log*
 # Cache
 .cache/
 *.tsbuildinfo
-.data/.master.key
+
+# Local models (GGUF files are multi-GB)
+local_models/
+*.gguf
+
+# Database backups
+backup-*.db
+backup-*.db-journal
+
+# Python fix scripts (dev-only)
+src/ui/*.py
+
+# Error logs
+ts-errors.txt

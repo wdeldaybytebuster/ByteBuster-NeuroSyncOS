@@ -1,4 +1,20 @@
 **Date:** 2026-06-26
+**Agent:** Kiro (LLM Provider Registry + Cerebro Chatbot)
+
+- **LLM Provider Registry (Phase 1–4) SHIPPED.** Full multi-provider support with encrypted keys, per-scope fallback chains, and UI management.
+  - DB: `llm_providers` + `llm_routing_rules` tables added to initDB()
+  - API: 8 CRUD endpoints for providers and routing rules (GET/POST/PUT/DELETE/test)
+  - Engine: `resolveProviderChain()` with scope hierarchy (Agent > Project > Cerebro > Global), fallback-on-error loop in execute(), adapters accept dynamic IDs
+  - Boot: `bootProviderRegistry()` loads enabled providers from DB on start, sets primary from global rule
+  - UI: RouteSwitch Set-up View rebuilt with Provider Registry (add/edit/delete/test cards) and Fallback Chain editor (scope tabs, ordered list, up/down/remove/add)
+- **Cerebro Floating Chatbot SHIPPED.** Always-visible AI assistant with navigation guidance.
+  - Component: `CerebroChatbot.tsx` — floating purple button, expandable chat panel, minimize state
+  - Backend: `POST /api/cerebro/chat` routes through RouteSwitchEngine with scope:'cerebro'
+  - Navigation buttons extracted from LLM responses — clicking navigates user directly
+- GitNexus blast radius: all modified symbols LOW risk
+- Build: `npx tsc --noEmit` ✓ (0 errors)
+
+**Date:** 2026-06-26
 **Agent:** Buffy
 
 - §3.3 RUNTIME-PARSE GATE SHIPPED. Closed the type-system-only discipline gutter on /api/basevault/* endpoints — dirty rows (status typos, schema-dirty workflow_runs / tasks from AdminSQL or backup-restore) silently propagated through to the UI instead of being rejected at the HTTP boundary.
@@ -88,9 +104,49 @@
 <!-- Append-only log of changes managed by BaseVault -->
 
 **Date:** 2026-06-26
+**Agent:** Kiro (UI Rebuild)
+
+- FULL UI ARCHITECTURE REBUILD COMPLETE.
+- Removed permanent left sidebar from OSLayout.tsx — replaced with NavigationContext provider (thin shell).
+- New shared components: AppShell.tsx (top nav bar + hideable left/right sidebars that push center content), ModuleRouter.tsx (8 modules), ProjectSwitcher.tsx (fetches /api/projects + Global option).
+- All 7 module dashboards + System View rebuilt using AppShell template:
+  - CoreExec (#00E5FF cyan): DAG run monitor + alerts + cron | threading + safety + recovery
+  - BaseVault (#D4AF37 gold): SQLite explorer + sanitization + retention | backup SSE + redaction + migrations
+  - RouteSwitch (#FFB300 amber): 24h telemetry + fleet health + alerts | providers + governor + MCP + routing
+  - ScopeLogic (#00E5FF cyan): interview pipeline + proposal quarantine + confidence | grammar + prompts + council + assertions
+  - PortGrid (#00FFCC teal): DAG canvas + HITL queue + badges + tool telemetry | registry + permissions + sandbox + a11y
+  - ScoutDaemon (#8E24AA purple): ambient monitor + quarantine + hardware | AgentStop + sensing + idle + kill switch
+  - Cerebro (#2DD4BF teal): learning approvals + memory browser + decay | retrieval + habituation + global KB
+  - System View (#D4AF37 gold): KPI strip + action center + cerebro health + cron | polling + logging + theme
+- Sidebar open/closed state persisted across module navigation via NavigationContext (leftBarOpen/rightBarOpen lifted from AppShell local state).
+- Top nav bar: "ByteBuster NeuroSyncOS v2.1" + module logo (prominent, glowing) + name + Dashboard/Set-up toggles + theme toggle + project filter badge.
+- Glow boxes on all center canvas sections with module-colored soft glow intensifying on hover.
+- Build passes cleanly (npx vite build ✓).
+
+
+
+**Date:** 2026-06-26
+**Agent:** Maintenance Agent (Antigravity)
+
+- System-wide TypeScript type resolution completed.
+- Backend type errors (165 tests) passing and cleared.
+- Successfully bootstrapped missing dependencies in Next.js `ui-next` directory.
+- Root TSConfig optimized for monorepo separation.
+- Unfinished tasks in `ts-errors.txt` successfully verified and marked as complete.
+
+
+
+**Date:** 2026-06-26
 **Agent:** Doc Agent
 
 - Phase 11 (RouteSwitch Inference Engine) COMPLETE: Implemented `discovery.ts` (OpenRouter auto-discovery), `interceptor.ts` (rate-limit telemetry), `router.ts` (fallback chain), and populated `RouteSwitchConfig.tsx` UI.
 - Phase 12 (ScoutLogic Dynamic Routing) COMPLETE: Implemented `benchmarker.ts` (EMA latency/TPS), `classifier.ts` (deterministic complexity heuristics), `dynamic-router.ts` (composite scoring math), and `RoutingDials.tsx` (Speed/Cost/IQ sliders).
 - Phase 12 (Documentation Audit) COMPLETE: Synced all context files and documentation to reflect the actual implemented state of the beta-stable system.
 - Transitioning to Phase 13 (Free-tier testing).
+
+### [2026-06-26] UI Overhaul - Full Dashboard Suite Redesign Complete
+- Fully redesigned and refactored **BaseVault**, **PortGrid**, **ScopeLogic**, **CoreExec**, **RouteSwitch**, **ScoutDaemon**, and **Cerebro** dashboards.
+- Applied the "Grit, Not Grime" zero-budget, high-reliability local execution design philosophy.
+- Transitioned to "High-Glow" dynamic themes tailored to each module's core function.
+- Finalized global styling variables in `index.css`.
+- Synchronized all module routes inside `OSLayout.tsx` and `App.tsx` ensuring 100% cohesion across the suite.

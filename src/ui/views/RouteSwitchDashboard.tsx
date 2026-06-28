@@ -1,643 +1,534 @@
-
 import React, { useState, useEffect } from 'react';
+import { AppShell } from '../components/AppShell';
+import { useNavigation } from '../layouts/OSLayout';
+import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plug, ListOrdered } from 'lucide-react';
 
+const API = 'http://localhost:3743';
+const ACCENT = '#FFB300';
 
-export function RouteSwitchDashboard() {
+// Shared glow box (amber glow)
+const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(255,179,0,0.08)] hover:shadow-[0_0_30px_rgba(255,179,0,0.2)] hover:border-[rgba(255,179,0,0.25)]`;
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+interface UsageData {
+  tokens?: number;
+  costUsd?: number;
+  requests?: number;
+}
+
+// ─── Dashboard View ─────────────────────────────────────────────────────────
+function DashboardView() {
+  const { activeProjectId } = useNavigation();
+  const [usage, setUsage] = useState<UsageData>({ tokens: 0, costUsd: 0, requests: 0 });
+  const [config, setConfig] = useState<any>(null);
+  const [alerts, setAlerts] = useState<string[]>([]);
+
+  // Poll usage every 5s
   useEffect(() => {
-    // Make sure lucid icons render on initial mount
-    try {
-      (window as any).lucide?.createIcons();
-    } catch(e) {}
+    const fetchUsage = () => {
+      fetch(`${API}/api/llm/usage`).then(r => r.json()).then(d => { if (d.success && d.usage24h) setUsage(d.usage24h); }).catch(() => {});
+    };
+    fetchUsage();
+    const iv = setInterval(fetchUsage, 5000);
+    return () => clearInterval(iv);
+  }, [activeProjectId]);
+
+  // Fetch config for provider status
+  useEffect(() => {
+    fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => { if (d.success) setConfig(d); }).catch(() => {});
   }, []);
 
+  const currentMode = config?.config?.provider === 'mock' ? 'Offline Mode' : config?.config?.provider === 'openai-compatible' ? 'Free-Cloud Mode' : 'Local Mode';
+  const dailyCap = config?.telemetry?.dailyTokenCap || 50000;
+  const tokensUsed = usage.tokens || 0;
+  const callsRemaining = Math.max(0, Math.floor((dailyCap - tokensUsed) / 150));
+
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        /* CSS Variable System for Stealth Black & High-Glow Amber Morphing */
-        :root {
-            /* Dark Mode: Deep Stealth Black & High-Contrast Amber Glow */
-            --bg-base: #000000; 
-            --bg-surface: #050505;
-            --bg-surface-glass: rgba(5, 5, 5, 0.45); 
-            --bg-nested: rgba(255, 179, 0, 0.05); /* Amber nested bg */
-            
-            /* Maximized Glow Values per request */
-            --border-glow: rgba(255, 179, 0, 0.35);
-            --text-primary: #fafafa;
-            --text-muted: #8f8f9d;
-            --accent: #FFB300; /* RouteSwitch Logo Amber */
-            --accent-glow: rgba(255, 179, 0, 0.75); /* Pumped up neon glow */
-            --card-border: rgba(35, 30, 20, 0.8);
-            --grid-color: rgba(255, 179, 0, 0.08); /* Stronger grid contrast */
-            --grid-line: rgba(255, 255, 255, 0.03);
-            --glow-color: rgba(255, 179, 0, 0.25);
-            --terminal-bg: #030303;
-            --terminal-text: #FFB300;
-        }
-
-        .light {
-            /* Light Mode: Structured Paper & Deep Amber */
-            --bg-base: #f8fafc;
-            --bg-surface: #ffffff;
-            --bg-surface-glass: rgba(255, 255, 255, 0.85);
-            --bg-nested: rgba(217, 119, 6, 0.04);
-            --border-glow: rgba(217, 119, 6, 0.1);
-            --text-primary: #0f172a;
-            --text-muted: #64748b;
-            --accent: #d97706;
-            --accent-glow: rgba(217, 119, 6, 0.25);
-            --card-border: rgba(203, 213, 225, 0.8);
-            --grid-color: rgba(217, 119, 6, 0.03);
-            --grid-line: rgba(217, 119, 6, 0.03);
-            --glow-color: rgba(217, 119, 6, 0.05);
-            --terminal-bg: #0f172a;
-            --terminal-text: #fbbf24;
-        }
-
-        body {
-            background-color: var(--bg-base);
-            color: var(--text-primary);
-            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-image: 
-                radial-gradient(circle at 50% 50%, var(--grid-color) 0%, transparent 70%),
-                linear-gradient(var(--grid-line) 1px, transparent 1px),
-                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-            background-size: 100% 100%, 24px 24px, 24px 24px;
-            transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
-        }
-
-        /* High-Glow Stealth Card Design */
-        .glow-card {
-            border: 1px solid var(--card-border);
-            background-color: var(--bg-surface-glass);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            /* Boosted default shadow */
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8), 0 0 15px var(--glow-color);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .glow-card:hover {
-            border-color: rgba(255, 179, 0, 0.6);
-            /* Massive neon bleed on hover */
-            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.9), 0 0 35px var(--accent-glow);
-            transform: translateY(-1px);
-        }
-
-        /* Focus rings */
-        .focusable:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: 2px;
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--card-border);
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent);
-        }
-
-        /* Traffic Routing Line Connector */
-        .route-connector::before {
-            content: '';
-            position: absolute;
-            top: 24px;
-            left: 11px;
-            bottom: -16px;
-            width: 2px;
-            background: var(--card-border);
-            z-index: 0;
-        }
-        .route-item:last-child .route-connector::before {
-            display: none;
-        }
-    ` }} />
-      
-
-    
-    <header className="w-full h-16 border-b border-[var(--card-border)] bg-[var(--bg-surface-glass)] backdrop-blur-md px-6 flex items-center justify-between z-40 fixed top-0 left-0 transition-colors duration-300">
-        <div className="flex items-center space-x-3">
-            
-            <button  className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:border-zinc-500 flex items-center justify-center text-[var(--accent)] focusable transition-colors shadow-[0_0_8px_var(--glow-color)]" aria-label="Open Suite Switcher Menu">
-                <i data-lucide="menu" className="w-5 h-5"></i>
-            </button>
-
-            
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-black/20 border border-[var(--card-border)] shadow-[0_0_12px_var(--glow-color)]">
-                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-7 h-7">
-                    <polyline points="20,70 20,20 40,20" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.5" className="text-[var(--accent)]"/>
-                    <polyline points="80,30 80,80 60,80" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.5" className="text-[var(--accent)]"/>
-                    <g transform="translate(50,50) scale(0.6) translate(-50,-50)">
-                        <g transform="rotate(45,50,50)">
-                            <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(255,179,0,0.15)" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" className="text-[var(--accent)]"/>
-                            <rect x="46" y="74" width="3" height="5" fill="#0D0E15"/>
-                            <rect x="51" y="74" width="3" height="5" fill="#0D0E15"/>
-                            <rect x="48" y="40" width="4" height="24" rx="2" fill="currentColor" className="text-[var(--accent)]"/>
-                        </g>
-                    </g>
-                </svg>
-            </div>
-            
-            <div className="hidden sm:block ml-1">
-                <span className="font-black text-sm tracking-wider uppercase text-[var(--text-primary)]" style={{ textShadow: '0 0 8px var(--glow-color)' }}>ROUTESWITCH ENGINE</span>
-                <span className="text-[9px] uppercase font-bold text-[var(--accent)] tracking-widest block -mt-1 drop-shadow-md">NeuroSync Sovereign Suite</span>
-            </div>
+    <div className="p-6 space-y-6">
+      {/* Widget A: 24h Telemetry & Quota Ledger */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Zap size={16} style={{ color: ACCENT }} /> 24h Telemetry & Quota Ledger
+          </h2>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-white/10 bg-white/5" style={{ color: ACCENT }}>{currentMode}</span>
         </div>
 
-        
-        <div className="flex bg-[var(--bg-nested)] p-1 rounded-xl border border-[var(--card-border)] items-center space-x-1 shadow-[0_0_10px_var(--glow-color)]" role="tablist" aria-label="Route Navigation">
-            <button id="tab-dashboard"  className="px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-black bg-[var(--accent)] shadow-[0_0_15px_var(--accent-glow)] focusable" role="tab" aria-selected="true" aria-controls="panel-dashboard">
-                <i data-lucide="git-merge" className="w-4 h-4 text-black"></i>
-                <span>Routing</span>
-            </button>
-            <button id="tab-setups"  className="px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] focusable hover:shadow-[0_0_10px_var(--glow-color)]" role="tab" aria-selected="false" aria-controls="panel-setups">
-                <i data-lucide="settings-2" className="w-4 h-4"></i>
-                <span>Quotas & Fallbacks</span>
-            </button>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Generated Tokens (24h)</div>
+            <div className="text-xl font-bold font-mono text-green-400">{tokensUsed.toLocaleString()}</div>
+          </div>
+          <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Requests (24h)</div>
+            <div className="text-xl font-bold font-mono" style={{ color: ACCENT }}>{(usage.requests || 0).toLocaleString()}</div>
+          </div>
+          <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Est. API Cost</div>
+            <div className="text-xl font-bold font-mono text-cyan-400">${((usage.costUsd || 0)).toFixed(4)}</div>
+          </div>
+          <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Calls Remaining</div>
+            <div className="text-xl font-bold font-mono" style={{ color: callsRemaining > 100 ? '#00FF41' : '#ef4444' }}>{callsRemaining}</div>
+          </div>
         </div>
 
-        
-        <div className="flex items-center space-x-2">
-            <button  className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:border-[var(--accent)] hover:shadow-[0_0_15px_var(--accent-glow)] flex items-center justify-center transition-all focusable" aria-label="Toggle visual theme">
-                <i id="theme-icon" data-lucide="sun" className="w-4 h-4 text-[var(--accent)]"></i>
-            </button>
-            <button className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:border-[var(--accent)] hover:shadow-[0_0_15px_var(--accent-glow)] flex items-center justify-center transition-all focusable" aria-label="Toggle system cognitive tags schema">
-                <i data-lucide="network" className="w-4 h-4 text-[var(--accent)]"></i>
-            </button>
-            <button  className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:border-[var(--accent)] hover:shadow-[0_0_15px_var(--accent-glow)] flex items-center justify-center text-[var(--accent)] focusable" aria-label="Toggle command workspace panel">
-                <i data-lucide="sidebar" className="w-5 h-5"></i>
-            </button>
+        {/* Quota Progress */}
+        <div className="space-y-1">
+          <div className="flex justify-between text-[10px] font-mono text-gray-500">
+            <span>Daily Burn</span>
+            <span>{tokensUsed.toLocaleString()} / {dailyCap.toLocaleString()} tokens</span>
+          </div>
+          <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden border border-white/5">
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (tokensUsed / dailyCap) * 100)}%`, background: `linear-gradient(to right, #00FF41, ${ACCENT})` }}></div>
+          </div>
         </div>
-    </header>
+      </section>
 
-    
-    <aside id="suite-switcher" className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-72 bg-[var(--bg-surface-glass)] backdrop-blur-xl border-r border-[var(--card-border)] z-30 transition-transform duration-300 transform -translate-x-full shadow-[5px_0_25px_rgba(0,0,0,0.9)] flex flex-col">
-        <div className="p-4 border-b border-[var(--card-border)] flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-[var(--accent)] drop-shadow-md">
-                <i data-lucide="compass" className="w-4 h-4"></i>
-                <h3 className="font-bold text-xs tracking-wider uppercase">Sovereign Suite Switcher</h3>
+      {/* Widget B: LLM Fleet Health & Fallback Monitor */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Activity size={16} style={{ color: ACCENT }} /> LLM Fleet Health & Fallback Monitor
+        </h2>
+
+        <div className="space-y-2">
+          {/* Provider rows */}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-green-500/20">
+            <div className="flex items-center gap-3">
+              <Server size={14} className="text-green-400" />
+              <div><div className="text-xs font-bold text-white">Local Mock Provider</div><div className="text-[10px] text-gray-500 font-mono">Level 3 — Air-gapped fallback</div></div>
             </div>
-            <button  className="p-1 rounded hover:bg-[var(--accent)]/20 text-[var(--text-muted)] hover:text-[var(--accent)] transition" aria-label="Close suite navigation">
-                <i data-lucide="x" className="w-4 h-4"></i>
-            </button>
+            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-[10px] font-mono text-green-400">ACTIVE</span></div>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5">
+            <div className="flex items-center gap-3">
+              <Cloud size={14} className="text-amber-400" />
+              <div><div className="text-xs font-bold text-white">OpenRouter (Free Tier)</div><div className="text-[10px] text-gray-500 font-mono">Level 1 — Agent Preference</div></div>
+            </div>
+            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="text-[10px] font-mono text-amber-400">{config?.config?.provider === 'openai-compatible' ? 'CONNECTED' : 'STANDBY'}</span></div>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5 opacity-60">
+            <div className="flex items-center gap-3">
+              <CloudOff size={14} className="text-gray-500" />
+              <div><div className="text-xs font-bold text-gray-400">OpenCode Zen (Paid)</div><div className="text-[10px] text-gray-600 font-mono">Level 2 — Category Default</div></div>
+            </div>
+            <span className="text-[10px] font-mono text-gray-600 border border-white/5 px-1.5 py-0.5 rounded bg-black/40">DISABLED</span>
+          </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto font-medium">
-            <button className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="cpu" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">CoreExec (Orchestrator)</span>
-            </button>
-            <button className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="vault" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">BaseVault (Database)</span>
-            </button>
-            <button className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="grid-3x3" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">PortGrid (Skills Hub)</span>
-            </button>
-            <a href="#" className="flex items-center justify-between p-3 rounded-xl bg-[var(--accent)]/15 border border-[var(--accent)] text-[var(--text-primary)] transition focusable shadow-[0_0_20px_var(--glow-color)]">
-                <div className="flex items-center space-x-3">
-                    <i data-lucide="shuffle" className="w-4 h-4 text-[var(--accent)]"></i>
-                    <span className="text-xs font-bold uppercase tracking-wider text-white" style={{ textShadow: '0 0 5px var(--accent-glow)' }}>RouteSwitch (Router)</span>
-                </div>
-                <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse shadow-[0_0_12px_var(--accent)]"></span>
-            </a>
-            <button className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="file-question" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">ScopeLogic (Proposal)</span>
-            </button>
-            <button className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="radar" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">ScoutDaemon (Predictive)</span>
-            </button>
-        </nav>
-        <div className="p-4 border-t border-[var(--card-border)] bg-zinc-900/40 text-[10px] text-[var(--accent)]/60 font-mono flex flex-col space-y-1">
-            <span>Universal Traffic Director</span>
-            <span>Free Mode Governor Active</span>
+        {/* Fallback Cascade */}
+        <div className="mt-4 pt-3 border-t border-white/5">
+          <div className="text-[10px] font-mono text-gray-500 mb-2 uppercase tracking-widest">Fallback Cascade Path</div>
+          <div className="flex items-center gap-2 text-[10px] font-mono">
+            <span className="px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Agent Preference</span>
+            <span className="text-gray-600">→</span>
+            <span className="px-2 py-1 rounded bg-white/5 text-gray-400 border border-white/10">Category Default</span>
+            <span className="text-gray-600">→</span>
+            <span className="px-2 py-1 rounded bg-green-500/10 text-green-400 border border-green-500/20">Local Mock</span>
+          </div>
         </div>
-    </aside>
+      </section>
 
-    
-    <aside id="sidebar-panel" className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-[var(--bg-surface-glass)] backdrop-blur-xl border-l border-[var(--card-border)] z-30 transition-transform duration-300 transform translate-x-0 shadow-[-5px_0_25px_rgba(0,0,0,0.9)] flex flex-col">
-        <div className="p-4 border-b border-[var(--card-border)] flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-[var(--accent)] drop-shadow-md">
-                <i data-lucide="network" className="w-4 h-4"></i>
-                <h3 className="font-bold text-sm tracking-wider uppercase">Active Connections</h3>
+      {/* Widget C: Routing Alerts & Forecasting Blockers */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <AlertTriangle size={16} className="text-red-400" /> Routing Alerts & Forecasting Blockers
+        </h2>
+
+        {alerts.length === 0 ? (
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/5 border border-green-500/20">
+            <Shield size={18} className="text-green-400" />
+            <div>
+              <div className="text-xs font-bold text-green-400">All Clear</div>
+              <div className="text-[10px] text-gray-500">No forecasting blockers or provider errors detected.</div>
             </div>
-            <button  className="p-1 rounded hover:bg-[var(--accent)]/20 text-[var(--text-muted)] hover:text-[var(--accent)] transition" aria-label="Close panel">
-                <i data-lucide="x" className="w-4 h-4"></i>
-            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {alerts.map((a, i) => (
+              <div key={i} className="p-3 rounded-lg bg-red-500/5 border border-red-500/20 text-xs text-red-300">{a}</div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick-fix Buttons */}
+        <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
+          <button onClick={() => { fetch(`${API}/api/routeswitch/provider`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'mock' }) }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Switch to Local Mock</button>
+          <button onClick={() => { fetch(`${API}/api/llm/clear-error`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Clear Last Provider Error</button>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
-            
-            <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase block">Provider Registry Health</label>
-                <div className="space-y-2">
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-black/60 border border-green-500/20 shadow-[0_0_8px_rgba(34,197,94,0.1)]">
-                        <div className="flex items-center space-x-2">
-                            <i data-lucide="server" className="w-3.5 h-3.5 text-green-500"></i>
-                            <span className="text-xs font-bold text-white">Local Mock Provider</span>
-                        </div>
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.8)]"></span>
-                    </div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-black/60 border border-[var(--card-border)]">
-                        <div className="flex items-center space-x-2">
-                            <i data-lucide="cloud" className="w-3.5 h-3.5 text-zinc-400"></i>
-                            <span className="text-xs font-bold text-zinc-300">OpenRouter (Free Tier)</span>
-                        </div>
-                        <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.8)]"></span>
-                    </div>
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-black/60 border border-[var(--card-border)]">
-                        <div className="flex items-center space-x-2">
-                            <i data-lucide="cloud-off" className="w-3.5 h-3.5 text-zinc-600"></i>
-                            <span className="text-xs font-bold text-zinc-500">OpenCode Zen (Paid)</span>
-                        </div>
-                        <span className="text-[9px] font-mono font-bold text-zinc-600 border border-zinc-700 px-1 rounded bg-black">DISABLED</span>
-                    </div>
-                </div>
-            </div>
-
-            
-            <div className="bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg p-3 space-y-3 shadow-[0_0_15px_var(--glow-color)]">
-                <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[var(--accent)] uppercase tracking-wider flex items-center space-x-1.5 drop-shadow-md">
-                        <i data-lucide="plug" className="w-3.5 h-3.5"></i>
-                        <span>MCP Adapters</span>
-                    </span>
-                    <span className="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded text-[9px] uppercase font-bold tracking-widest border border-[var(--accent)]/30">2 Active</span>
-                </div>
-                <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] font-mono">
-                        <span className="text-zinc-300 font-semibold">SQLite Vector Adapter</span>
-                        <span className="text-green-400 font-bold">stdio</span>
-                    </div>
-                    <div className="flex justify-between text-[11px] font-mono">
-                        <span className="text-zinc-300 font-semibold">GitNexus Map</span>
-                        <span className="text-green-400 font-bold">stdio</span>
-                    </div>
-                </div>
-                <p className="text-[10px] text-zinc-500 leading-relaxed font-medium pt-1 border-t border-[var(--card-border)]">
-                    Local model context protocols ensure tools are executed without remote SDK point-to-point connections.
-                </p>
-            </div>
-        </div>
-
-        <div className="p-3 border-t border-[var(--card-border)] bg-zinc-900/40 text-[10px] text-[var(--accent)]/60 font-mono text-center">
-            P99 Latency: <span className="text-[var(--accent)] font-bold drop-shadow-sm">48ms</span>
-        </div>
-    </aside>
-
-    
-    <div className="flex-1 flex pt-16 relative overflow-hidden">
-        <main className="flex-1 flex flex-col md:flex-row transition-all duration-300 p-6 space-y-6 md:space-y-0 md:space-x-6 min-h-[calc(100vh-4rem)] lg:mr-80" id="main-content-layout">
-
-            
-            <div id="panel-dashboard" className="flex-1 flex flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6 w-full animate-fade-in" role="tabpanel" aria-labelledby="tab-dashboard">
-                
-                
-                <div className="flex-1 glow-card rounded-2xl p-5 flex flex-col relative overflow-hidden transition-colors duration-300">
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at top, var(--grid-color) 0%, transparent 75%)" }}></div>
-                    
-                    <div className="relative z-10 flex flex-col h-full space-y-5">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3">
-                            <div>
-                                <h1 className="text-xl font-black tracking-wide text-white drop-shadow-md">Live Traffic & Cascade Routing</h1>
-                                <p className="text-[11px] text-[var(--text-muted)] mt-0.5 font-bold uppercase tracking-wider">Tracking outbound payload intercept: <span className="text-[var(--accent)] drop-shadow-sm">req_992x_gamma</span></p>
-                            </div>
-                            <button  className="px-4 py-2 rounded-lg bg-[var(--accent)] hover:bg-white text-black text-xs font-black flex items-center space-x-2 transition-all shadow-[0_0_20px_var(--accent-glow)] focusable">
-                                <i data-lucide="send-to-back" className="w-3.5 h-3.5"></i>
-                                <span>Inject Mock Request</span>
-                            </button>
-                        </div>
-
-                        
-                        <div className="flex-1 overflow-y-auto px-2 py-4 space-y-4" id="routing-container">
-                            
-                            
-                            <div className="route-item relative pl-10">
-                                <div className="route-connector">
-                                    <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-green-500/10 border border-green-500 flex items-center justify-center z-10 shadow-[0_0_12px_rgba(34,197,94,0.4)]">
-                                        <i data-lucide="calculator" className="w-3 h-3 text-green-400"></i>
-                                    </div>
-                                </div>
-                                <div className="p-3 rounded-xl bg-black/60 border border-green-500/30">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="text-xs font-bold text-white">1. Token & Call Forecast Module</span>
-                                        <span className="text-[9px] px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded border border-green-500/20 font-mono">APPROVED</span>
-                                    </div>
-                                    <p className="text-[10px] text-zinc-400 font-mono">Worst-case DAG token burn: <span className="text-green-400">1,200 tokens.</span> Daily limit safe.</p>
-                                </div>
-                            </div>
-
-                            
-                            <div className="route-item relative pl-10" id="primary-route">
-                                <div className="route-connector">
-                                    <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-red-500/10 border border-red-500 flex items-center justify-center z-10 shadow-[0_0_12px_rgba(239,68,68,0.4)]">
-                                        <i data-lucide="x" className="w-3 h-3 text-red-400"></i>
-                                    </div>
-                                </div>
-                                <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/5">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="text-xs font-bold text-white">2. Level 1 (Agent Preference)</span>
-                                        <span className="text-[9px] px-1.5 py-0.5 bg-red-500/10 text-red-400 rounded border border-red-500/20 font-mono">429 RATE LIMIT</span>
-                                    </div>
-                                    <p className="text-[10px] text-zinc-400 font-mono">Provider: <span className="text-red-400">OpenRouter (deepseek-v4-flash-free)</span></p>
-                                    <p className="text-[10px] text-zinc-500 italic mt-1 border-t border-red-500/20 pt-1">Error Normalizer: "NLMRateLimitError - Daily Free Tier Exhausted"</p>
-                                </div>
-                            </div>
-
-                            
-                            <div className="route-item relative pl-10 opacity-50" id="fallback-route">
-                                <div className="route-connector">
-                                    <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center z-10">
-                                        <i data-lucide="rotate-ccw" className="w-3 h-3 text-zinc-500"></i>
-                                    </div>
-                                </div>
-                                <div className="border border-[var(--card-border)] bg-black/40 p-3 rounded-xl">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className="text-xs font-bold text-white">3. Level 2 (Category Default Fallback)</span>
-                                        <span className="text-[9px] px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded border border-zinc-700 font-mono">AWAITING</span>
-                                    </div>
-                                    <p className="text-[10px] text-zinc-500 font-mono">Target: Local Mock Offline Provider...</p>
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-
-                
-                <div className="w-full lg:w-80 flex flex-col space-y-6">
-                    
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)] drop-shadow-md">
-                                <i data-lucide="bar-chart-2" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">Free Mode Mentrix</h3>
-                            </div>
-                            <span className="text-[9px] font-mono text-zinc-500 font-bold">Ledger Active</span>
-                        </div>
-
-                        
-                        <div className="space-y-1 mb-4">
-                            <div className="flex justify-between text-[11px] font-bold">
-                                <span className="text-white">Daily Token Quota Burn</span>
-                                <span className="text-[var(--accent)] drop-shadow-sm font-mono">34,500 / 50k</span>
-                            </div>
-                            <div className="w-full h-2 bg-black/80 rounded-full border border-[var(--card-border)] overflow-hidden shadow-inner">
-                                <div className="h-full bg-gradient-to-r from-orange-600 to-[var(--accent)] w-[69%] shadow-[0_0_10px_var(--accent)]"></div>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 text-center text-xs">
-                            <div className="bg-black/60 p-2 rounded-xl border border-[var(--card-border)] shadow-inner">
-                                <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block mb-0.5">Blocked Spends</span>
-                                <span className="text-sm font-black text-green-500 font-mono">14</span>
-                            </div>
-                            <div className="bg-black/60 p-2 rounded-xl border border-[var(--card-border)] shadow-inner">
-                                <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block mb-0.5">Fallbacks</span>
-                                <span className="text-sm font-black text-[var(--accent)] font-mono drop-shadow-sm">48</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    
-                    <div className="flex-1 flex flex-col min-h-[250px]">
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase">Route Ledger Logs</label>
-                        </div>
-                        <div id="pino-logger" className="flex-1 bg-black border border-[var(--card-border)] rounded-xl p-3 font-mono text-[9px] text-zinc-400 overflow-y-auto space-y-1.5 shadow-inner">
-                            <div><span className="text-zinc-600">[11:42:01]</span> ROUTESWITCH: Booting traffic director...</div>
-                            <div><span className="text-zinc-600">[11:42:02]</span> QUOTA_LEDGER: Daily limits initialized at 50,000.</div>
-                            <div className="text-[var(--accent)]"><span className="text-zinc-600">[11:45:10]</span> FORECAST: DAG workflow wf_092x mathematically safe.</div>
-                            <div className="text-red-400"><span className="text-zinc-600">[11:45:12]</span> ERROR_NORMALIZE: Caught 429 Rate Limit from OpenRouter.</div>
-                            <div className="text-[var(--accent)]"><span className="text-zinc-600">[11:45:13]</span> CASCADE: Fallback to Local Mock initiated.</div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            
-            <div id="panel-setups" className="flex-1 hidden flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6 w-full animate-fade-in" role="tabpanel" aria-labelledby="tab-setups">
-                
-                
-                <div className="flex-1 glow-card rounded-2xl p-5 flex flex-col relative overflow-hidden transition-colors duration-300">
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at top, var(--grid-color) 0%, transparent 75%)" }}></div>
-
-                    <div className="relative z-10 flex flex-col h-full space-y-4">
-                        <div className="border-b border-[var(--card-border)] pb-3">
-                            <h1 className="text-xl font-black tracking-wide text-white drop-shadow-md">Quota & Routing Set-ups</h1>
-                            <p className="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Configure Free Mode limits, provider fallback cascades, and Intelligent Rotation policies.</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                            
-                            
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2 drop-shadow-sm">
-                                    <i data-lucide="scale" className="w-4 h-4"></i>
-                                    <span>Free Mode Governor</span>
-                                </h3>
-
-                                <div className="space-y-4 bg-black/60 border border-[var(--card-border)] rounded-xl p-4 shadow-inner">
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-xs font-bold">
-                                            <span className="text-[var(--text-muted)]">Daily Token Cap</span>
-                                            <span id="quota-display" className="text-[var(--accent)] font-mono">50,000 (Safe)</span>
-                                        </div>
-                                        <input type="range" min="10000" max="100000" step="5000" value="50000" onInput={() => {}} className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[var(--accent)] shadow-[0_0_10px_var(--accent-glow)]" />
-                                    </div>
-                                    
-                                    <div className="flex items-center justify-between p-2 rounded bg-black/80 border border-[var(--card-border)]">
-                                        <div>
-                                            <span className="text-xs font-bold text-white block">Token & Call Forecasting</span>
-                                            <span className="text-[9px] text-zinc-500 font-semibold block">Mathematically block doomed DAGs</span>
-                                        </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-black border-zinc-700 rounded focus:ring-[var(--accent)]" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2 drop-shadow-sm">
-                                    <i data-lucide="refresh-ccw" className="w-4 h-4"></i>
-                                    <span>Provider Rotation Engine</span>
-                                </h3>
-
-                                <div className="space-y-3 bg-black/60 border border-[var(--card-border)] rounded-xl p-4 shadow-inner">
-                                    <div className="flex items-center justify-between p-2 rounded bg-black/80 border border-[var(--card-border)]">
-                                        <div>
-                                            <span className="text-xs font-bold text-white block">Usage-Based Rotation</span>
-                                            <span className="text-[9px] text-zinc-500 font-semibold block">Dynamically switch free-tier providers</span>
-                                        </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-black border-zinc-700 rounded focus:ring-[var(--accent)]" />
-                                    </div>
-                                    
-                                    <div className="space-y-1 mt-2">
-                                        <label className="text-xs font-bold text-[var(--text-muted)]">Rotation Strategy</label>
-                                        <select className="w-full bg-black/80 border border-[var(--card-border)] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[var(--accent)] focusable">
-                                            <option value="latency">Latency Optimized (Fastest First)</option>
-                                            <option value="quota">Quota Balanced (Spread Usage)</option>
-                                            <option value="strict">Strict Priority Fallback</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            
-                            <div className="space-y-4 md:col-span-2">
-                                <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2 drop-shadow-sm">
-                                    <i data-lucide="list-ordered" className="w-4 h-4"></i>
-                                    <span>Fallback Cascade Priority (Generalist)</span>
-                                </h3>
-                                
-                                <div className="bg-black/60 border border-[var(--card-border)] rounded-xl p-4 shadow-inner space-y-2">
-                                     <div className="flex items-center justify-between p-2 rounded border border-zinc-700 bg-black/40">
-                                         <div className="flex items-center space-x-3">
-                                            <span className="text-xs font-bold text-[var(--accent)] font-mono">1</span>
-                                            <span className="text-xs text-white font-semibold">Qwen-2.5-72B-Free (OpenRouter)</span>
-                                         </div>
-                                         <i data-lucide="grip-vertical" className="w-4 h-4 text-zinc-600 cursor-move"></i>
-                                     </div>
-                                     <div className="flex items-center justify-between p-2 rounded border border-zinc-700 bg-black/40">
-                                        <div className="flex items-center space-x-3">
-                                           <span className="text-xs font-bold text-[var(--accent)] font-mono">2</span>
-                                           <span className="text-xs text-white font-semibold">Llama-3-70B-Free (OpenRouter)</span>
-                                        </div>
-                                        <i data-lucide="grip-vertical" className="w-4 h-4 text-zinc-600 cursor-move"></i>
-                                    </div>
-                                    <div className="flex items-center justify-between p-2 rounded border border-zinc-700 bg-black/40 opacity-70">
-                                        <div className="flex items-center space-x-3">
-                                           <span className="text-xs font-bold text-[var(--text-muted)] font-mono">3</span>
-                                           <span className="text-xs text-white font-semibold">Local Mock Offline Provider (Air-Gapped)</span>
-                                        </div>
-                                        <i data-lucide="lock" className="w-4 h-4 text-zinc-600"></i>
-                                    </div>
-                                    <p className="text-[9px] text-zinc-500 font-medium pt-1">
-                                        Level 3 generalist fallbacks are engaged only when Level 1 Agent Preferences and Level 2 Category Defaults throw 429/402 exceptions.
-                                    </p>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <div className="flex justify-end space-x-3 pt-6 border-t border-[var(--card-border)] mt-auto">
-                            <button className="px-5 py-2 rounded-lg bg-transparent hover:bg-white/5 text-xs font-bold border border-[var(--card-border)] transition focusable">Revert</button>
-                            <button className="px-5 py-2 rounded-lg bg-[var(--accent)] hover:bg-white text-black font-black text-xs transition shadow-[0_0_20px_var(--accent-glow)] focusable">Commit Policy</button>
-                        </div>
-                    </div>
-                </div>
-
-                
-                <div className="w-full lg:w-80 flex flex-col space-y-6">
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-green-400 drop-shadow-sm">
-                                <i data-lucide="shield-check" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase text-white">Financial Guardrails</h3>
-                            </div>
-                            <span className="text-[9px] text-[var(--accent)] font-bold uppercase tracking-wider font-mono border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-1 rounded shadow-[0_0_8px_var(--glow-color)]">SECURED</span>
-                        </div>
-
-                        <div className="space-y-3 text-xs">
-                            <div className="flex items-start space-x-2 border-b border-[var(--card-border)] pb-2">
-                                <i data-lucide="check-circle-2" className="w-4 h-4 text-[var(--accent)] mt-0.5"></i>
-                                <div>
-                                    <span className="font-bold block text-white">Zero Cloud Dependency</span>
-                                    <p className="text-[10px] text-zinc-500 font-medium">RouteSwitch intercepts and blocks any paid API request if a valid key is missing.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-2 border-b border-[var(--card-border)] pb-2">
-                                <i data-lucide="check-circle-2" className="w-4 h-4 text-[var(--accent)] mt-0.5"></i>
-                                <div>
-                                    <span className="font-bold block text-white">Pino Redaction Layer</span>
-                                    <p className="text-[10px] text-zinc-500 font-medium">All API keys and provider credentials are stripped at the serializer level before logging.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-2">
-                                <i data-lucide="check-circle-2" className="w-4 h-4 text-[var(--accent)] mt-0.5"></i>
-                                <div>
-                                    <span className="font-bold block text-white">Idempotent Networking</span>
-                                    <p className="text-[10px] text-zinc-500 font-medium">Network timeouts trigger local fallbacks instead of endless retries, preventing runaways.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </main>
+      </section>
     </div>
+  );
+}
 
-    
-    <footer className="w-full h-8 bg-black border-t border-[var(--card-border)] px-4 flex items-center justify-between text-[10px] text-zinc-600 font-mono z-25 relative transition-colors duration-300">
-        <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse shadow-[0_0_8px_var(--accent)]"></span>
-                <span className="font-bold text-[var(--accent)] uppercase drop-shadow-sm">RouteSwitch Gateway Online</span>
+// ─── Set-up View ────────────────────────────────────────────────────────────
+interface ProviderEntry { id: string; name: string; type: string; config: any; hasApiKey: boolean; isEnabled: boolean; createdAt: number; }
+interface RoutingRule { id: string; scope: string; scopeId: string | null; providerChain: string[]; }
+
+function SetupView() {
+  // Provider Registry state
+  const [providers, setProviders] = useState<ProviderEntry[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formName, setFormName] = useState('');
+  const [formType, setFormType] = useState('openai-compatible');
+  const [formBaseUrl, setFormBaseUrl] = useState('http://localhost:1234/v1');
+  const [formModelId, setFormModelId] = useState('Auto');
+  const [formModelPath, setFormModelPath] = useState('/models/llama-3.gguf');
+  const [formApiKey, setFormApiKey] = useState('');
+  const [formSaving, setFormSaving] = useState(false);
+  const [testResult, setTestResult] = useState<{connected:boolean;latencyMs?:number;error?:string;responsePreview?:string}|null>(null);
+  const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
+
+  // Routing Rules state
+  const [rules, setRules] = useState<RoutingRule[]>([]);
+  const [activeScope, setActiveScope] = useState<'global'|'cerebro'|'project'|'agent'>('global');
+  const [activeScopeId, setActiveScopeId] = useState<string>('');
+  const [currentChain, setCurrentChain] = useState<string[]>([]);
+  const [ruleSaving, setRuleSaving] = useState(false);
+  const [addChainSelect, setAddChainSelect] = useState('');
+
+  // Existing settings state
+  const [dailyCeiling, setDailyCeiling] = useState(2.0);
+  const [externalEnabled, setExternalEnabled] = useState(true);
+  const [grammarEnabled, setGrammarEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [mcpConnections, setMcpConnections] = useState<{id:string;name:string;transport:string;status:string}[]>([]);
+  const [projects, setProjects] = useState<{id:string;name:string}[]>([]);
+
+  // Load providers, rules, MCP, settings, projects
+  useEffect(() => {
+    fetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setProviders(d.providers); }).catch(() => {});
+    fetch(`${API}/api/llm/routing-rules`).then(r => r.json()).then(d => { if (d.success) setRules(d.rules); }).catch(() => {});
+    fetch(`${API}/api/system/mcp/connections`).then(r => r.json()).then(d => { if (d.success && d.connections) setMcpConnections(d.connections); }).catch(() => {});
+    fetch(`${API}/api/projects`).then(r => r.json()).then(d => { if (d.projects) setProjects(d.projects); }).catch(() => {});
+    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+      if (d.success && d.settings) {
+        if (d.settings.daily_cost_ceiling) setDailyCeiling(Number(d.settings.daily_cost_ceiling));
+        if (d.settings.external_calls_enabled !== undefined) setExternalEnabled(d.settings.external_calls_enabled === 'true' || d.settings.external_calls_enabled === true);
+        if (d.settings.grammar_constrained !== undefined) setGrammarEnabled(d.settings.grammar_constrained === 'true' || d.settings.grammar_constrained === true);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // When scope tab changes, load the matching chain
+  useEffect(() => {
+    const scopeId = (activeScope === 'global' || activeScope === 'cerebro') ? null : activeScopeId;
+    const match = rules.find(r => r.scope === activeScope && (r.scopeId || '') === (scopeId || ''));
+    setCurrentChain(match ? match.providerChain : []);
+  }, [activeScope, activeScopeId, rules]);
+
+  // Provider CRUD helpers
+  const handleSaveProvider = async () => {
+    setFormSaving(true);
+    const config = formType === 'openai-compatible' ? { baseUrl: formBaseUrl, modelId: formModelId } : formType === 'llama-cpp' ? { modelPath: formModelPath } : {};
+    const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true };
+    try {
+      if (editingId) {
+        await fetch(`${API}/api/llm/providers/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      } else {
+        await fetch(`${API}/api/llm/providers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      }
+      // Refresh list
+      const d = await fetch(`${API}/api/llm/providers`).then(r => r.json());
+      if (d.success) setProviders(d.providers);
+      setShowAddForm(false); setEditingId(null); setFormName(''); setFormApiKey(''); setTestResult(null);
+    } catch {}
+    setFormSaving(false);
+  };
+
+  const handleDeleteProvider = async (id: string) => {
+    try {
+      const res = await fetch(`${API}/api/llm/providers/${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) {
+        setProviders(prev => prev.filter(p => p.id !== id));
+        // Also remove from any local chain display
+        setCurrentChain(prev => prev.filter(pId => pId !== id));
+      } else {
+        alert(d.error || 'Failed to delete provider');
+      }
+    } catch { alert('Network error deleting provider'); }
+  };
+
+  const handleTestProvider = async (id: string) => {
+    setTestResult(null);
+    setTestingProviderId(id);
+    try {
+      const d = await fetch(`${API}/api/llm/providers/${id}/test`, { method: 'POST' }).then(r => r.json());
+      setTestResult(d.test || { connected: false, error: 'Unknown error' });
+    } catch { setTestResult({ connected: false, error: 'Network error' }); }
+  };
+
+  const handleEditProvider = (p: ProviderEntry) => {
+    setEditingId(p.id); setFormName(p.name); setFormType(p.type);
+    if (p.type === 'openai-compatible') { setFormBaseUrl(p.config.baseUrl || ''); setFormModelId(p.config.modelId || 'Auto'); }
+    if (p.type === 'llama-cpp') { setFormModelPath(p.config.modelPath || ''); }
+    setFormApiKey(''); setShowAddForm(true); setTestResult(null);
+  };
+
+  // Routing Rules helpers
+  const handleSaveChain = async () => {
+    setRuleSaving(true);
+    const scopeId = (activeScope === 'global' || activeScope === 'cerebro') ? null : activeScopeId || null;
+    try {
+      await fetch(`${API}/api/llm/routing-rules`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: activeScope, scopeId, providerChain: currentChain }) });
+      const d = await fetch(`${API}/api/llm/routing-rules`).then(r => r.json());
+      if (d.success) setRules(d.rules);
+    } catch {}
+    setRuleSaving(false);
+  };
+
+  const moveChainItem = (idx: number, dir: -1 | 1) => {
+    const next = [...currentChain];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx]!, next[target]!] = [next[target]!, next[idx]!];
+    setCurrentChain(next);
+  };
+
+  const removeFromChain = (idx: number) => setCurrentChain(prev => prev.filter((_, i) => i !== idx));
+  const addToChain = (provId: string) => { if (provId && !currentChain.includes(provId)) { setCurrentChain(prev => [...prev, provId]); setAddChainSelect(''); } };
+
+  const handleDeleteRule = async () => {
+    const scopeId = (activeScope === 'global' || activeScope === 'cerebro') ? null : activeScopeId || null;
+    const match = rules.find(r => r.scope === activeScope && (r.scopeId || '') === (scopeId || ''));
+    if (!match) return;
+    try {
+      await fetch(`${API}/api/llm/routing-rules/${match.id}`, { method: 'DELETE' });
+      const d = await fetch(`${API}/api/llm/routing-rules`).then(r => r.json());
+      if (d.success) setRules(d.rules);
+      setCurrentChain([]);
+    } catch {}
+  };
+
+  // Settings save
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ daily_cost_ceiling: dailyCeiling, external_calls_enabled: externalEnabled, grammar_constrained: grammarEnabled }) });
+    } catch {}
+    setSaving(false);
+  };
+
+  const providerLabel = (id: string) => providers.find(p => p.id === id)?.name || id;
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Section A: Provider Registry */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Key size={16} style={{ color: ACCENT }} /> Provider Registry
+          </h2>
+          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('openai-compatible'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId('Auto'); setFormModelPath('/models/llama-3.gguf'); setFormApiKey(''); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
+        </div>
+        <p className="text-xs text-gray-400 mb-4">Named LLM endpoint entries. API keys are encrypted at rest. Create multiple entries of the same type for different models or services.</p>
+
+        {/* Provider cards */}
+        <div className="space-y-2">
+          {providers.length === 0 && !showAddForm && (
+            <div className="text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">No providers configured. Click "Add Provider" to get started.</div>
+          )}
+          {providers.map(p => (
+            <div key={p.id} className={`flex flex-col rounded-lg border transition-all ${p.isEnabled ? 'bg-black/30 border-white/10' : 'bg-black/20 border-white/5 opacity-60'}`}>
+              <div className="flex items-center justify-between p-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <Server size={14} style={{ color: p.isEnabled ? ACCENT : '#6b7280' }} />
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-white truncate">{p.name}</div>
+                    <div className="text-[10px] text-gray-500 font-mono">{p.type} {p.hasApiKey ? '• key set' : ''} {p.config.baseUrl ? `• ${p.config.baseUrl}` : ''}{p.config.modelPath ? `• ${p.config.modelPath}` : ''}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => handleTestProvider(p.id)} className="px-2 py-1 rounded text-[9px] font-bold border border-white/10 bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all">Test</button>
+                  <button onClick={() => handleEditProvider(p)} className="px-2 py-1 rounded text-[9px] font-bold border border-white/10 bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all">Edit</button>
+                  <button onClick={() => handleDeleteProvider(p.id)} className="px-2 py-1 rounded text-[9px] font-bold border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all">Del</button>
+                </div>
+              </div>
+              {testingProviderId === p.id && testResult && (
+                <div className={`mx-3 mb-3 flex items-center gap-2 p-2 rounded-lg text-[10px] font-mono ${testResult.connected ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+                  {testResult.connected ? `✓ Connected (${testResult.latencyMs}ms) — ${testResult.responsePreview || ''}` : `✕ Failed: ${testResult.error}`}
+                </div>
+              )}
             </div>
-            <span>|</span>
-            <span>Policy: <strong className="text-white">Strict Rotation</strong></span>
-            <span>|</span>
-            <span>Database: <strong className="text-white">BaseVault.db</strong></span>
+          ))}
         </div>
-        <div className="flex items-center space-x-4">
-            <span>Quota Blocks Today: <strong className="text-green-400 font-bold">14</strong></span>
-            <span>|</span>
-            <span>Node.js: <strong className="text-white">v22 LTS</strong></span>
-        </div>
-    </footer>
 
-    
-    <div id="chat-sentinel" className="fixed bottom-12 right-6 z-50 flex flex-col items-end">
-        <button  className="w-12 h-12 rounded-full bg-[var(--accent)] text-black flex items-center justify-center shadow-[0_0_25px_var(--accent-glow)] hover:scale-105 transform transition duration-200 focusable" aria-label="Toggle Cerebro chatbot assistant">
-            <i data-lucide="bot-message-square" className="w-6 h-6"></i>
+        {/* Add/Edit Form */}
+        {showAddForm && (
+          <div className="mt-4 p-4 bg-black/30 border border-white/10 rounded-lg space-y-3">
+            <div className="text-xs font-bold text-white mb-2">{editingId ? 'Edit Provider' : 'New Provider'}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Name</label>
+                <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="My LMStudio" className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Type</label>
+                <select value={formType} onChange={e => setFormType(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50">
+                  <option value="openai-compatible">OpenAI Compatible</option>
+                  <option value="llama-cpp">Local GGUF (llama.cpp)</option>
+                  <option value="mock">Offline Mock</option>
+                </select>
+              </div>
+            </div>
+            {formType === 'openai-compatible' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div><label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Base URL</label><input type="text" value={formBaseUrl} onChange={e => setFormBaseUrl(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" /></div>
+                <div><label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Model ID</label><input type="text" value={formModelId} onChange={e => setFormModelId(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" /></div>
+                <div><label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">API Key</label><input type="password" value={formApiKey} onChange={e => setFormApiKey(e.target.value)} placeholder={editingId ? '(unchanged)' : 'sk-...'} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" /></div>
+              </div>
+            )}
+            {formType === 'llama-cpp' && (
+              <div><label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Model Path (.gguf)</label><input type="text" value={formModelPath} onChange={e => setFormModelPath(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" /></div>
+            )}
+            <div className="flex gap-2 pt-2">
+              <button onClick={handleSaveProvider} disabled={formSaving || !formName.trim()} className="px-4 py-2 rounded-lg text-black font-bold text-xs disabled:opacity-50 transition-all" style={{ backgroundColor: ACCENT }}>{formSaving ? 'Saving...' : editingId ? 'Update' : 'Save Provider'}</button>
+              <button onClick={() => { setShowAddForm(false); setEditingId(null); }} className="px-4 py-2 rounded-lg border border-white/10 text-xs font-bold text-gray-400 hover:text-white transition-all">Cancel</button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Section B: Default & Fallback Chain (Routing Rules) */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <ListOrdered size={16} style={{ color: ACCENT }} /> Default & Fallback Chain
+        </h2>
+        <p className="text-xs text-gray-400 mb-4">Set the provider priority order per scope. Position 1 is primary; remaining are fallbacks tried on failure. Most specific scope wins at runtime.</p>
+
+        {/* Scope tabs */}
+        <div className="flex gap-1 mb-4 bg-black/30 p-1 rounded-lg border border-white/5">
+          {(['global', 'cerebro', 'project', 'agent'] as const).map(s => (
+            <button key={s} onClick={() => { setActiveScope(s); setActiveScopeId(''); }} className={`flex-1 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all ${activeScope === s ? 'text-black' : 'text-gray-400 hover:text-white'}`} style={activeScope === s ? { backgroundColor: ACCENT } : {}}>{s}</button>
+          ))}
+        </div>
+
+        {/* Scope ID selector for project/agent */}
+        {activeScope === 'project' && (
+          <div className="mb-3">
+            <select value={activeScopeId} onChange={e => setActiveScopeId(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50">
+              <option value="">Select a project...</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+        {activeScope === 'agent' && (
+          <div className="mb-3">
+            <select value={activeScopeId} onChange={e => setActiveScopeId(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50">
+              <option value="">Select an agent/workflow...</option>
+              <option value="scopelogic-interview">ScopeLogic Interview</option>
+              <option value="council-mode">Council Mode</option>
+              <option value="coreexec-dag">CoreExec DAG Execution</option>
+              <option value="scoutdaemon-reflection">ScoutDaemon Reflection</option>
+            </select>
+          </div>
+        )}
+
+        {/* Current chain */}
+        <div className="space-y-2 mb-3">
+          {currentChain.length === 0 ? (
+            <div className="text-[10px] text-gray-500 text-center py-4 border border-dashed border-white/10 rounded-lg">No chain configured for this scope. Add providers below.</div>
+          ) : currentChain.map((provId, idx) => (
+            <div key={provId + idx} className="flex items-center gap-2 p-2.5 rounded-lg bg-black/30 border border-white/5">
+              <span className="text-xs font-bold font-mono w-5 text-center" style={{ color: ACCENT }}>{idx + 1}</span>
+              <span className="text-xs text-white font-semibold flex-1">{providerLabel(provId)}</span>
+              <button onClick={() => moveChainItem(idx, -1)} disabled={idx === 0} className="text-[10px] text-gray-500 hover:text-white disabled:opacity-30 px-1">▲</button>
+              <button onClick={() => moveChainItem(idx, 1)} disabled={idx === currentChain.length - 1} className="text-[10px] text-gray-500 hover:text-white disabled:opacity-30 px-1">▼</button>
+              <button onClick={() => removeFromChain(idx)} className="text-[10px] text-red-400 hover:text-red-300 px-1">✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add to chain */}
+        {providers.filter(p => !currentChain.includes(p.id)).length > 0 && (
+          <div className="flex gap-2 items-center mb-3">
+            <select value={addChainSelect} onChange={e => setAddChainSelect(e.target.value)} className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/50">
+              <option value="">Select provider to add...</option>
+              {providers.filter(p => !currentChain.includes(p.id)).map(p => <option key={p.id} value={p.id}>{p.name} ({p.type})</option>)}
+            </select>
+            <button onClick={() => addToChain(addChainSelect)} disabled={!addChainSelect} className="px-3 py-1.5 rounded-lg text-[10px] font-bold border border-white/10 bg-white/5 text-gray-300 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30">Add to Chain</button>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button onClick={handleSaveChain} disabled={ruleSaving || currentChain.length === 0} className="flex-1 px-4 py-2 rounded-lg text-black font-bold text-xs disabled:opacity-50 transition-all" style={{ backgroundColor: ACCENT }}>{ruleSaving ? 'Saving...' : 'Save Routing Rule'}</button>
+          {currentChain.length > 0 && rules.find(r => r.scope === activeScope && (r.scopeId || '') === ((activeScope === 'global' || activeScope === 'cerebro') ? '' : activeScopeId || '')) && (
+            <button onClick={handleDeleteRule} className="px-4 py-2 rounded-lg text-xs font-bold border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all">Delete Rule</button>
+          )}
+        </div>
+      </section>
+
+      {/* Section C: Free Mode Governor Limits */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Shield size={16} style={{ color: ACCENT }} /> Free Mode Governor Limits
+        </h2>
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-gray-300 font-bold">Hard Daily Cost Ceiling (Auto-Park)</span>
+              <span className="font-mono font-bold" style={{ color: ACCENT }}>${dailyCeiling.toFixed(2)}</span>
+            </div>
+            <input type="range" min={0} max={10} step={0.25} value={dailyCeiling} onChange={e => setDailyCeiling(+e.target.value)} className="w-full h-2 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
+            <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-1"><span>$0 (Free only)</span><span>$10.00/day</span></div>
+          </div>
+          <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
+            <div><span className="text-xs font-bold text-white block">External Calls Enabled</span><span className="text-[10px] text-gray-500">When disabled, all requests route exclusively to the local mock provider</span></div>
+            <input type="checkbox" checked={externalEnabled} onChange={e => setExternalEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+          </label>
+          <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
+            <div><span className="text-xs font-bold text-white block">Grammar-Constrained Decoding (GBNF)</span><span className="text-[10px] text-gray-500">Force valid JSON output via logit masking</span></div>
+            <input type="checkbox" checked={grammarEnabled} onChange={e => setGrammarEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+          </label>
+        </div>
+      </section>
+
+      {/* Section D: MCP Connection Manager */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Plug size={16} style={{ color: ACCENT }} /> MCP Connection Manager
+        </h2>
+        <div className="space-y-2">
+          {mcpConnections.map(conn => (
+            <div key={conn.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-green-500/20">
+              <div className="flex items-center gap-3">
+                <Plug size={14} className={conn.status === 'active' ? 'text-green-400' : 'text-gray-500'} />
+                <div><div className="text-xs font-bold text-white">{conn.name}</div><div className="text-[10px] text-gray-500 font-mono">{conn.transport} | {conn.status}</div></div>
+              </div>
+              <span className={`text-[10px] font-mono ${conn.status === 'active' ? 'text-green-400' : 'text-gray-500'}`}>{conn.status === 'active' ? 'CONNECTED' : 'OFFLINE'}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Save Settings */}
+      <div className="flex justify-end">
+        <button onClick={saveSettings} disabled={saving} className="px-6 py-2.5 rounded-lg text-black font-bold text-sm transition-all shadow-lg hover:shadow-xl disabled:opacity-50" style={{ backgroundColor: ACCENT }}>
+          {saving ? 'Saving...' : 'Commit Configuration'}
         </button>
-
-        <div id="chat-box" className="w-80 h-96 bg-[var(--bg-surface-glass)] backdrop-blur-xl border border-[var(--card-border)] rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.9)] mt-3 hidden flex-col overflow-hidden transition-all duration-300">
-            <div className="bg-black/90 p-3 flex items-center justify-between border-b border-[var(--card-border)]">
-                <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]"></span>
-                    <span className="text-xs font-bold tracking-wide uppercase text-white">Cerebro Assist Sentinel</span>
-                </div>
-                <button  className="text-zinc-500 hover:text-[var(--accent)] transition">
-                    <i data-lucide="minus" className="w-4 h-4"></i>
-                </button>
-            </div>
-
-            <div id="chat-conversation" className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
-                <div className="bg-black border border-[var(--accent)]/30 p-2.5 rounded-xl rounded-tl-none self-start max-w-[85%] leading-relaxed text-zinc-300 shadow-[0_0_10px_var(--glow-color)]">
-                    <span className="font-black text-[10px] text-[var(--accent)] block mb-1">CEREBRO:</span>
-                    Welcome, Billie. Let us synthesize and map your network topology. Ask me anything about Free Mode Governor logic, fallback cascades, or dynamic provider registry limits.
-                </div>
-            </div>
-
-            <div className="p-2 border-t border-[var(--card-border)] bg-black/80 flex items-center space-x-1">
-                <input id="chat-input-field" type="text" placeholder="Query routing policy..." className="flex-1 bg-black/60 border border-[var(--card-border)] text-xs rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[var(--accent)] focus:shadow-[0_0_10px_var(--glow-color)]"  />
-                <button  className="p-2 bg-[var(--accent)] text-black rounded-lg transition focusable hover:bg-white hover:shadow-[0_0_15px_var(--accent-glow)]">
-                    <i data-lucide="send" className="w-3.5 h-3.5"></i>
-                </button>
-            </div>
-        </div>
+      </div>
     </div>
+  );
+}
 
-    
-    
+// ─── Main Export ─────────────────────────────────────────────────────────────
+export function RouteSwitchDashboard() {
+  const [activeView, setActiveView] = useState<'dashboard' | 'setups'>('dashboard');
 
-    </>
+  return (
+    <AppShell
+      moduleId="routeswitch"
+      moduleName="RouteSwitch"
+      moduleLogo="/ROUTESWITCHLogo.png"
+      accentColor={ACCENT}
+      activeView={activeView}
+      onViewChange={setActiveView}
+    >
+      {activeView === 'dashboard' ? <DashboardView /> : <SetupView />}
+    </AppShell>
   );
 }

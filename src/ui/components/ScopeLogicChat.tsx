@@ -101,7 +101,7 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-2 bg-black/20 rounded-md">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-2 bg-gray-900/30 rounded-md">
         {chatLog.length === 0 && (
           <div className="text-sm opacity-50 text-center mt-10">
             Tell me what workflow you want to build...

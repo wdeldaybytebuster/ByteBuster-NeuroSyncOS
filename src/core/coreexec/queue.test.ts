@@ -68,4 +68,50 @@ describe('CoreExec Queue - BEGIN IMMEDIATE Task Claims', () => {
     const claimed = claimTask(taskId!, Date.now() + 60000);
     expect(claimed).toBe(false);
   });
+
+  // ── Acceptance Gate: Stale Leases Correctly Expired on Boot ──────────────
+  it('re-claims a task whose lease timestamp is already in the past (stale lease expiry)', () => {
+    const { taskIds } = createRunAndTasks('proj-stale', 1);
+    const taskId = taskIds[0]!;
+
+    // Claim with a lease that expired 1 ms ago
+    const expiredLease = Date.now() - 1;
+    expect(claimTask(taskId, expiredLease)).toBe(true);
+
+    const before = db.prepare('SELECT status, claim_lease FROM tasks WHERE id = ?').get(taskId) as any;
+    expect(before.status).toBe('claimed');
+    expect(before.claim_lease).toBe(expiredLease);
+
+    // Second call must detect the expired lease and grant a fresh claim
+    const freshLease = Date.now() + 60000;
+    expect(claimTask(taskId, freshLease)).toBe(true);
+
+    const after = db.prepare('SELECT status, claim_lease FROM tasks WHERE id = ?').get(taskId) as any;
+    expect(after.status).toBe('claimed');
+    expect(after.claim_lease).toBe(freshLease);
+  });
+
+  // ── Acceptance Gate: Cross-Project Memory Namespace Isolation ────────────
+  it('tasks from project-A are invisible in queries scoped to project-B (project_id FK isolation)', () => {
+    const { runId: runA, taskIds: tasksA } = createRunAndTasks('proj-iso-A', 2);
+    const { runId: runB, taskIds: tasksB } = createRunAndTasks('proj-iso-B', 2);
+
+    // workflow_runs scoped to proj-iso-B must not expose proj-iso-A's run
+    const runsForB = (db
+      .prepare('SELECT id FROM workflow_runs WHERE project_id = ?')
+      .all('proj-iso-B') as { id: string }[]).map((r) => r.id);
+    expect(runsForB).toContain(runB);
+    expect(runsForB).not.toContain(runA);
+
+    // tasks scoped to runB must not include any task from runA
+    const taskIdsForB = (db
+      .prepare('SELECT id FROM tasks WHERE run_id = ?')
+      .all(runB) as { id: string }[]).map((t) => t.id);
+    for (const tid of tasksA) {
+      expect(taskIdsForB).not.toContain(tid);
+    }
+    for (const tid of tasksB) {
+      expect(taskIdsForB).toContain(tid);
+    }
+  });
 });

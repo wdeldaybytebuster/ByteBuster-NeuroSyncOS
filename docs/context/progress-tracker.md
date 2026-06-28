@@ -72,7 +72,8 @@ All implementation phases §1.2 through §3.4, Phase 11, and Phase 12 are shippe
 | --- | --- | --- | --- | --- |
 | OQ-001 | Should `selectOptimalModel()` in `scoutlogic/dynamic-router.ts` be integrated into the `RouteSwitchEngine.execute()` path for automatic model selection, or remain a standalone utility? | RouteSwitch intelligence | RouteSwitch Lead | Open |
 | OQ-002 | `ReflectionExecutor._mockExtractPreferences()` uses mock LLM extraction. Should this be wired to `RouteSwitchEngine.execute()` in production? | Cerebro accuracy | Cerebro Lead | Open |
-| OQ-003 | `dag.gbnf` grammar file referenced in `system-reserved.ts` comment — is this file implemented? | Grammar-constrained DAG generation | ScopeLogic Lead | Open |
+| OQ-003 | `dag.gbnf` grammar file referenced in `system-reserved.ts` comment — is this file implemented? | Grammar-constrained DAG generation | ScopeLogic Lead | **Closed — Phase 8+ (GBNF/llama.cpp integration deferred; not in scope for beta-stable or P13 free-tier testing)** |
+
 | OQ-004 | `idleDetector` in `scoutdaemon/idle.ts` — does it trigger `ReflectionExecutor.startDaemon()` or just ping? Confirm wiring in `server/index.ts`. | Cerebro idle reflection | Cerebro Lead | Open |
 
 ---

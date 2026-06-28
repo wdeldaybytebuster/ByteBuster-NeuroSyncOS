@@ -1,826 +1,387 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { AppShell } from '../components/AppShell';
+import { useNavigation } from '../layouts/OSLayout';
+import { MessageSquare, Container, AlertTriangle, Binary, FileText, Users, Shield, CheckCircle, XCircle, Send } from 'lucide-react';
 
-import React, { useState, useEffect } from 'react';
+const API = 'http://localhost:3743';
+const ACCENT = '#00E5FF';
 
+// Shared glow box (cyan glow — ScopeLogic uses the same stealth-cyan as CoreExec)
+const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(0,229,255,0.08)] hover:shadow-[0_0_30px_rgba(0,229,255,0.2)] hover:border-[rgba(0,229,255,0.25)]`;
 
-export function ScopeLogicDashboard() {
+// ─── Dashboard View ─────────────────────────────────────────────────────────
+function DashboardView() {
+  const { activeProjectId, navigate } = useNavigation();
+  const [messages, setMessages] = useState<{role:string;text:string}[]>([
+    { role: 'assistant', text: 'Welcome. Let us define your transactional workflow parameters. What is the primary objective of the workflow DAG we are building?' }
+  ]);
+  const [input, setInput] = useState('');
+  const [round, setRound] = useState(1);
+  const [isComplete, setIsComplete] = useState(false);
+  const [proposal, setProposal] = useState<any>(null);
+  const [confidence, setConfidence] = useState<{score: number; alerts: string[]}>({ score: 98.4, alerts: [] });
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load interview history on mount
   useEffect(() => {
-    // Make sure lucid icons render on initial mount
+    fetch(`${API}/api/scopelogic/history`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.history && data.history.length > 0) {
+          setMessages(data.history.map((m: any) => ({ role: m.role, text: m.content || m.text || '' })));
+          setRound(Math.min(8, Math.ceil(data.history.length / 2) + 1));
+          if (data.isComplete) {
+            setIsComplete(true);
+            // Check if there's a persisted proposal
+            fetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
+              if (d.success && d.proposal) setProposal(d.proposal);
+            }).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+  }, [activeProjectId]);
+
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // Send interview message
+  const handleSend = async () => {
+    if (!input.trim() || isComplete) return;
+    const msg = input.trim();
+    setMessages(prev => [...prev, { role: 'user', text: msg }]);
+    setInput('');
     try {
-      (window as any).lucide?.createIcons();
-    } catch(e) {}
-  }, []);
+      const res = await fetch(`${API}/api/scopelogic/prompt`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      });
+      const data = await res.json();
+      const reply = data.reply || data.response || data.message || 'Acknowledged.';
+      setMessages(prev => [...prev, { role: 'assistant', text: reply }]);
+      setRound(prev => Math.min(8, prev + 1));
+      if (data.isComplete || data.ready || data.dagProposal) {
+        setIsComplete(true);
+        const prop = data.dagProposal || data.proposal;
+        if (prop) {
+          setProposal(prop);
+          // Persist to backend so it survives navigation
+          await fetch(`${API}/api/system/proposals/stage`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proposal: prop })
+          }).catch(() => {});
+          // Auto-navigate to PortGrid for visual review after a brief delay
+          setTimeout(() => navigate('portgrid'), 1500);
+        }
+      }
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', text: 'Error: Could not reach ScopeLogic engine.' }]);
+    }
+  };
+
+  // Reset interview
+  const handleReset = async () => {
+    await fetch(`${API}/api/scopelogic/reset`, { method: 'POST' }).catch(() => {});
+    await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
+    setMessages([{ role: 'assistant', text: 'Interview reset. What is the primary objective of the workflow DAG we are building?' }]);
+    setRound(1);
+    setIsComplete(false);
+    setProposal(null);
+  };
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        /* CSS Variable System for Stealth Black & Cyber Cyan Morphing */
-        :root {
-            /* Dark Mode: Cyber-Cyan & Stealth Black Space */
-            --bg-base: #030303;
-            --bg-surface: #0a0a0c;
-            --bg-surface-glass: rgba(10, 10, 12, 0.85);
-            --bg-nested: rgba(0, 229, 255, 0.01);
-            --border-glow: rgba(0, 229, 255, 0.08);
-            --text-primary: #fafafa;
-            --text-muted: #a1a1aa;
-            --accent: #00E5FF;
-            --accent-glow: rgba(0, 229, 255, 0.2);
-            --card-border: rgba(39, 39, 42, 0.8);
-            --grid-color: rgba(0, 229, 255, 0.01);
-            --grid-line: rgba(255, 255, 255, 0.005);
-            --glow-color: rgba(0, 229, 255, 0.05);
-            --logo-accent: #00E5FF;
-            --terminal-bg: #050505;
-            --terminal-text: #00E5FF;
-        }
-
-        .light {
-            /* Light Mode: Structured Paper & Deep Cyan Slate */
-            --bg-base: #f8fafc;
-            --bg-surface: #ffffff;
-            --bg-surface-glass: rgba(255, 255, 255, 0.9);
-            --bg-nested: rgba(14, 116, 144, 0.03);
-            --border-glow: rgba(14, 116, 144, 0.05);
-            --text-primary: #0f172a;
-            --text-muted: #64748b;
-            --accent: #0891b2;
-            --accent-glow: rgba(8, 145, 178, 0.15);
-            --card-border: rgba(226, 232, 240, 0.8);
-            --grid-color: rgba(14, 116, 144, 0.02);
-            --grid-line: rgba(14, 116, 144, 0.01);
-            --glow-color: rgba(14, 116, 144, 0.02);
-            --logo-accent: #0891b2;
-            --terminal-bg: #0f172a;
-            --terminal-text: #38bdf8;
-        }
-
-        body {
-            background-color: var(--bg-base);
-            color: var(--text-primary);
-            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-image: 
-                radial-gradient(circle at 50% 50%, var(--grid-color) 0%, transparent 60%),
-                linear-gradient(var(--grid-line) 1px, transparent 1px),
-                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-            background-size: 100% 100%, 20px 20px, 20px 20px;
-            transition: background-color 0.4s ease, color 0.4s ease, background-image 0.4s ease;
-        }
-
-        /* Technical Low-Glow Stealth Card Design */
-        .glow-card {
-            border: 1px solid var(--card-border);
-            background-color: var(--bg-surface-glass);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 5px var(--glow-color);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .glow-card:hover {
-            border-color: var(--accent);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 12px var(--accent-glow);
-            transform: translateY(-1px);
-        }
-
-        /* Focus rings */
-        .focusable:focus-visible {
-            outline: 2px solid var(--accent);
-            outline-offset: 2px;
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--card-border);
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--accent);
-        }
-    ` }} />
-      
-
-    
-    <header className="w-full h-16 border-b border-[var(--card-border)] bg-[var(--bg-surface-glass)] backdrop-blur-md px-6 flex items-center justify-between z-40 fixed top-0 left-0 transition-colors duration-300">
-        <div className="flex items-center space-x-3">
-            
-            <button  className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-80 flex items-center justify-center text-[var(--accent)] focusable" aria-label="Open Suite Switcher Menu">
-                <i data-lucide="menu" className="w-5 h-5"></i>
-            </button>
-
-            
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center">
-                <svg id="scopelogic-logo" viewBox="0 0 100 100" className="w-8 h-8 transition-all duration-300 text-[var(--accent)]">
-                    <polygon points="50,15 90,80 10,80" fill="rgba(0,229,255,0.05)" stroke="currentColor" strokeWidth="2" opacity="0.6"/>
-                    <circle cx="50" cy="55" r="30" fill="none" stroke="#C0C0C0" strokeWidth="1" stroke-dasharray="3 3" opacity="0.5"/>
-                    <g transform="translate(50,58) scale(0.5) translate(-50,-50)">
-                        <g transform="rotate(45,50,50)">
-                            <path d="M 56 85 L 56 68 L 60 68 L 60 45 L 75 30 L 75 10 L 58 10 L 58 28 L 42 28 L 42 10 L 25 10 L 25 30 L 40 45 L 40 68 L 44 68 L 44 85 Z" fill="rgba(0,229,255,0.1)" stroke="currentColor" strokeWidth="4" strokeLinejoin="round"/>
-                            <rect x="46" y="74" width="3" height="5" fill="#0D0E15"/>
-                            <rect x="51" y="74" width="3" height="5" fill="#0D0E15"/>
-                            <rect x="48" y="40" width="4" height="24" rx="2" fill="currentColor" />
-                        </g>
-                    </g>
-                </svg>
-            </div>
-            
-            <div className="hidden sm:block">
-                <span className="font-black text-sm tracking-wider uppercase bg-clip-text text-transparent bg-gradient-to-r from-[var(--text-primary)] via-[var(--accent)] to-[var(--text-primary)]">SCOPELOGIC ENGINE</span>
-                <span className="text-[9px] uppercase font-semibold text-[var(--text-muted)] tracking-widest block -mt-1">NeuroSync Sovereign Suite</span>
-            </div>
+    <div className="p-6 space-y-6">
+      {/* Widget A: Bounded Interview Pipeline */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <MessageSquare size={16} style={{ color: ACCENT }} /> Bounded Interview Pipeline
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-white/10 bg-white/5" style={{ color: ACCENT }}>Round {round} / 8</span>
+            <button onClick={handleReset} className="text-[10px] font-bold text-gray-400 hover:text-white px-2 py-1 rounded border border-white/10 hover:border-white/20 transition-all">{isComplete ? '+ New Interview' : 'Reset'}</button>
+          </div>
         </div>
 
-        
-        <div className="flex bg-[var(--bg-nested)] p-1 rounded-xl border border-[var(--card-border)] items-center space-x-1" role="tablist" aria-label="Core Navigation">
-            <button id="tab-dashboard"  className="px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-white bg-[var(--accent)] shadow shadow-[var(--accent-glow)] focusable" role="tab" aria-selected="true" aria-controls="panel-dashboard">
-                <i data-lucide="layout-dashboard" className="w-4 h-4 text-white dark:text-zinc-950"></i>
-                <span>Dashboard</span>
-            </button>
-            <button id="tab-setups"  className="px-5 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center space-x-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] focusable" role="tab" aria-selected="false" aria-controls="panel-setups">
-                <i data-lucide="sliders" className="w-4 h-4"></i>
-                <span>Set-ups</span>
-            </button>
+        {/* Chat area */}
+        <div className="bg-black/30 border border-white/5 rounded-lg p-4 h-[280px] overflow-y-auto space-y-3 mb-3">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] px-3 py-2 rounded-lg text-xs leading-relaxed ${
+                m.role === 'user'
+                  ? 'bg-white/5 border border-white/10 text-white'
+                  : 'border border-cyan-500/20 bg-cyan-500/5 text-gray-300'
+              }`}>
+                <div className="text-[9px] font-mono font-bold uppercase tracking-widest mb-1" style={{ color: m.role === 'user' ? '#9ca3af' : ACCENT }}>
+                  {m.role === 'user' ? 'OPERATOR' : 'SCOPELOGIC'}
+                </div>
+                {m.text}
+              </div>
+            </div>
+          ))}
+          <div ref={scrollRef} />
         </div>
 
-        
-        <div className="flex items-center space-x-2">
-            
-            <button  className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-85 flex items-center justify-center transition-all focusable" aria-label="Toggle visual theme">
-                <i id="theme-icon" data-lucide="sun" className="w-4 h-4 text-[var(--accent)]"></i>
-            </button>
-
-            
-            <button  className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-85 flex items-center justify-center transition-all focusable" aria-label="Toggle system cognitive tags schema">
-                <i data-lucide="database" className="w-4 h-4 text-[var(--accent)]"></i>
-            </button>
-
-            
-            <button  className="w-9 h-9 rounded-lg border border-[var(--card-border)] bg-[var(--bg-nested)] hover:opacity-85 flex items-center justify-center text-[var(--accent)] focusable" aria-label="Toggle command workspace panel">
-                <i data-lucide="sidebar" className="w-5 h-5"></i>
-            </button>
+        {/* Input */}
+        <div className="flex gap-2">
+          <input
+            type="text" value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
+            disabled={isComplete}
+            placeholder={isComplete ? 'Interview complete — review proposal below' : 'Specify your requirements...'}
+            className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500/50 disabled:opacity-50"
+          />
+          <button onClick={handleSend} disabled={isComplete} className="px-3 py-2 rounded-lg text-black font-bold text-xs disabled:opacity-30 transition-all" style={{ backgroundColor: ACCENT }}>
+            <Send size={14} />
+          </button>
         </div>
-    </header>
+      </section>
 
-    
-    <aside id="suite-switcher" className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-72 bg-[var(--bg-surface-glass)] backdrop-blur-md border-r border-[var(--card-border)] z-30 transition-transform duration-300 transform -translate-x-full shadow-2xl flex flex-col">
-        <div className="p-4 border-b border-[var(--card-border)] flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                <i data-lucide="compass" className="w-4 h-4"></i>
-                <h3 className="font-bold text-xs tracking-wider uppercase">Sovereign Suite Switcher</h3>
-            </div>
-            <button  className="p-1 rounded hover:bg-zinc-800/40 text-[var(--text-muted)] hover:text-[var(--text-primary)]" aria-label="Close suite navigation">
-                <i data-lucide="x" className="w-4 h-4"></i>
-            </button>
+      {/* Widget B: Draft Proposal Status */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Container size={16} style={{ color: ACCENT }} /> Draft Proposal Status
+          </h2>
+          <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-400">Zero-Trust Staging</span>
         </div>
 
-        
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto font-medium">
-            <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="cpu" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">CoreExec (Orchestrator)</span>
+        {proposal ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-cyan-500/5 border border-cyan-500/20">
+              <CheckCircle size={18} style={{ color: ACCENT }} />
+              <div>
+                <div className="text-xs font-bold text-white">Proposal Generated — Sent to PortGrid for Visual Review</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Navigate to PortGrid to see the workflow as a visual flowchart, make edits, and approve.</div>
+              </div>
+            </div>
+            <button onClick={() => navigate('portgrid')} className="w-full px-4 py-2.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-xs font-bold flex items-center justify-center gap-2 hover:bg-cyan-500/20 transition-all" style={{ color: ACCENT }}>
+              Open in PortGrid for Review →
             </button>
+            {/* Collapsible raw JSON for technical operators */}
+            <details className="mt-2">
+              <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 transition-colors">Show raw JSON (technical view)</summary>
+              <div className="bg-black/40 border border-white/5 rounded-lg p-3 mt-2 font-mono text-[9px] text-cyan-400 max-h-[150px] overflow-y-auto">
+                <pre className="whitespace-pre-wrap">{JSON.stringify(proposal, null, 2)}</pre>
+              </div>
+            </details>
+          </div>
+        ) : (
+          <div className="bg-black/40 border border-white/5 rounded-lg p-4 font-mono text-[10px] text-gray-500 text-center">
+            Complete the interview above to generate a workflow proposal. It will be sent to PortGrid for visual review.
+          </div>
+        )}
+      </section>
 
-            <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="vault" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">BaseVault (Database)</span>
-            </button>
+      {/* Widget C: Confidence & Triage Ledger */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <AlertTriangle size={16} className="text-amber-400" /> Confidence & Triage Ledger
+        </h2>
 
-            <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="grid-3x3" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">PortGrid (Skills Hub)</span>
-            </button>
+        <div className="space-y-3">
+          {/* Consensus score */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-300 font-semibold">Multi-Model Consensus Rating</span>
+            <span className="text-sm font-mono font-bold" style={{ color: confidence.score > 90 ? '#00FF41' : confidence.score > 70 ? ACCENT : '#ef4444' }}>{confidence.score}%</span>
+          </div>
+          <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden border border-white/5">
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${confidence.score}%`, background: `linear-gradient(to right, ${ACCENT}, #00FF41)` }}></div>
+          </div>
 
-            <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="shuffle" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">RouteSwitch (Router)</span>
-            </button>
-
-            <a href="#" className="flex items-center justify-between p-3 rounded-xl bg-[var(--accent)]/10 border border-[var(--accent)] text-[var(--text-primary)] transition focusable">
-                <div className="flex items-center space-x-3">
-                    <i data-lucide="file-question" className="w-4 h-4 text-[var(--accent)]"></i>
-                    <span className="text-xs font-bold uppercase tracking-wider">ScopeLogic (Proposal)</span>
+          {/* Alerts */}
+          {confidence.alerts.length === 0 ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/5 border border-green-500/20 mt-3">
+              <CheckCircle size={14} className="text-green-400" />
+              <span className="text-[10px] text-green-400 font-bold">No behavioral assertion violations detected.</span>
+            </div>
+          ) : (
+            <div className="space-y-2 mt-3">
+              {confidence.alerts.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-red-500/5 border border-red-500/20 text-[10px] text-red-300">
+                  <AlertTriangle size={12} className="text-red-400 shrink-0" /> {a}
                 </div>
-                <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse"></span>
-            </a>
-
-            <button  className="w-full flex items-center p-3 rounded-xl hover:bg-[var(--bg-nested)] border border-transparent hover:border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition text-left focusable">
-                <i data-lucide="radar" className="w-4 h-4 mr-3"></i>
-                <span className="text-xs font-bold uppercase tracking-wider">ScoutDaemon (Predictive)</span>
-            </button>
-        </nav>
-
-        <div className="p-4 border-t border-[var(--card-border)] bg-zinc-900/20 text-[10px] text-zinc-500 flex flex-col space-y-1 font-mono">
-            <span>Sovereign Platform Framework</span>
-            <span>Design Core: Grit, Not Grime</span>
+              ))}
+            </div>
+          )}
         </div>
-    </aside>
-
-    
-    <aside id="sidebar-panel" className="fixed right-0 top-16 h-[calc(100vh-4rem)] w-80 bg-[var(--bg-surface-glass)] backdrop-blur-md border-l border-[var(--card-border)] z-30 transition-transform duration-300 transform translate-x-0 shadow-2xl flex flex-col">
-        
-        <div className="p-4 border-b border-[var(--card-border)] flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                <i data-lucide="folder-search" className="w-4 h-4"></i>
-                <h3 className="font-bold text-sm tracking-wider uppercase">Project Target Workspace</h3>
-            </div>
-            <button  className="p-1 rounded hover:bg-zinc-800/40 text-[var(--text-muted)] hover:text-white" aria-label="Close panel">
-                <i data-lucide="x" className="w-4 h-4"></i>
-            </button>
-        </div>
-
-        
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
-            
-            <div className="space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase block">Project Database Workspace</label>
-                <div className="relative">
-                    <select id="project-selector"  className="w-full bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] appearance-none focusable">
-                        <option value="alex-workspace">Alex (Freelance Creator Silo)</option>
-                        <option value="sam-workspace">Sam (Hobbyist Developer Silo)</option>
-                        <option value="custom-workspace">Add New Custom Silo...</option>
-                    </select>
-                    <i data-lucide="chevron-down" className="w-4 h-4 text-[var(--accent)] absolute right-3 top-3 pointer-events-none"></i>
-                </div>
-            </div>
-
-            
-            <div className="bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg p-3 space-y-3">
-                <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[var(--accent)] uppercase tracking-wider flex items-center space-x-1">
-                        <i data-lucide="database-backup" className="w-3 h-3"></i>
-                        <span>SQLite WAL Persistence</span>
-                    </span>
-                    <span className="px-1.5 py-0.5 bg-green-500/10 text-green-400 rounded text-[9px] uppercase font-bold tracking-widest border border-green-500/20 animate-pulse">Synchronous</span>
-                </div>
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed font-medium">
-                    State storage backed strictly by relational tables to prevent context window explosion.
-                </p>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                    <button  className="bg-[var(--bg-surface)] hover:opacity-90 border border-[var(--card-border)] py-1.5 px-2 rounded-md text-[11px] font-bold hover:border-[var(--accent)]/50 flex items-center justify-center space-x-1.5 text-[var(--accent)] focusable">
-                        <i data-lucide="download" className="w-3 h-3"></i>
-                        <span>Backup DB</span>
-                    </button>
-                    <button  className="bg-[var(--bg-surface)] hover:opacity-90 border border-[var(--card-border)] py-1.5 px-2 rounded-md text-[11px] font-bold hover:border-[var(--accent)]/50 flex items-center justify-center space-x-1.5 text-[var(--accent)] focusable">
-                        <i data-lucide="upload" className="w-3 h-3"></i>
-                        <span>Restore DB</span>
-                    </button>
-                </div>
-            </div>
-
-            
-            <div className="bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg p-3 space-y-3">
-                <span className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider flex items-center space-x-1.5">
-                    <i data-lucide="chart-spline" className="w-3.5 h-3.5 text-[var(--accent)]"></i>
-                    <span>ScopeLogic Telemetry</span>
-                </span>
-                <p className="text-[11px] text-[var(--text-muted)] leading-relaxed font-medium">
-                    Real-time metrics tracking requirements extraction ELO benchmarks.
-                </p>
-                <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                        <span>Syntactic Grammar Adherence</span>
-                        <span className="text-green-500 font-bold">100%</span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                        <span>Average Interview Cycles</span>
-                        <span className="text-[var(--accent)] font-bold">5.4 rounds</span>
-                    </div>
-                </div>
-            </div>
-
-            
-            <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-[var(--text-muted)] tracking-wider uppercase">ScopeLogic Activity Log</label>
-                    <button  className="text-[10px] text-[var(--accent)] hover:underline font-bold">Clear</button>
-                </div>
-                <div id="pino-logger" className="w-full h-44 bg-zinc-950 border border-[var(--card-border)] rounded-lg p-2 font-mono text-[9px] text-zinc-300 overflow-y-auto space-y-1">
-                    <div className="text-zinc-500">INIT: ScopeLogic requirements parser loaded...</div>
-                    <div className="text-zinc-500">INIT: Grammar Constraint Engine (XGrammar) active...</div>
-                    <div className="text-[var(--accent)]">AUDIT: Scoped Workspace locked to project silo: alex-workspace</div>
-                </div>
-            </div>
-        </div>
-
-        
-        <div className="p-3 border-t border-[var(--card-border)] bg-zinc-900/40 text-[10px] text-zinc-500 font-mono text-center">
-            System ELO Rank: <span className="text-[var(--accent)] font-bold">3,533 edges</span> | v1.0-Beta
-        </div>
-    </aside>
-
-    
-    <div className="flex-1 flex pt-16 relative overflow-hidden">
-        <main className="flex-1 flex flex-col md:flex-row transition-all duration-300 p-6 space-y-6 md:space-y-0 md:space-x-6 min-h-[calc(100vh-4rem)] mr-0" id="main-content-layout">
-
-            
-            <div id="panel-dashboard" className="flex-1 flex flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6 w-full" role="tabpanel" aria-labelledby="tab-dashboard">
-                
-                
-                <div className="flex-1 bg-[var(--bg-surface-glass)] border border-[var(--card-border)] backdrop-blur-md rounded-2xl p-5 shadow-xl flex flex-col relative overflow-hidden transition-colors duration-300">
-                    
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at top, var(--grid-color) 0%, transparent 75%)" }}></div>
-                    
-                    <div className="relative z-10 flex flex-col h-full space-y-6">
-                        
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[var(--card-border)] pb-3 gap-3">
-                            <div>
-                                <h1 className="text-xl font-black tracking-wide">ScopeLogic Interview & Synthesis Room</h1>
-                                <p className="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Gather requirements via bounded interview loops, filter hallucinations using multi-model consensus, and compile draft-only workflow DAG configurations.</p>
-                            </div>
-                            
-                            <button  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] via-cyan-600 to-sky-600 hover:opacity-95 text-white dark:text-zinc-950 dark:font-extrabold text-sm font-bold flex items-center justify-center space-x-2 transition-all shadow-lg shadow-[var(--accent-glow)] focusable">
-                                <i data-lucide="refresh-cw" className="w-4 h-4 text-white dark:text-zinc-950"></i>
-                                <span>Restart Loop</span>
-                            </button>
-                        </div>
-
-                        
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1">
-                            
-                            
-                            <div className="glow-card rounded-2xl p-4 flex flex-col h-[400px]">
-                                <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-2 mb-3">
-                                    <span className="text-xs font-bold text-[var(--accent)] flex items-center space-x-1.5">
-                                        <i data-lucide="message-square-quote" className="w-4 h-4"></i>
-                                        <span>Bounded Interview (Max 8 rounds)</span>
-                                    </span>
-                                    <span id="interview-round" className="px-2 py-0.5 bg-[var(--bg-nested)] text-[var(--accent)] rounded text-[10px] font-mono font-black border border-[var(--accent)]/20">Round 1 / 8</span>
-                                </div>
-
-                                
-                                <div id="interview-scroller" className="flex-1 overflow-y-auto space-y-3 p-1 text-xs">
-                                    <div className="bg-[var(--bg-nested)] border border-[var(--card-border)] p-3 rounded-xl max-w-[90%] leading-relaxed">
-                                        <span className="font-bold text-[10px] text-[var(--accent)] block mb-1 uppercase tracking-wider">ScopeLogic:</span>
-                                        Welcome, Billie. Let us define your transactional workflow parameters. What is the primary objective of the workflow DAG we are building?
-                                    </div>
-                                </div>
-
-                                
-                                <div className="mt-3 pt-2 border-t border-[var(--card-border)] flex items-center space-x-2">
-                                    <input id="interview-input" type="text" placeholder="Specify your requirements..." className="flex-1 bg-[var(--bg-surface)] border border-[var(--card-border)] text-xs rounded-xl px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"  />
-                                    <button  className="p-2 bg-[var(--accent)] text-white dark:text-zinc-950 hover:opacity-90 rounded-xl transition focusable" aria-label="Send answer">
-                                        <i data-lucide="arrow-right" className="w-4 h-4"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-                            
-                            <div className="glow-card rounded-2xl p-4 flex flex-col h-[400px] relative">
-                                <div className="absolute inset-0 bg-red-500/[0.02] dark:bg-red-500/[0.01] pointer-events-none rounded-2xl"></div>
-                                <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-2 mb-3 z-10 relative">
-                                    <span className="text-xs font-bold text-[var(--accent)] flex items-center space-x-1.5">
-                                        <i data-lucide="container" className="w-4 h-4"></i>
-                                        <span>Draft-Only Proposal Boundary (Quarantined)</span>
-                                    </span>
-                                    <span className="px-2 py-0.5 bg-red-500/10 text-red-500 rounded text-[9px] font-black uppercase tracking-widest border border-red-500/20">Quarantined</span>
-                                </div>
-
-                                
-                                <div className="flex-1 bg-zinc-950 border border-[var(--card-border)] p-3 rounded-xl font-mono text-[10px] text-cyan-400 overflow-y-auto leading-relaxed select-text relative z-10">
-                                    <pre id="compiled-dag-output">
-{`{
-  "status": "Awaiting Requirements...",
-  "instructions": "Answer questions in the interview loop on the left to compile the workflow DAG blueprint by construction."
-}`}
-                                    </pre>
-                                </div>
-
-                                
-                                <div className="mt-3 pt-2 border-t border-[var(--card-border)] flex gap-2 relative z-10">
-                                    <button  id="btn-approve" disabled className="flex-1 bg-green-600 hover:bg-green-700 text-white disabled:opacity-30 disabled:pointer-events-none py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 focusable">
-                                        <i data-lucide="check-circle" className="w-4 h-4"></i>
-                                        <span>Approve & Write</span>
-                                    </button>
-                                    <button  id="btn-reject" disabled className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 disabled:opacity-30 disabled:pointer-events-none py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 focusable">
-                                        <i data-lucide="ban" className="w-4 h-4"></i>
-                                        <span>Reject Proposal</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-
-                
-                <div className="w-full lg:w-96 flex flex-col space-y-6">
-                    
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="AI Jury Consensus Matrix">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="scale" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">AI Jury Consensus</h3>
-                            </div>
-                            <button  className="text-[10px] text-[var(--accent)] hover:underline flex items-center space-x-1 font-bold focusable">
-                                <i data-lucide="refresh-cw" className="w-3 h-3 animate-spin"></i>
-                                <span>Re-audit</span>
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            
-                            <div className="space-y-1">
-                                <div className="flex justify-between text-xs font-semibold">
-                                    <span>Consensus Rating</span>
-                                    <span id="consensus-pct" className="text-green-500 font-bold">98.4% (Gold)</span>
-                                </div>
-                                <div className="w-full h-2 bg-zinc-800/80 rounded-full overflow-hidden border border-[var(--card-border)]">
-                                    <div id="consensus-progress" className="h-full bg-gradient-to-r from-[var(--accent)] to-teal-500 rounded-full transition-all duration-300" style={{ width: '98%' }}></div>
-                                </div>
-                            </div>
-
-                            
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-[11px] items-center p-1.5 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg">
-                                    <span className="font-semibold">Qwen-2.5-72B-Free</span>
-                                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 text-[9px] rounded font-bold border border-green-500/20">AGREED</span>
-                                </div>
-                                <div className="flex justify-between text-[11px] items-center p-1.5 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg">
-                                    <span className="font-semibold">Llama-3-70B-Free</span>
-                                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 text-[9px] rounded font-bold border border-green-500/20">AGREED</span>
-                                </div>
-                                <div className="flex justify-between text-[11px] items-center p-1.5 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-lg">
-                                    <span className="font-semibold">Phi-3-Medium-Free</span>
-                                    <span className="px-2 py-0.5 bg-green-500/10 text-green-400 text-[9px] rounded font-bold border border-green-500/20">AGREED</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Grammar-Constrained Telemetry">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="binary" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">Grammar-Constrained Telemetry</h3>
-                            </div>
-                            <span className="text-[9px] font-mono text-zinc-500 font-bold">XGrammar Active</span>
-                        </div>
-
-                        <div className="space-y-4">
-                            
-                            <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                                <div className="bg-[var(--bg-nested)] p-2 rounded-xl border border-[var(--card-border)]">
-                                    <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Token Savings</span>
-                                    <span className="text-sm font-bold text-[var(--accent)] font-mono">14,200 (23%)</span>
-                                </div>
-                                <div className="bg-[var(--bg-nested)] p-2 rounded-xl border border-[var(--card-border)]">
-                                    <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Parse Validity</span>
-                                    <span className="text-sm font-bold text-green-500 font-mono">100% PERFECT</span>
-                                </div>
-                            </div>
-
-                            
-                            <div className="bg-zinc-950 border border-[var(--card-border)] p-2.5 rounded-xl font-mono text-[9px] text-cyan-400 h-24 overflow-y-auto space-y-1">
-                                <div className="opacity-80">[Parser] State Transition: T_OBJECT_OPEN -&gt; KEY('nodes')</div>
-                                <div className="opacity-80">[Parser] Match strict regex pattern structure...</div>
-                                <div className="opacity-100 text-[var(--accent)]">[Masking Engine] Zeroed probabilities of all non-conforming JSON tokens</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Free Mode Governor">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="wallet" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">Free Mode Governor</h3>
-                            </div>
-                            <span className="px-1.5 py-0.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded text-[9px] uppercase font-bold tracking-widest border border-[var(--accent)]/20">Zero Spending</span>
-                        </div>
-
-                        <div className="space-y-4">
-                            
-                            <div className="space-y-1">
-                                <div className="flex justify-between text-xs font-semibold">
-                                    <span>Daily Quota Burn</span>
-                                    <span id="quota-value" className="text-[var(--accent)] font-bold">12,500 / 50,000 Tokens</span>
-                                </div>
-                                <div className="w-full h-2 bg-zinc-800/80 rounded-full overflow-hidden border border-[var(--card-border)]">
-                                    <div id="quota-progress" className="h-full bg-gradient-to-r from-[var(--accent)] to-amber-600 rounded-full transition-all duration-300" style={{ width: '25%' }}></div>
-                                </div>
-                            </div>
-
-                            
-                            <div className="space-y-1">
-                                <div className="flex justify-between text-[11px] text-[var(--text-muted)] font-medium">
-                                    <label htmlFor="quota-slider">Adjust Daily Cap (tokens)</label>
-                                    <span id="cap-display">50,000 cap</span>
-                                </div>
-                                <input type="range" id="quota-slider" min="10000" max="100000" step="5000" value="50000" onInput={() => {}} className="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
-                            </div>
-
-                            
-                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[var(--card-border)] text-center font-medium">
-                                <div className="bg-[var(--bg-nested)] p-2 rounded-lg border border-[var(--card-border)]">
-                                    <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Forecast Status</span>
-                                    <span className="text-xs font-bold text-green-500 uppercase">SAFE TO RUN</span>
-                                </div>
-                                <div className="bg-[var(--bg-nested)] p-2 rounded-lg border border-[var(--card-border)]">
-                                    <span className="text-[9px] text-[var(--text-muted)] font-bold uppercase block">Daily calls used</span>
-                                    <span id="calls-count-dashboard" className="text-xs font-bold text-[var(--accent)] font-mono">22 calls</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            
-            <div id="panel-setups" className="flex-1 hidden flex-col lg:flex-row space-y-6 lg:space-y-0 lg:space-x-6 w-full" role="tabpanel" aria-labelledby="tab-setups">
-                
-                
-                <div className="flex-1 bg-[var(--bg-surface-glass)] border border-[var(--card-border)] backdrop-blur-md rounded-2xl p-5 shadow-xl flex flex-col relative overflow-hidden transition-colors duration-300">
-                    <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(circle at top, var(--grid-color) 0%, transparent 75%)" }}></div>
-
-                    <div className="relative z-10 flex flex-col h-full space-y-4">
-                        
-                        <div className="border-b border-[var(--card-border)] pb-3">
-                            <h1 className="text-xl font-black tracking-wide">ScopeLogic Engine Set-ups</h1>
-                            <p className="text-xs text-[var(--text-muted)] mt-0.5 font-medium">Control requirements gathering loops, model consensus juries, and strict outlines grammar schema structures.</p>
-                        </div>
-
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                            
-                            
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
-                                    <i data-lucide="message-square" className="w-4 h-4"></i>
-                                    <span>Bounded Interview Specifications</span>
-                                </h3>
-
-                                <div className="space-y-3 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
-                                    
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-xs font-semibold">
-                                            <span className="text-[var(--text-muted)]">Maximum Interview Rounds</span>
-                                            <span id="rounds-display" className="font-black text-[var(--accent)]">8 rounds (Strict limit)</span>
-                                        </div>
-                                        <input type="range" min="3" max="15" value="8" onInput={() => {}} className="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
-                                    </div>
-                                    
-                                    <div className="space-y-1">
-                                        <label htmlFor="rigour-select" className="text-xs font-bold text-[var(--text-muted)]">Rigor Level</label>
-                                        <select id="rigour-select" className="w-full bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)] focusable">
-                                            <option value="high">High Reasoning (Continuous multi-model cross reference)</option>
-                                            <option value="standard">Standard (Saves token budget)</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
-                                    <i data-lucide="gavel" className="w-4 h-4"></i>
-                                    <span>AI Jury & Consensus Thresholds</span>
-                                </h3>
-
-                                <div className="space-y-3 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
-                                    
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-xs font-semibold">
-                                            <span className="text-[var(--text-muted)]">Minimum Consensus Match</span>
-                                            <span id="consensus-threshold-display" className="font-black text-[var(--accent)]">95% (Gold level)</span>
-                                        </div>
-                                        <input type="range" min="60" max="100" value="95" onInput={() => {}} className="w-full h-1 bg-[var(--card-border)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]" />
-                                    </div>
-                                    
-                                    <div className="space-y-1 text-xs">
-                                        <span className="font-bold text-[var(--text-muted)] block mb-1">Jury Members:</span>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <label className="flex items-center space-x-1.5">
-                                                <input type="checkbox" checked className="rounded accent-[var(--accent)]" />
-                                                <span>Llama 3 70B</span>
-                                            </label>
-                                            <label className="flex items-center space-x-1.5">
-                                                <input type="checkbox" checked className="rounded accent-[var(--accent)]" />
-                                                <span>Qwen 2.5 72B</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            
-                            <div className="space-y-4 md:col-span-2">
-                                <h3 className="text-sm font-black text-[var(--accent)] flex items-center space-x-2">
-                                    <i data-lucide="binary" className="w-4 h-4"></i>
-                                    <span>Grammar Masking & Compiling Rules</span>
-                                </h3>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-[var(--bg-nested)] border border-[var(--card-border)] rounded-xl p-4">
-                                    <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
-                                        <div>
-                                            <span className="text-xs font-bold block">Logic Masking</span>
-                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Guarantee structured JSON</span>
-                                        </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
-                                    </div>
-                                    <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
-                                        <div>
-                                            <span className="text-xs font-bold block">Strict Typings</span>
-                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Reject flexible schema fields</span>
-                                        </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
-                                    </div>
-                                    <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] border border-[var(--card-border)]">
-                                        <div>
-                                            <span className="text-xs font-bold block">Pre-Compile Checks</span>
-                                            <span className="text-[9px] text-[var(--text-muted)] font-semibold block">Verify acyclic DAG bounds</span>
-                                        </div>
-                                        <input type="checkbox" checked className="w-4 h-4 text-[var(--accent)] bg-zinc-800 border-zinc-700 rounded focus:ring-[var(--accent)]" />
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        
-                        <div className="flex justify-end space-x-3 pt-6 border-t border-[var(--card-border)] mt-auto">
-                            <button  className="px-5 py-2 rounded-xl bg-[var(--bg-nested)] hover:opacity-90 text-sm font-bold border border-[var(--card-border)] transition focusable">Reset Defaults</button>
-                            <button  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[var(--accent)] to-sky-600 hover:opacity-90 text-white dark:text-zinc-950 font-black text-sm transition shadow-lg shadow-[var(--accent-glow)] focusable">Apply Configurations</button>
-                        </div>
-
-                    </div>
-                </div>
-
-                
-                <div className="w-full lg:w-96 flex flex-col space-y-6">
-                    
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Safety Assertions Status">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="shield-check" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">Category A Guardrails</h3>
-                            </div>
-                            <span className="text-[10px] text-green-500 font-bold uppercase tracking-wider font-mono">ENFORCED</span>
-                        </div>
-
-                        
-                        <div className="space-y-3 text-xs">
-                            <div className="flex items-start space-x-2 border-b border-[var(--card-border)] pb-2">
-                                <i data-lucide="check-circle-2" className="w-4 h-4 text-green-500 mt-0.5"></i>
-                                <div>
-                                    <span className="font-bold block text-[var(--text-primary)]">SA-01: Explanations SQL Block</span>
-                                    <p className="text-[11px] text-[var(--text-muted)] font-medium">No INSERT/UPDATE queries permitted in explanation paths.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-2 border-b border-[var(--card-border)] pb-2">
-                                <i data-lucide="check-circle-2" className="w-4 h-4 text-green-500 mt-0.5"></i>
-                                <div>
-                                    <span className="font-bold block text-[var(--text-primary)]">SA-02: Executive Code Quarantine</span>
-                                    <p className="text-[11px] text-[var(--text-muted)] font-medium">Strictly forbids raw bash, sh, or python compilation blocks.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start space-x-2">
-                                <i data-lucide="check-circle-2" className="w-4 h-4 text-green-500 mt-0.5"></i>
-                                <div>
-                                    <span className="font-bold block text-[var(--text-primary)]">SA-04: Node Category Sanity</span>
-                                    <p className="text-[11px] text-[var(--text-muted)] font-medium">Workflows forbidden from adding shell, exec, or eval nodes.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    
-                    <div className="glow-card rounded-2xl p-5 relative overflow-hidden transition-colors duration-300" role="region" aria-label="Workflow Quarantine Rules">
-                        <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                            <div className="flex items-center space-x-2 text-[var(--accent)]">
-                                <i data-lucide="shield-alert" className="w-4 h-4"></i>
-                                <h3 className="font-bold text-xs tracking-wider uppercase">Quarantine Invariants</h3>
-                            </div>
-                            <span className="text-[9px] font-mono text-zinc-500 font-bold">Assume Breach</span>
-                        </div>
-
-                        
-                        <div className="space-y-2 text-xs">
-                            <div className="flex justify-between p-2 rounded bg-[var(--accent)]/5 border border-[var(--accent)]/20">
-                                <span className="font-bold">Proposals strictly Draft-Only</span>
-                                <i data-lucide="lock" className="w-3.5 h-3.5 text-[var(--accent)]"></i>
-                            </div>
-                            <div className="flex justify-between p-2 rounded bg-[var(--bg-nested)] border border-[var(--card-border)] text-zinc-400">
-                                <span className="font-bold">0 Authority to mutate file states</span>
-                                <i data-lucide="lock" className="w-3.5 h-3.5 text-zinc-400"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-        </main>
+      </section>
     </div>
+  );
+}
 
-    
-    <footer className="w-full h-8 bg-zinc-950 border-t border-[var(--card-border)] px-4 flex items-center justify-between text-[10px] text-zinc-500 font-mono z-25 relative transition-colors duration-300">
-        <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-1.5">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                <span className="font-bold text-green-400 uppercase">Hono Daemon Online</span>
+// ─── Set-up View ────────────────────────────────────────────────────────────
+function SetupView() {
+  const [grammarEnabled, setGrammarEnabled] = useState(true);
+  const [rationaleFirst, setRationaleFirst] = useState(true);
+  const [thinkingTokens, setThinkingTokens] = useState(false);
+  const [maxDisagreement, setMaxDisagreement] = useState(0.25);
+  const [highStakesThreshold, setHighStakesThreshold] = useState(70);
+  const [saving, setSaving] = useState(false);
+
+  // Safety assertions (locked vs toggleable)
+  const [assertions, setAssertions] = useState({
+    'SA-01': { label: 'Explanations SQL Block', locked: true, enabled: true },
+    'SA-02': { label: 'Executive Code Quarantine', locked: true, enabled: true },
+    'SA-04': { label: 'Node Category Sanity (no shell/exec)', locked: true, enabled: true },
+    'SA-06': { label: 'No Self-Modification', locked: true, enabled: true },
+    'SI-01': { label: 'Output shape validity (JSON)', locked: false, enabled: true },
+    'SI-03': { label: 'Explanation non-empty', locked: false, enabled: true },
+    'SI-05': { label: 'Confidence above minimum', locked: false, enabled: true },
+    'QR-01': { label: 'Reasoning key present', locked: false, enabled: true },
+  });
+
+  // Load settings
+  useEffect(() => {
+    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+      if (d.success && d.settings) {
+        if (d.settings.grammar_constrained !== undefined) setGrammarEnabled(d.settings.grammar_constrained === 'true' || d.settings.grammar_constrained === true);
+        if (d.settings.max_disagreement) setMaxDisagreement(Number(d.settings.max_disagreement));
+        if (d.settings.high_stakes_threshold) setHighStakesThreshold(Number(d.settings.high_stakes_threshold));
+      }
+    }).catch(() => {});
+  }, []);
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API}/api/system/settings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grammar_constrained: grammarEnabled, rationale_first: rationaleFirst, thinking_tokens: thinkingTokens, max_disagreement: maxDisagreement, high_stakes_threshold: highStakesThreshold })
+      });
+    } catch {}
+    setSaving(false);
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Control A: Grammar-Constrained Decoding */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Binary size={16} style={{ color: ACCENT }} /> Grammar-Constrained Decoding
+        </h2>
+        <p className="text-xs text-gray-400 mb-4">Enforce strict syntactic output shapes. Rationale-First injection forces the model to reason before syntax clamps down.</p>
+
+        <div className="space-y-3">
+          <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
+            <div><span className="text-xs font-bold text-white block">GBNF Grammar Enforcement</span><span className="text-[10px] text-gray-500">Force valid JSON output via logit masking</span></div>
+            <input type="checkbox" checked={grammarEnabled} onChange={e => setGrammarEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+          </label>
+          <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
+            <div><span className="text-xs font-bold text-white block">Rationale-First Schema Injection</span><span className="text-[10px] text-gray-500">Force "reasoning" as first JSON key before strict syntax</span></div>
+            <input type="checkbox" checked={rationaleFirst} onChange={e => setRationaleFirst(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+          </label>
+          <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
+            <div><span className="text-xs font-bold text-white block">Suppress Thinking Tokens</span><span className="text-[10px] text-gray-500">Pass enable_thinking=False to prevent proprietary token crashes</span></div>
+            <input type="checkbox" checked={thinkingTokens} onChange={e => setThinkingTokens(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+          </label>
+        </div>
+      </section>
+
+      {/* Control B: System Prompt Governance */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <FileText size={16} style={{ color: ACCENT }} /> System Prompt Governance & Versioning
+        </h2>
+        <p className="text-xs text-gray-400 mb-4">Changes to base system instructions auto-increment the prompt version. Safety modifications trigger CI regression gates.</p>
+
+        <div className="bg-black/30 border border-white/5 rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-300 font-bold">Current Prompt Version</span>
+            <span className="text-sm font-mono font-bold" style={{ color: ACCENT }}>v3.2.1</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-300 font-bold">Last Modified</span>
+            <span className="text-[10px] font-mono text-gray-500">2026-06-24 14:32:00</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-300 font-bold">Safety Gate Status</span>
+            <span className="text-[10px] font-mono text-green-400 font-bold">PASSING (398 tests)</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Control C: Multi-Model Consensus Tuning */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Users size={16} style={{ color: ACCENT }} /> Multi-Model Consensus (Council Mode)
+        </h2>
+        <p className="text-xs text-gray-400 mb-4">Configure when ScopeLogic dispatches to parallel expert models for verification.</p>
+
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-gray-300 font-bold">High-Stakes Threshold (triggers Council)</span>
+              <span className="font-mono font-bold" style={{ color: ACCENT }}>{highStakesThreshold}%</span>
             </div>
-            <span>|</span>
-            <span>Port: <strong className="text-[var(--accent)]">127.0.0.1:4096</strong></span>
-            <span>|</span>
-            <span>Database: <strong className="text-[var(--accent)]">BaseVault.db</strong></span>
-        </div>
-        <div className="flex items-center space-x-4">
-            <span>Verified Confidence Metrics: <strong className="text-green-400 font-bold">398 Tests Pass</strong></span>
-            <span>|</span>
-            <span>Supply Chain: <strong className="text-green-400 font-bold">CycloneDX Compliant</strong></span>
-        </div>
-    </footer>
+            <input type="range" min={50} max={100} value={highStakesThreshold} onChange={e => setHighStakesThreshold(+e.target.value)} className="w-full h-2 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
+            <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-1"><span>50% (Aggressive)</span><span>100% (Never)</span></div>
+          </div>
 
-    
-    <div id="chat-sentinel" className="fixed bottom-12 right-6 z-50 flex flex-col items-end">
-        
-        
-        <button  className="w-12 h-12 rounded-full bg-gradient-to-tr from-[var(--accent)] to-sky-600 text-white dark:text-zinc-950 flex items-center justify-center shadow-lg shadow-[var(--accent-glow)] hover:scale-105 transform transition duration-200 focusable" aria-label="Toggle Cerebro chatbot assistant">
-            <i data-lucide="bot-message-square" className="w-6 h-6"></i>
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="text-gray-300 font-bold">Max Disagreement Score (auto-halt)</span>
+              <span className="font-mono font-bold" style={{ color: ACCENT }}>{maxDisagreement.toFixed(2)}</span>
+            </div>
+            <input type="range" min={0.1} max={0.8} step={0.05} value={maxDisagreement} onChange={e => setMaxDisagreement(+e.target.value)} className="w-full h-2 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
+            <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-1"><span>0.10 (Strict)</span><span>0.80 (Permissive)</span></div>
+          </div>
+        </div>
+      </section>
+
+      {/* Control D: Behavioral Assertion Framework */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Shield size={16} className="text-amber-400" /> Behavioral Assertion Framework
+        </h2>
+        <p className="text-xs text-gray-400 mb-4">Toggle validation rules. Critical safety assertions (SA-*) are locked mandatory. Quality regressions (SI-*, QR-*) are toggleable.</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {Object.entries(assertions).map(([code, rule]) => (
+            <label key={code} className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+              rule.locked ? 'bg-green-500/5 border-green-500/20' : 'bg-white/[0.02] border-white/5 hover:border-white/10'
+            }`}>
+              <div className="flex items-center gap-2">
+                {rule.locked ? <Shield size={12} className="text-green-400" /> : <CheckCircle size={12} className="text-gray-500" />}
+                <div>
+                  <span className="text-[10px] font-mono font-bold" style={{ color: rule.locked ? '#22c55e' : '#9ca3af' }}>{code}</span>
+                  <span className="text-[10px] text-gray-400 ml-2">{rule.label}</span>
+                </div>
+              </div>
+              <input
+                type="checkbox" checked={rule.enabled}
+                disabled={rule.locked}
+                onChange={e => setAssertions(prev => ({ ...prev, [code]: { ...prev[code as keyof typeof prev], enabled: e.target.checked } }))}
+                className="w-3.5 h-3.5 rounded disabled:opacity-50" style={{ accentColor: ACCENT }}
+              />
+            </label>
+          ))}
+        </div>
+      </section>
+
+      {/* Save */}
+      <div className="flex justify-end">
+        <button onClick={saveSettings} disabled={saving} className="px-6 py-2.5 rounded-lg text-black font-bold text-sm transition-all shadow-lg hover:shadow-xl disabled:opacity-50" style={{ backgroundColor: ACCENT }}>
+          {saving ? 'Saving...' : 'Commit Configuration'}
         </button>
-
-        
-        <div id="chat-box" className="w-80 h-96 bg-[var(--bg-surface-glass)] backdrop-blur-md border border-[var(--card-border)] rounded-2xl shadow-2xl mt-3 hidden flex-col overflow-hidden transition-all duration-300">
-            
-            <div className="bg-gradient-to-r from-zinc-950 to-cyan-950 p-3 flex items-center justify-between border-b border-[var(--card-border)]">
-                <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-green-400"></span>
-                    <span className="text-xs font-bold tracking-wide uppercase text-white">Cerebro Assist Sentinel</span>
-                </div>
-                <button  className="text-zinc-400 hover:text-white" aria-label="Minimize chatbot">
-                    <i data-lucide="minus" className="w-4 h-4"></i>
-                </button>
-            </div>
-
-            
-            <div id="chat-conversation" className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
-                <div className="bg-[var(--terminal-bg)] text-[var(--terminal-text)] border border-[var(--accent)]/20 p-2.5 rounded-xl rounded-tl-none self-start max-w-[85%] leading-relaxed">
-                    <span className="font-black text-[10px] text-[var(--accent)] block mb-1">CEREBRO SENTINEL:</span>
-                    Welcome, Billie. Let us synthesize and map your local cognitive topology. Ask me anything about ScopeLogic requirements, mock juries, or grammar-masking bounds.
-                </div>
-            </div>
-
-            
-            <div className="p-2 border-t border-[var(--card-border)] bg-zinc-950/50 flex items-center space-x-1">
-                <input id="chat-input-field" type="text" placeholder="Query our local cognitive nexus..." className="flex-1 bg-[var(--bg-surface)] border border-[var(--card-border)] text-xs rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"  />
-                <button  className="p-2 bg-[var(--accent)] text-white dark:text-zinc-950 hover:opacity-90 rounded-lg transition focusable" aria-label="Send query">
-                    <i data-lucide="send" className="w-3.5 h-3.5"></i>
-                </button>
-            </div>
-        </div>
+      </div>
     </div>
+  );
+}
 
-    
-    <div id="alert-toast" className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-[var(--bg-surface-glass)] backdrop-blur-md border border-[var(--card-border)] p-4 rounded-xl shadow-2xl transition-all duration-300 pointer-events-none opacity-0 flex items-center space-x-3 max-w-sm">
-        <div id="alert-icon-wrapper" className="w-8 h-8 rounded-full flex items-center justify-center"></div>
-        <div className="flex-1">
-            <span id="alert-title" className="font-bold text-xs block text-[var(--accent)] uppercase tracking-wider"></span>
-            <p id="alert-body" className="text-[11px] text-[var(--text-muted)] mt-0.5 font-bold"></p>
-        </div>
-    </div>
+// ─── Main Export ─────────────────────────────────────────────────────────────
+export function ScopeLogicDashboard() {
+  const [activeView, setActiveView] = useState<'dashboard' | 'setups'>('dashboard');
 
-    
-    <div id="meta-explorer" className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center hidden p-6">
-        <div className="w-full max-w-2xl bg-[var(--bg-surface)] border border-[var(--card-border)] rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
-            <div className="flex items-center justify-between border-b border-[var(--card-border)] pb-3 mb-4">
-                <div className="flex items-center space-x-2 text-[var(--accent)]">
-                    <i data-lucide="database" className="w-5 h-5"></i>
-                    <h2 className="font-bold text-lg">System Cognitive Metadata Mapping</h2>
-                </div>
-                <button  className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500 hover:text-white" aria-label="Close schema view">
-                    <i data-lucide="x" className="w-5 h-5"></i>
-                </button>
-            </div>
-            
-            <p className="text-xs text-[var(--text-muted)] mb-4 font-semibold">
-                Below is the verified programmatical list of system cognitive structures parsed directly from our active <code className="bg-[var(--bg-nested)] border border-[var(--card-border)] px-1 rounded">&lt;meta&gt;</code> Tags.
-            </p>
-
-            <div id="meta-tag-list" className="flex-1 overflow-y-auto space-y-3 font-mono text-[11px] pr-2">
-                
-            </div>
-            
-            <div className="mt-4 pt-3 border-t border-[var(--card-border)] flex justify-end">
-                <button  className="bg-[var(--accent)] text-white dark:text-zinc-950 px-4 py-2 rounded-xl text-xs font-bold focusable">
-                    Return to cockpit
-                </button>
-            </div>
-        </div>
-    </div>
-
-    
-    
-
-    </>
+  return (
+    <AppShell
+      moduleId="scopelogic"
+      moduleName="ScopeLogic"
+      moduleLogo="/SCOPELOGICLogo.png"
+      accentColor={ACCENT}
+      activeView={activeView}
+      onViewChange={setActiveView}
+    >
+      {activeView === 'dashboard' ? <DashboardView /> : <SetupView />}
+    </AppShell>
   );
 }

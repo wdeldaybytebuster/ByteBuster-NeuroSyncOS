@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, Clock, Layers } from 'lucide-react';
 
 export function IntentPreview({ logs, onClose }: { logs: any[], onClose: () => void }) {
   // Aggregate logs into a unique list of tasks to show the DAG history (Test-Fix-Retest steps).
@@ -13,21 +13,25 @@ export function IntentPreview({ logs, onClose }: { logs: any[], onClose: () => v
   const taskList = Array.from(tasks.values());
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
-      <div className="bg-gunmetal/90 border border-white/10 rounded-2xl w-[600px] max-w-[95vw] max-h-[85vh] flex flex-col shadow-[0_0_40px_rgba(0,0,0,0.8)] overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/80 backdrop-blur-md animate-fade-in">
+      <div className="glass-panel w-full max-w-3xl max-h-[85vh] flex flex-col p-6 rounded-xl border border-[var(--color-glass-border)] shadow-2xl relative overflow-hidden" style={{
+        background: 'var(--color-gunmetal)',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+      }}>
         
         {/* Header */}
-        <div className="flex justify-between items-center px-6 py-4 border-b border-white/5 bg-white/5">
-          <h2 className="text-lg font-heading font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 flex items-center gap-2">
-            Decision Node Audit
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 rounded-full p-1.5">
+        <div className="flex items-center justify-between border-b border-[var(--color-glass-border)] pb-4 mb-4">
+          <div className="flex items-center gap-3">
+            <Layers className="text-core-exec" size={24} />
+            <h2 className="text-xl font-bold text-gray-100">Intent Execution Plan</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-100 transition-colors bg-gray-800 hover:bg-gray-700 rounded-full p-1.5">
             <X size={18} />
           </button>
         </div>
         
         {/* Body */}
-        <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+        <div className="overflow-y-auto flex-1 custom-scrollbar">
           {taskList.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-gray-500 gap-3">
               <Clock size={32} className="opacity-50" />

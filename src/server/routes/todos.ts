@@ -47,3 +47,38 @@ todosRouter.post('/resolve', async (c) => {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
+
+// Promote a ScoutDaemon discovery to the PortGrid HITL approval queue
+todosRouter.post('/promote', async (c) => {
+  const body = await c.req.json();
+  const { fact, sourceId } = body;
+
+  if (!fact) return c.json({ success: false, error: 'fact is required' }, 400);
+
+  try {
+    const id = require('crypto').randomUUID();
+    // Create a sentinel task and os_todo so PortGrid's HITL queue surfaces it
+    const sentinelTaskId = `promote-${id}`;
+    const sentinelRunId = `scout-discovery-${id}`;
+    const projectId = `scout-promote-${id}`;
+
+    db.transaction(() => {
+      // Insert sentinel project, run, and task to satisfy FK constraints
+      db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(projectId, 'ScoutDaemon Discovery', Date.now());
+      db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(sentinelRunId, projectId, JSON.stringify({ nodes: [{ id: sentinelTaskId, prompt: fact }] }), 'pending', Date.now());
+      db.prepare('INSERT INTO tasks (id, run_id, status, claim_lease, output_data) VALUES (?, ?, ?, ?, ?)').run(sentinelTaskId, sentinelRunId, 'unclaimed', null, null);
+      db.prepare('INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+        id, sentinelTaskId, 'MEDIUM', `ScoutDaemon Discovery: ${fact.substring(0, 120)}`, 'APPROVE_PROPOSAL', 'open', Date.now()
+      );
+    })();
+
+    // If sourceId provided, mark the learning approval as handled
+    if (sourceId) {
+      db.prepare("UPDATE cerebro_learning_approvals SET status = 'promoted' WHERE id = ?").run(sourceId);
+    }
+
+    return c.json({ success: true, todoId: id });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
