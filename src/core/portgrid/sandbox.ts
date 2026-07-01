@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { PathValidator } from './path-validator';
+import { PathValidator } from '../coreexec/path-validator';
 
 /**
  * Export the allowlist so dispatch.ts (the §2.1 prompt classifier) can mirror
@@ -31,17 +31,38 @@ export class CommandSandbox {
     if (isWorkspacePath && projectIdOrWorkspacePath) {
       this.baseDir = projectIdOrWorkspacePath;
     } else if (projectIdOrWorkspacePath) {
-      const { db } = require('../basevault/db');
-      const project = db.prepare('SELECT workspace_path FROM projects WHERE id = ?').get(projectIdOrWorkspacePath) as { workspace_path: string } | undefined;
-      if (project?.workspace_path) {
-        this.baseDir = project.workspace_path;
-      } else {
-        throw new Error(`Sandbox Error: Project ${projectIdOrWorkspacePath} has no workspace_path`);
-      }
+      this.baseDir = CommandSandbox.resolveCwd(projectIdOrWorkspacePath);
     } else {
       // Lock execution to a specific directory (CWD Lock) - Legacy fallback
       this.baseDir = process.cwd();
     }
+  }
+
+  /**
+   * Resolve the CWD for sandboxed execution from a project ID.
+   * Priority: project_root_path (user's actual source dir) > workspace_path (system sandbox dir).
+   * This locks all allowlisted commands to the project's physical directory,
+   * preventing path-traversal attacks from escaping the project boundary.
+   */
+  public static resolveCwd(projectId: string): string {
+    const { db } = require('../basevault/db');
+    const project = db.prepare('SELECT project_root_path, workspace_path FROM projects WHERE id = ?').get(projectId) as { project_root_path: string | null; workspace_path: string | null } | undefined;
+
+    if (!project) {
+      throw new Error(`Sandbox Error: Project ${projectId} not found.`);
+    }
+
+    // Prefer project_root_path (user-defined source directory) — this is the real code boundary
+    if (project.project_root_path) {
+      return project.project_root_path;
+    }
+
+    // Fallback to workspace_path (system-created .data/workspaces/<id>)
+    if (project.workspace_path) {
+      return project.workspace_path;
+    }
+
+    throw new Error(`Sandbox Error: Project ${projectId} has no project_root_path or workspace_path configured.`);
   }
 
   /**

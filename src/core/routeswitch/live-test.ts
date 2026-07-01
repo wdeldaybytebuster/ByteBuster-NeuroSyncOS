@@ -1,7 +1,7 @@
 import { initDB } from '../basevault/db';
 import { ZenDiscoveryService } from './discovery';
-import { classifyComplexity } from '../scoutlogic/classifier';
-import { selectOptimalModel } from '../scoutlogic/dynamic-router';
+import { classifyComplexity } from './model-selector/classifier';
+import { selectOptimalModel } from './model-selector/dynamic-router';
 import { executeWithFallback } from './router';
 
 async function runTest() {

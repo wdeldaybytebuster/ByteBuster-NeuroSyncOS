@@ -1,4 +1,4 @@
-import { ZenDiscoveryService, ModelInfo } from '../routeswitch/discovery';
+import { ZenDiscoveryService, ModelInfo } from '../discovery';
 
 export class CerebroAssistPipeline {
   private static SYSTEM_PROMPT = `You are Cerebro Assist, the ethereal onboarding chatbot for NeuroSync.
