@@ -19,6 +19,9 @@ cookies2.txt
 # Build output
 dist/
 
+# Worker thread bundle, regenerated at process boot (see worker-pool.ts)
+src/core/coreexec/worker.generated.cjs
+
 # Data files (SQLite)
 .data/
 
