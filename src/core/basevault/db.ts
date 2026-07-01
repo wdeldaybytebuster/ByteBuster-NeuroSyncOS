@@ -149,6 +149,53 @@ export function initDB() {
       updated_at INTEGER NOT NULL,
       UNIQUE(scope, scope_id)
     );
+
+    -- OKF Knowledge Graph: individual Markdown concept files indexed
+    CREATE TABLE IF NOT EXISTS okf_nodes (
+      id TEXT PRIMARY KEY,
+      tier TEXT NOT NULL CHECK(tier IN ('GLOBAL', 'USER', 'PROJECT')),
+      project_id TEXT,
+      type TEXT NOT NULL,
+      title TEXT,
+      confidence REAL NOT NULL DEFAULT 1.0,
+      content_hash TEXT,
+      frontmatter_json TEXT,
+      file_path TEXT UNIQUE NOT NULL,
+      last_indexed_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    -- OKF Edges: relationships between concept files (from Markdown links)
+    CREATE TABLE IF NOT EXISTS okf_edges (
+      source_node_id TEXT NOT NULL,
+      target_node_id TEXT NOT NULL,
+      relationship_type TEXT NOT NULL DEFAULT 'references',
+      PRIMARY KEY (source_node_id, target_node_id),
+      FOREIGN KEY (source_node_id) REFERENCES okf_nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (target_node_id) REFERENCES okf_nodes(id) ON DELETE CASCADE
+    );
+
+    -- ScoutDaemon quarantined research (isolated from active knowledge graph)
+    CREATE TABLE IF NOT EXISTS scout_okf_nodes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      type TEXT NOT NULL,
+      title TEXT,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      content_hash TEXT,
+      frontmatter_json TEXT,
+      file_path TEXT UNIQUE NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'promoted', 'rejected')),
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL
+    );
+
+    -- Indexes for graph traversal performance
+    CREATE INDEX IF NOT EXISTS idx_okf_nodes_tier ON okf_nodes(tier, project_id);
+    CREATE INDEX IF NOT EXISTS idx_okf_nodes_type ON okf_nodes(type);
+    CREATE INDEX IF NOT EXISTS idx_okf_edges_source ON okf_edges(source_node_id);
+    CREATE INDEX IF NOT EXISTS idx_okf_edges_target ON okf_edges(target_node_id);
+    CREATE INDEX IF NOT EXISTS idx_scout_okf_status ON scout_okf_nodes(status);
   `);
 
   try {
@@ -157,6 +204,25 @@ export function initDB() {
     // Ignore error if column already exists
     if (!e.message.includes('duplicate column name')) {
       console.error('Error adding workspace_path column:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN project_root_path TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding project_root_path column:', e);
+    }
+  }
+
+  try {
+    // Deference UI (0.70 threshold) — numeric confidence per pending approval.
+    // Default 0.5 puts legacy/un-scored rows in the "needs a look" bucket
+    // rather than silently qualifying them for bulk auto-approval.
+    db.exec(`ALTER TABLE os_todos ADD COLUMN confidence REAL NOT NULL DEFAULT 0.5;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding confidence column to os_todos:', e);
     }
   }
 }

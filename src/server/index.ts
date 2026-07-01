@@ -131,6 +131,85 @@ import { coreexecRouter } from './routes/coreexec-router';
 // routes mounted by app.route take precedence and the inline variants bypass the gate.
 app.route('/api/coreexec', coreexecRouter);
 
+import { okfRouter, injectOKFGenerateFn } from './routes/okf';
+app.route('/api/okf', okfRouter);
+
+// ─── PortGrid Interactive Terminal (Task 8) ──────────────────────────────────
+// A REAL interactive shell embedded in PortGrid, confined to one project's
+// directory with network removed via hardened bwrap (see
+// core/portgrid/terminal-session.ts for the recipe + why it can't reuse
+// CommandSandbox's `--dev-bind / /` invocation). Human-only: opened solely by an
+// explicit UI action, never auto-launched by any agent code path. Inherits the
+// app's existing auth posture (this route is under /api/, so the auth middleware
+// above applies exactly as it does to every other API route).
+import { createNodeWebSocket } from '@hono/node-ws';
+import {
+  createTerminalSession,
+  installTerminalShutdownHooks,
+  type TerminalSession,
+} from '../core/portgrid/terminal-session';
+
+const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+installTerminalShutdownHooks();
+
+app.get(
+  '/api/portgrid/terminal/:projectId',
+  upgradeWebSocket((c) => {
+    const projectId = c.req.param('projectId');
+    let session: TerminalSession | null = null;
+    return {
+      onOpen(_evt, ws) {
+        try {
+          if (!projectId) throw new Error('Terminal unavailable: no project selected.');
+          session = createTerminalSession(projectId, { cols: 80, rows: 24 });
+          session.onData((data) => {
+            try { ws.send(data); } catch { /* socket gone */ }
+          });
+          session.onExit((code) => {
+            try {
+              ws.send(`\r\n\x1b[90m[process exited with code ${code}]\x1b[0m\r\n`);
+              ws.close();
+            } catch { /* socket gone */ }
+          });
+        } catch (err: any) {
+          const msg = err?.message || 'Failed to start terminal session.';
+          try {
+            ws.send(`\r\n\x1b[31m${msg}\x1b[0m\r\n`);
+            ws.close();
+          } catch { /* ignore */ }
+        }
+      },
+      onMessage(evt, _ws) {
+        if (!session) return;
+        const raw = typeof evt.data === 'string' ? evt.data : evt.data?.toString?.() ?? '';
+        // Control messages are JSON envelopes; anything else is raw keystroke input.
+        if (raw.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.type === 'resize') {
+              session.resize(Number(parsed.cols), Number(parsed.rows));
+              return;
+            }
+            if (parsed && parsed.type === 'input' && typeof parsed.data === 'string') {
+              session.write(parsed.data);
+              return;
+            }
+          } catch { /* fall through: treat as raw input */ }
+        }
+        session.write(raw);
+      },
+      onClose() {
+        session?.dispose('ws-close');
+        session = null;
+      },
+      onError() {
+        session?.dispose('ws-error');
+        session = null;
+      },
+    };
+  })
+);
+
 // ─── LLM Provider Boot Sequence ──────────────────────────────────────────────
 // Load all enabled providers from the llm_providers DB table into the engine's
 // providerRegistry. Then set the global routing rule's position-0 as the active
@@ -220,6 +299,13 @@ bootProviderRegistry();
 
 // Inject RouteSwitchEngine into Cerebro chat endpoint
 injectChatEngine(routeSwitch);
+
+// Inject LLM generate function into OKF routes for document/chat generation
+const _okfGenerateFn = async (prompt: string, schema?: any) => {
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 500, scope: 'cerebro', responseSchema: schema });
+  return result.content;
+};
+injectOKFGenerateFn(_okfGenerateFn);
 
 // OQ-002 resolved: inject live RouteSwitch generate function into Cerebro
 // ReflectionExecutor so preference extraction routes through the real LLM
@@ -386,7 +472,11 @@ ModelDiscovery.fetchModels().then(() => {
   console.error('[NeuroSync] Model Discovery failed:', err);
 });
 
-serve({
+const server = serve({
   fetch: app.fetch,
   port
 });
+
+// Attach the WebSocket upgrade handler to the underlying http.Server so the
+// PortGrid terminal endpoint (/api/portgrid/terminal/:projectId) can upgrade.
+injectWebSocket(server);

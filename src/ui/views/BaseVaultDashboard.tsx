@@ -20,6 +20,7 @@ function DashboardView() {
   const [redactionLog, setRedactionLog] = useState<string[]>([]);
   const [dbStats, setDbStats] = useState({ size: '14.8 MB', walCheckpoints: 22, latency: '0.82' });
   const [retentionStats, setRetentionStats] = useState({ staleFailedRuns: 0, orphanedLeases: 0, dbSizeMB: 0, walSizeMB: 0 });
+  const [okfStats, setOkfStats] = useState({ nodes: 0, edges: 0 });
 
   // Fetch redaction events from backend
   useEffect(() => {
@@ -44,6 +45,13 @@ function DashboardView() {
       }
     }).catch(() => {});
   }, []);
+
+  // Fetch OKF node stats
+  useEffect(() => {
+    fetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
+      if (d.success) setOkfStats(prev => ({ ...prev, nodes: d.count || 0 }));
+    }).catch(() => {});
+  }, [activeProjectId]);
 
   // Fetch runs (project-scoped)
   useEffect(() => {
@@ -104,7 +112,7 @@ function DashboardView() {
         )}
 
         {/* Quick DB Stats */}
-        <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/5">
+        <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/5">
           <div className="text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">DB Size</div>
             <div className="text-sm font-bold font-mono" style={{ color: ACCENT }}>{dbStats.size}</div>
@@ -116,6 +124,10 @@ function DashboardView() {
           <div className="text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">WAL Checkpoints</div>
             <div className="text-sm font-bold font-mono text-green-400">{dbStats.walCheckpoints}/min</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">OKF Nodes</div>
+            <div className="text-sm font-bold font-mono" style={{ color: ACCENT }}>{okfStats.nodes}</div>
           </div>
         </div>
       </section>

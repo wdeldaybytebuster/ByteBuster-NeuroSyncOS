@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, RotateCcw, RefreshCw, Edit3 } from 'lucide-react';
+import { useDeveloperMode } from './DeveloperModeContext';
 
 interface NodeOutputInspectorProps {
   runId: string;
@@ -31,6 +32,7 @@ export function NodeOutputInspector({
   const [tab, setTab] = useState<'output' | 'metadata' | 'errors'>('output');
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { isDeveloperMode } = useDeveloperMode();
 
   useEffect(() => {
     // Each fetch of run detail gives us a created_at / completed_at pair —
@@ -121,7 +123,13 @@ export function NodeOutputInspector({
       }}>
         {tab === 'output' && (
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--text-main)' }}>
-            {prettyJson ?? <em style={{ color: 'var(--text-muted)' }}>No output captured yet.</em>}
+            {prettyJson === null ? (
+              <em style={{ color: 'var(--text-muted)' }}>No output captured yet.</em>
+            ) : isDeveloperMode ? (
+              prettyJson
+            ) : (
+              <em style={{ color: 'var(--text-muted)' }}>This step produced a result. Turn on Developer Mode (top-right icon) to see the raw output.</em>
+            )}
           </pre>
         )}
 
@@ -136,7 +144,11 @@ export function NodeOutputInspector({
 
         {tab === 'errors' && (
           <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#f87171' }}>
-            {isFailed ? (prettyJson ?? 'No error payload recorded.') : '✓ No errors.'}
+            {!isFailed
+              ? '✓ No errors.'
+              : isDeveloperMode
+                ? (prettyJson ?? 'No error payload recorded.')
+                : 'Something went wrong with this step. Turn on Developer Mode (top-right icon) to see the technical error.'}
           </pre>
         )}
       </div>

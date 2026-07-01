@@ -4,6 +4,7 @@ import { scoutEmitter } from '../scoutdaemon/sse';
 import { workerPool } from './worker-pool';
 import { systemConfig } from '../../server/routes/system';
 import { SensitiveDataRedactor, DataTier } from '../basevault/redactor';
+import { WorktreeIsolation } from './worktree';
 export interface DAGNode {
   id: string;
   dependencies: string[];
@@ -38,6 +39,14 @@ export async function executeRun(
 
   const layout: { nodes: PromptedDAGNode[] } = JSON.parse(run.dag_layout);
   const getTasks = db.prepare('SELECT id, status, claim_lease FROM tasks WHERE run_id = ?');
+
+  // Create an isolated .nexus_worktrees/<runId> directory if the project has a root path.
+  // All AI-drafted file mutations go here instead of the user's primary codebase.
+  const runRow = db.prepare('SELECT project_id FROM workflow_runs WHERE id = ?').get(runId) as { project_id: string } | undefined;
+  const worktreePath = runRow?.project_id ? WorktreeIsolation.createRunWorktree(runRow.project_id, runId) : null;
+  if (worktreePath) {
+    console.log(`[CoreExec] Worktree created for run ${runId}: ${worktreePath}`);
+  }
   
   let allCompleted = false;
   const timeoutMs = 5 * 60 * 1000; // 5 minute lease
@@ -126,8 +135,10 @@ export async function executeRun(
         updateTask.run(JSON.stringify({ error: redactedErrorMsg }), node.id);
         
         const todoId = crypto.randomUUID();
-        const insertTodo = db.prepare("INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        insertTodo.run(todoId, node.id, 'HIGH', errorMsg, 'LLM_RETRY_OR_FIX', 'open', Date.now());
+        const insertTodo = db.prepare("INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        // Worker threw during execution — a hard failure, not an AI confidence
+        // judgment. Always below the 0.70 threshold, always needs a human look.
+        insertTodo.run(todoId, node.id, 'HIGH', errorMsg, 'LLM_RETRY_OR_FIX', 'open', Date.now(), 0.0);
 
         scoutEmitter.emit('update', { type: 'TASK_STATUS', runId, taskId: node.id, status: 'parked', error: errorMsg });
       }

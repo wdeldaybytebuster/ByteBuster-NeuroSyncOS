@@ -26,7 +26,7 @@ let currentConfig = {
   baseUrl: 'http://localhost:1234/v1',
   modelId: 'Auto',
   apiKey: '',
-  modelPath: '/models/llama-3.gguf',
+  modelPath: './local_models/',
   councilRisk: 70
 };
 

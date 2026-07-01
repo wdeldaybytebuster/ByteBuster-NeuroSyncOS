@@ -1,5 +1,5 @@
 import { ThreadWorker } from 'poolifier';
-import { CommandSandbox } from './sandbox';
+import { CommandSandbox } from '../portgrid/sandbox';
 import { StealthScraper } from './scraping';
 import { classifyDirective, NodeDirective } from './dispatch';
 

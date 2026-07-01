@@ -1,7 +1,9 @@
 import React from 'react';
 import { X, CheckCircle, AlertTriangle, Clock, Layers } from 'lucide-react';
+import { useDeveloperMode } from './DeveloperModeContext';
 
 export function IntentPreview({ logs, onClose }: { logs: any[], onClose: () => void }) {
+  const { isDeveloperMode } = useDeveloperMode();
   // Aggregate logs into a unique list of tasks to show the DAG history (Test-Fix-Retest steps).
   const tasks = new Map();
   logs.forEach(l => {
@@ -58,13 +60,17 @@ export function IntentPreview({ logs, onClose }: { logs: any[], onClose: () => v
                       
                       {task.output && (
                         <div className="text-xs text-gray-400 mt-2 p-2 bg-black/30 rounded border border-white/5 font-mono overflow-x-auto">
-                          {typeof task.output === 'object' ? JSON.stringify(task.output) : task.output}
+                          {isDeveloperMode
+                            ? (typeof task.output === 'object' ? JSON.stringify(task.output) : task.output)
+                            : 'This step finished and produced a result. Turn on Developer Mode (top-right icon) to see the raw details.'}
                         </div>
                       )}
                       
                       {task.error && (
                         <div className="text-xs text-red-400 mt-2 p-2 bg-red-500/10 rounded border border-red-500/20 font-mono">
-                          {task.error}
+                          {isDeveloperMode
+                            ? task.error
+                            : 'This step ran into a problem. Turn on Developer Mode (top-right icon) to see the technical error.'}
                         </div>
                       )}
                    </div>

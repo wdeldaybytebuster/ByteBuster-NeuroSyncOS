@@ -10,7 +10,7 @@
  * `generic` (metadata echo), which keeps the run auditable and avoids
  * unsafe shell/escape paths.
  */
-import { ALLOWLIST } from './sandbox';
+import { ALLOWLIST } from '../portgrid/sandbox';
 
 export type DirectiveAction = 'shell' | 'scrape' | 'generic';
 
