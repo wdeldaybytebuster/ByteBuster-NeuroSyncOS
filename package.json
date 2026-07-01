@@ -1,7 +1,7 @@
 {
   "name": "neurosyncmega",
   "version": "1.0.0",
-  "description": "",
+  "description": "NeuroSync Sovereign OS -- a local-first, privacy-first AI project orchestrator: schedules background agents, routes requests across local and free-tier LLM providers, and keeps all state in a local SQLite database.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
@@ -13,9 +13,24 @@
     "build": "vite build",
     "start": "cross-env NODE_OPTIONS=\"--max-old-space-size=1024\" UV_THREADPOOL_SIZE=3 tsx src/server/index.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "local-first",
+    "ai-orchestration",
+    "llm-router",
+    "sqlite",
+    "hono",
+    "self-hosted"
+  ],
+  "author": "William Delday",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wdeldaybytebuster/ByteBuster-NeuroSyncOS.git"
+  },
+  "homepage": "https://neurosync.bytebuster-tools.online/",
+  "bugs": {
+    "url": "https://github.com/wdeldaybytebuster/ByteBuster-NeuroSyncOS/issues"
+  },
   "type": "commonjs",
   "dependencies": {
     "@hono/node-server": "^2.0.6",
