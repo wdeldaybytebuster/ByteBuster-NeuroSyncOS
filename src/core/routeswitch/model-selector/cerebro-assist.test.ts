@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CerebroAssistPipeline } from './cerebro-assist';
-import { ZenDiscoveryService, ModelDiscovery } from '../routeswitch/discovery';
-import { db } from '../basevault/db';
+import { ZenDiscoveryService, ModelDiscovery } from '../discovery';
+import { db } from '../../basevault/db';
 
 describe('CerebroAssistPipeline', () => {
   beforeEach(() => {

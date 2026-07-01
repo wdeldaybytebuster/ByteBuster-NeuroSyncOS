@@ -1,4 +1,4 @@
-import { db } from '../basevault/db';
+import { db } from '../../basevault/db';
 
 export class Benchmarker {
   public recordRun(modelId: string, latencyMs: number, tokens: number, isFailure: boolean): void {
