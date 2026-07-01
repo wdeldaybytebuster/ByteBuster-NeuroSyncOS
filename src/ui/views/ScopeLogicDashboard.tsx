@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
+import { useDeveloperMode } from '../components/DeveloperModeContext';
 import { MessageSquare, Container, AlertTriangle, Binary, FileText, Users, Shield, CheckCircle, XCircle, Send } from 'lucide-react';
 
 const API = 'http://localhost:3743';
@@ -12,6 +13,7 @@ const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-
 // ─── Dashboard View ─────────────────────────────────────────────────────────
 function DashboardView() {
   const { activeProjectId, navigate } = useNavigation();
+  const { isDeveloperMode } = useDeveloperMode();
   const [messages, setMessages] = useState<{role:string;text:string}[]>([
     { role: 'assistant', text: 'Welcome. Let us define your transactional workflow parameters. What is the primary objective of the workflow DAG we are building?' }
   ]);
@@ -157,13 +159,19 @@ function DashboardView() {
             <button onClick={() => navigate('portgrid')} className="w-full px-4 py-2.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-xs font-bold flex items-center justify-center gap-2 hover:bg-cyan-500/20 transition-all" style={{ color: ACCENT }}>
               Open in PortGrid for Review →
             </button>
-            {/* Collapsible raw JSON for technical operators */}
-            <details className="mt-2">
-              <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 transition-colors">Show raw JSON (technical view)</summary>
-              <div className="bg-black/40 border border-white/5 rounded-lg p-3 mt-2 font-mono text-[9px] text-cyan-400 max-h-[150px] overflow-y-auto">
-                <pre className="whitespace-pre-wrap">{JSON.stringify(proposal, null, 2)}</pre>
+            {/* Collapsible raw JSON — only offered to users who've turned on Developer Mode */}
+            {isDeveloperMode ? (
+              <details className="mt-2">
+                <summary className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300 transition-colors">Show raw JSON (technical view)</summary>
+                <div className="bg-black/40 border border-white/5 rounded-lg p-3 mt-2 font-mono text-[9px] text-cyan-400 max-h-[150px] overflow-y-auto">
+                  <pre className="whitespace-pre-wrap">{JSON.stringify(proposal, null, 2)}</pre>
+                </div>
+              </details>
+            ) : (
+              <div className="text-[10px] text-gray-600 mt-2">
+                Turn on Developer Mode (top-right icon) to see the technical details behind this plan.
               </div>
-            </details>
+            )}
           </div>
         ) : (
           <div className="bg-black/40 border border-white/5 rounded-lg p-4 font-mono text-[10px] text-gray-500 text-center">

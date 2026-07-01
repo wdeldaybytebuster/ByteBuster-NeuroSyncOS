@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Cpu, Zap, Layers, Users } from 'lucide-react';
 
+const API = 'http://localhost:3743';
+
 interface PoolMetrics {
   busyWorkerNodes?: number;
   idleWorkerNodes?: number;
@@ -34,7 +36,7 @@ export function AgentKPIStrip() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const source = new EventSource('/api/system/metrics');
+    const source = new EventSource(`${API}/api/system/metrics`);
     source.addEventListener('telemetry', (ev) => {
       try {
         const parsed: TelemetryFrame = JSON.parse((ev as MessageEvent).data);
