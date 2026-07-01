@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { RouteSwitchEngine } from './engine';
 import { LLMProvider } from './providers';
+import { ConsensusSynthesizer } from './council';
 
 class DummyProvider implements LLMProvider {
   constructor(public id: string, private response: string) {}
@@ -38,5 +39,33 @@ describe('Council Mode Triage & Consensus', () => {
     
     expect(result.isCouncilMode).toBe(false);
     expect(result.provider).toBe('main');
+  });
+});
+
+describe('ConsensusSynthesizer.executeCouncilMode — numeric confidence', () => {
+  it('returns confidence close to 1.0 when responses are near-identical in length', async () => {
+    const providers: LLMProvider[] = [
+      new DummyProvider('a', 'the quick brown fox jumps'),
+      new DummyProvider('b', 'the quick brown fox leaps'),
+      new DummyProvider('c', 'the quick brown fox hops!'),
+    ];
+
+    const result = await ConsensusSynthesizer.executeCouncilMode('test prompt', 10, providers);
+
+    expect(typeof result.confidence).toBe('number');
+    expect(result.confidence).toBeGreaterThan(0.9);
+  });
+
+  it('returns confidence below 0.5 when response lengths vary wildly', async () => {
+    const providers: LLMProvider[] = [
+      new DummyProvider('a', 'ok'),
+      new DummyProvider('b', 'This is a much, much longer response than the other two by a wide margin, deliberately so.'),
+      new DummyProvider('c', 'ok'),
+    ];
+
+    const result = await ConsensusSynthesizer.executeCouncilMode('test prompt', 10, providers);
+
+    expect(typeof result.confidence).toBe('number');
+    expect(result.confidence).toBeLessThan(0.5);
   });
 });

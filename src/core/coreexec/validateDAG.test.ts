@@ -137,6 +137,9 @@ describe('escalateBlockedDAGToOsTodos() — §3.4 FK-satisfying escalation', () 
     expect(todoRow).toBeTruthy();
     expect((todoRow as any).dag_node_id).toBe(result.sentinelTaskId);
     expect((todoRow as any).severity).toBe('HIGH');
+    // Deterministic validation failure, not an AI judgment call — always
+    // below the 0.70 Deference UI threshold, always routed to human review.
+    expect((todoRow as any).confidence).toBe(0.0);
 
     const afterRuns = (db.prepare('SELECT COUNT(*) AS n FROM workflow_runs').get() as any).n;
     const afterTasks = (db.prepare('SELECT COUNT(*) AS n FROM tasks').get() as any).n;

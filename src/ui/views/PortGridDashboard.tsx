@@ -2,11 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
 import { Grid3X3, Shield, CheckCircle, XCircle, Eye, Terminal, Award, Wrench, Users, Lock, Accessibility, AlertTriangle, Sparkles } from 'lucide-react';
+import { OKFWorkspaceWidget } from '../components/OKFWorkspaceWidget';
+import { OKFMindmap } from '../components/OKFMindmap';
+import { DeferenceUI } from '../components/DeferenceUI';
+import { EmbeddedTerminal } from '../components/EmbeddedTerminal';
 import { ReactFlow, Controls, Background, BackgroundVariant, Handle, Position, useNodesState, useEdgesState } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#00FFCC';
+// Deference UI (Master Spec §4): items at/above this confidence skip the
+// per-item modal row and go to the quiet bulk-approve pill bar instead.
+const DEFERENCE_THRESHOLD = 0.70;
 
 // Shared glow box (mint/teal glow)
 const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(0,255,204,0.08)] hover:shadow-[0_0_30px_rgba(0,255,204,0.2)] hover:border-[rgba(0,255,204,0.25)]`;
@@ -33,7 +40,7 @@ function DAGNode({ data }: any) {
 const nodeTypes = { dag: DAGNode };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-interface OsTodo { id: string; severity: string; escalation_reason: string; required_action_type: string; status: string; }
+interface OsTodo { id: string; severity: string; escalation_reason: string; required_action_type: string; status: string; confidence: number; }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────
 function DashboardView() {
@@ -46,6 +53,8 @@ function DashboardView() {
   const [proposalNodes, setProposalNodes, onProposalNodesChange] = useNodesState([] as Node[]);
   const [proposalEdges, setProposalEdges, onProposalEdgesChange] = useEdgesState([] as Edge[]);
   const [approving, setApproving] = useState(false);
+  const [showMindmap, setShowMindmap] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
 
   // Fetch pending proposal on mount
   useEffect(() => {
@@ -183,6 +192,26 @@ function DashboardView() {
     } catch {}
   };
 
+  // Deference UI split: low-confidence items need a human look (Attention
+  // Required); high-confidence items get quick, non-blocking bulk approval.
+  const lowConfidenceTodos = approvalQueue.filter(t => t.confidence < DEFERENCE_THRESHOLD);
+  const highConfidenceTodos = approvalQueue.filter(t => t.confidence >= DEFERENCE_THRESHOLD);
+
+  const handleApproveAll = async (todoIds: string[]) => {
+    try {
+      await fetch(`${API}/api/todos/resolve-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+      setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+    } catch {}
+  };
+
+  const handleRejectAll = async (todoIds: string[]) => {
+    // No bulk-reject endpoint exists (declining a todo doesn't resolve it —
+    // it just leaves the DAG parked, matching the existing single-item
+    // "Decline" button at :316 which is also not yet wired to a handler).
+    // Just remove them from local view state so the pill bar clears.
+    setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Widget A: Interactive DAG Canvas — shows pending proposal OR existing runs */}
@@ -283,29 +312,31 @@ function DashboardView() {
         )}
       </section>
 
-      {/* Widget B: Zero-Trust Quarantine & HITL Approval Queue */}
+      {/* Widget B: Attention Required — Zero-Trust Quarantine & HITL Approval Queue.
+          Deference UI (Master Spec §4): only low-confidence (<0.70) items land
+          here; high-confidence items are handled by the pill bar below instead. */}
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Shield size={16} className="text-amber-400" /> HITL Approval Queue
+            <Shield size={16} className="text-amber-400" /> Attention Required — HITL Approval Queue
           </h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400">Zero-Trust Gate</span>
         </div>
 
-        {approvalQueue.length === 0 ? (
+        {lowConfidenceTodos.length === 0 ? (
           <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/5 border border-green-500/20">
             <CheckCircle size={18} className="text-green-400" />
             <div><div className="text-xs font-bold text-green-400">All Clear</div><div className="text-[10px] text-gray-500">No pending approvals or staged proposals.</div></div>
           </div>
         ) : (
           <div className="space-y-2 max-h-[200px] overflow-y-auto">
-            {approvalQueue.map(todo => (
+            {lowConfidenceTodos.map(todo => (
               <div key={todo.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-amber-500/20">
                 <div className="flex items-center gap-3">
                   <AlertTriangle size={14} className="text-amber-400" />
                   <div>
                     <div className="text-xs font-bold text-white">{todo.escalation_reason}</div>
-                    <div className="text-[10px] text-gray-500 font-mono">{todo.severity} • {todo.required_action_type}</div>
+                    <div className="text-[10px] text-gray-500 font-mono">{todo.severity} • {todo.required_action_type} • confidence {todo.confidence.toFixed(2)}</div>
                   </div>
                 </div>
                 <div className="flex gap-1.5">
@@ -317,6 +348,13 @@ function DashboardView() {
           </div>
         )}
       </section>
+
+      <DeferenceUI
+        tasks={highConfidenceTodos.map(t => ({ id: t.id, description: t.escalation_reason, confidence: t.confidence }))}
+        accentColor={ACCENT}
+        onApproveAll={handleApproveAll}
+        onRejectAll={handleRejectAll}
+      />
 
       {/* Widget C: Verifiable Confidence & Local Proof Badges */}
       <section className={GLOW_BOX}>
@@ -353,6 +391,51 @@ function DashboardView() {
           ))}
         </div>
       </section>
+
+      {/* Widget D2: Embedded Terminal (Task 8) — human-opened, sandboxed shell */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Terminal size={16} style={{ color: ACCENT }} /> Embedded Terminal
+          </h2>
+          <button
+            onClick={() => setShowTerminal(v => !v)}
+            disabled={!activeProjectId}
+            className="px-3 py-1.5 rounded-lg text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {showTerminal ? 'Close Terminal' : 'Open Terminal'}
+          </button>
+        </div>
+        {!activeProjectId ? (
+          <p className="text-xs text-gray-500">Select a project to open an interactive terminal.</p>
+        ) : (
+          <>
+            <p className="text-[10px] text-gray-500 mb-3">
+              Interactive shell for CLI tools (Claude CLI, OpenCode, etc.), confined to this
+              project's directory with network access removed. Started only by you — never by an agent.
+            </p>
+            {showTerminal && (
+              <div
+                className="rounded-lg overflow-hidden border border-white/10 bg-black"
+                style={{ height: 360, padding: 8 }}
+              >
+                <EmbeddedTerminal projectId={activeProjectId} accentColor={ACCENT} />
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* Widget E: OKF Project Knowledge Workspace */}
+      <div className="space-y-3">
+        <div className="flex justify-end">
+          <button onClick={() => setShowMindmap(true)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-all">
+            Open Knowledge Mindmap
+          </button>
+        </div>
+        <OKFWorkspaceWidget projectId={activeProjectId} accentColor={ACCENT} />
+      </div>
+      <OKFMindmap isOpen={showMindmap} onClose={() => setShowMindmap(false)} />
     </div>
   );
 }

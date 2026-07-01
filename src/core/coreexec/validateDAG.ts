@@ -130,8 +130,8 @@ export function escalateBlockedDAGToOsTodos(
 
     db.prepare(
       `INSERT INTO os_todos
-         (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       todoId,
       sentinelTaskId,
@@ -140,6 +140,9 @@ export function escalateBlockedDAGToOsTodos(
       'LLM_RETRY_OR_FIX',
       'open',
       now,
+      // Deterministic structural validation failure, not an AI judgment call —
+      // always below the 0.70 threshold, always routed to human review.
+      0.0,
     );
   });
   insertBlocked();

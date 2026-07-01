@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RouteSwitchConfig } from './RouteSwitchConfig';
 import { RoutingDials } from './RoutingDials';
+import { useDeveloperMode } from './DeveloperModeContext';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+  const { isDeveloperMode } = useDeveloperMode();
   const [provider, setProvider] = useState('mock');
   const [statusMsg, setStatusMsg] = useState('');
   
@@ -82,10 +84,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           onClose();
         }, 1500);
       } else {
-        setStatusMsg(`❌ ${data.error}`);
+        setStatusMsg(isDeveloperMode ? `❌ ${data.error}` : '❌ Could not connect. Please check your settings and try again.');
       }
     } catch (err: any) {
-      setStatusMsg(`❌ Connection failed: ${err.message}`);
+      setStatusMsg(isDeveloperMode ? `❌ Connection failed: ${err.message}` : '❌ Could not connect. Please check your settings and try again.');
     }
   };
 
@@ -132,10 +134,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       if (data.success) {
         setRestoreStatus('✅ Restore complete. OS is rebooting...');
       } else {
-        setRestoreStatus(`❌ Restore failed: ${data.error}`);
+        setRestoreStatus(isDeveloperMode ? `❌ Restore failed: ${data.error}` : '❌ Could not restore the backup. Please try again.');
       }
     } catch (err: any) {
-      setRestoreStatus(`❌ Network error: ${err.message}`);
+      setRestoreStatus(isDeveloperMode ? `❌ Network error: ${err.message}` : '❌ Could not restore the backup. Please try again.');
     }
   };
 
