@@ -1,9 +1,10 @@
 import React from 'react';
-import { Menu, Sidebar, X, Sun, Moon } from 'lucide-react';
+import { Menu, Sidebar, X, Sun, Moon, Code2 } from 'lucide-react';
 import { ModuleRouter } from './ModuleRouter';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { useNavigation } from '../layouts/OSLayout';
 import { useTheme } from './ThemeContext';
+import { useDeveloperMode } from './DeveloperModeContext';
 
 interface AppShellProps {
   moduleId: string;
@@ -18,6 +19,7 @@ interface AppShellProps {
 export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, children, activeView, onViewChange }: AppShellProps) {
   const { activeProjectName, leftBarOpen, setLeftBarOpen, rightBarOpen, setRightBarOpen } = useNavigation();
   const { theme, setTheme } = useTheme();
+  const { isDeveloperMode, setDeveloperMode } = useDeveloperMode();
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -53,8 +55,18 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
           </button>
         </div>
 
-        {/* Right: Theme toggle + Project filter badge + Sidebar toggle */}
+        {/* Right: Developer Mode toggle + Theme toggle + Project filter badge + Sidebar toggle */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setDeveloperMode(!isDeveloperMode)}
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all ${isDeveloperMode ? 'text-black' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+            style={isDeveloperMode ? { backgroundColor: accentColor } : {}}
+            aria-label="Toggle Developer Mode"
+            aria-pressed={isDeveloperMode}
+            title={isDeveloperMode ? 'Developer Mode: ON — showing raw technical details' : 'Developer Mode: OFF — showing simple explanations'}
+          >
+            <Code2 size={16} />
+          </button>
           <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all" aria-label="Toggle theme">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useDeveloperMode } from './DeveloperModeContext';
 
 interface ModelInfo {
   id: string;
@@ -7,6 +8,7 @@ interface ModelInfo {
 }
 
 export function RouteSwitchConfig() {
+  const { isDeveloperMode } = useDeveloperMode();
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [primary, setPrimary] = useState('');
   const [fallback1, setFallback1] = useState('');
@@ -55,10 +57,10 @@ export function RouteSwitchConfig() {
       if (data.success) {
         setStatusMsg('✅ Fallback chain saved successfully');
       } else {
-        setStatusMsg(`❌ Error: ${data.error}`);
+        setStatusMsg(isDeveloperMode ? `❌ Error: ${data.error}` : '❌ Could not save. Please try again.');
       }
     } catch (err: any) {
-      setStatusMsg(`❌ Failed to save: ${err.message}`);
+      setStatusMsg(isDeveloperMode ? `❌ Failed to save: ${err.message}` : '❌ Could not save. Please try again.');
     } finally {
       setLoading(false);
       setTimeout(() => setStatusMsg(''), 3000);

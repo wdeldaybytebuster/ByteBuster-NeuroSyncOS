@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useDeveloperMode } from './DeveloperModeContext';
 
 type Priority = 'Speed' | 'Cost' | 'Intelligence';
 
 export function RoutingDials() {
+  const { isDeveloperMode } = useDeveloperMode();
   const [priority, setPriority] = useState<Priority>('Intelligence');
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
@@ -11,8 +13,11 @@ export function RoutingDials() {
     fetch('/api/system/settings')
       .then(res => res.json())
       .then(data => {
-        if (data.success && data.settings && data.settings.scoutlogic_priority) {
-          setPriority(data.settings.scoutlogic_priority as Priority);
+        if (data.success && data.settings) {
+          // model_selector_priority is the current key; scoutlogic_priority is a
+          // legacy fallback for settings saved before the naming cleanup.
+          const saved = data.settings.model_selector_priority || data.settings.scoutlogic_priority;
+          if (saved) setPriority(saved as Priority);
         }
       })
       .catch(console.error);
@@ -26,16 +31,16 @@ export function RoutingDials() {
       const res = await fetch('/api/system/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scoutlogic_priority: newPriority })
+        body: JSON.stringify({ model_selector_priority: newPriority })
       });
       const data = await res.json();
       if (data.success) {
         setStatusMsg('✅ Priority updated');
       } else {
-        setStatusMsg(`❌ Error: ${data.error}`);
+        setStatusMsg(isDeveloperMode ? `❌ Error: ${data.error}` : '❌ Could not update. Please try again.');
       }
     } catch (err: any) {
-      setStatusMsg(`❌ Failed: ${err.message}`);
+      setStatusMsg(isDeveloperMode ? `❌ Failed: ${err.message}` : '❌ Could not update. Please try again.');
     } finally {
       setLoading(false);
       setTimeout(() => setStatusMsg(''), 3000);
@@ -54,7 +59,7 @@ export function RoutingDials() {
       <div className="relative z-10 flex flex-col gap-1">
         <div className="flex justify-between items-center">
           <h3 className="text-white font-bold text-lg flex items-center gap-2">
-            <span className="text-blue-400">🎛️</span> ScoutLogic Routing Priority
+            <span className="text-blue-400">🎛️</span> Model Selection Priority
           </h3>
           <span className="text-xs text-gray-400 h-4 font-semibold">{loading ? 'Saving...' : statusMsg}</span>
         </div>
