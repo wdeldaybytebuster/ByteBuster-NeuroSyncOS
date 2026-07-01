@@ -150,6 +150,7 @@ cerebroRouter.post('/pin-high-confidence', (c) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { RouteSwitchEngine } from '../../core/routeswitch/engine';
+import { routeQuery } from '../../core/memory/context-router';
 
 let chatEngine: RouteSwitchEngine | null = null;
 export function injectChatEngine(engine: RouteSwitchEngine) { chatEngine = engine; }
@@ -190,12 +191,30 @@ cerebroRouter.post('/chat', async (c) => {
       return c.json({ success: false, error: 'Chat engine not initialized' }, 500);
     }
 
+    // Tri-Modal Context Router: pick which knowledge source(s) to consult based
+    // on the question's intent, and prepend any retrieved context to the prompt.
+    // (OKF is injected downstream by RouteSwitchEngine, so the 'okf' branch adds
+    // no block here — see context-router.ts for the rationale.)
+    let routedContextBlock = '';
+    try {
+      const routed = await routeQuery(message);
+      routedContextBlock = routed.map((r) => r.contextBlock).filter(Boolean).join('\n');
+      console.log(
+        '[CerebroChat] context router →',
+        routed.map((r) => r.source).join(', '),
+        routedContextBlock ? `(+${routedContextBlock.length} chars)` : '(no extra block)'
+      );
+    } catch (err: any) {
+      // Context routing is best-effort — never block the chat response.
+      console.warn('[CerebroChat] context routing failed (non-fatal):', err?.message);
+    }
+
     // Build prompt with conversation history for context
     const historyContext = (history || []).slice(-6).map((m: any) =>
       `${m.role === 'user' ? 'User' : 'Cerebro'}: ${m.text}`
     ).join('\n');
 
-    const fullPrompt = `${CEREBRO_SYSTEM_PROMPT}\n\n${historyContext ? `CONVERSATION HISTORY:\n${historyContext}\n\n` : ''}User: ${message}\n\nCerebro:`;
+    const fullPrompt = `${CEREBRO_SYSTEM_PROMPT}\n\n${routedContextBlock ? `${routedContextBlock}\n` : ''}${historyContext ? `CONVERSATION HISTORY:\n${historyContext}\n\n` : ''}User: ${message}\n\nCerebro:`;
 
     const result = await chatEngine.execute({
       prompt: fullPrompt,

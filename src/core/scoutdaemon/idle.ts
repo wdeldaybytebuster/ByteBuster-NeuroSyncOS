@@ -4,6 +4,7 @@ import { db } from '../basevault/db';
 import crypto from 'crypto';
 import * as si from 'systeminformation';
 import { systemConfig } from '../../server/routes/system';
+import { ScoutResearch } from './research';
 
 export class IdleDetector extends EventEmitter {
   private lastHeartbeat: number;
@@ -90,5 +91,15 @@ idleDetector.on('idle', () => {
     executeRun(runId).catch(err => console.error('[ScoutDaemon] Maintenance failed:', err));
   } catch (err) {
     console.error('[ScoutDaemon] Failed to trigger maintenance:', err);
+  }
+
+  // During idle, review pending scout drafts and log their count
+  try {
+    const pendingDrafts = ScoutResearch.listDrafts();
+    if (pendingDrafts.length > 0) {
+      console.log(`[ScoutDaemon] ${pendingDrafts.length} scout draft(s) pending review.`);
+    }
+  } catch (err) {
+    console.error('[ScoutDaemon] Failed to check scout drafts:', err);
   }
 });

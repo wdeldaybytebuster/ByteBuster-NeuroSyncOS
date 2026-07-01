@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Minimize2, Maximize2 } from 'lucide-react';
+import { useDeveloperMode } from './DeveloperModeContext';
 
 export interface DAGProposalPayload {
   id: string;
@@ -12,6 +13,7 @@ interface ScopeLogicChatProps {
 }
 
 export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
+  const { isDeveloperMode } = useDeveloperMode();
   const [input,     setInput]     = useState('');
   const [chatLog,   setChatLog]   = useState<{role: string, content: string}[]>([]);
   const [loading,   setLoading]   = useState(false);
@@ -55,7 +57,11 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
       }
 
     } catch (err: any) {
-      setChatLog(prev => [...prev, { role: 'system', content: `Error: ${err.message}` }]);
+      const simple = "Something went wrong sending that message. Please try again.";
+      setChatLog(prev => [...prev, {
+        role: 'system',
+        content: isDeveloperMode ? `${simple} (Developer Mode: ${err.message})` : simple
+      }]);
     } finally {
       setLoading(false);
     }

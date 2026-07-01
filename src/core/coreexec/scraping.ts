@@ -1,5 +1,5 @@
 import path from 'path';
-import { CommandSandbox } from './sandbox';
+import { CommandSandbox } from '../portgrid/sandbox';
 
 export class StealthScraper {
   private sandbox: CommandSandbox;
