@@ -1,5 +1,6 @@
 import { db } from '../../basevault/db';
 import { CerebroVectorStore } from './vector';
+import { OKFGenerator } from '../../okf/generator';
 
 /** Injected by server/index.ts at startup. Avoids circular import. */
 let _generateFn: ((prompt: string) => Promise<string>) | null = null;
@@ -79,6 +80,16 @@ export class ReflectionExecutor {
         console.log(`Cerebro: Consolidated new preference: "${fact}"`);
       } else {
         console.log(`Cerebro: Ignored duplicate/contradictory fact: "${fact}"`);
+      }
+    }
+
+    // OKF Generation: persist extracted preferences as structured Markdown files
+    if (extractedFacts.length > 0 && _generateFn) {
+      try {
+        await OKFGenerator.fromChat(_generateFn, historyToProcess, 'USER');
+        console.log(`Cerebro: Generated OKF files from ${extractedFacts.length} extracted fact(s).`);
+      } catch (err) {
+        console.warn('[Cerebro] OKF generation from reflection failed (non-fatal):', err);
       }
     }
 

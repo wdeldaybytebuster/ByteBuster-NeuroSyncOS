@@ -4,6 +4,8 @@ import { useNavigation } from '../layouts/OSLayout';
 import { NotificationCenter } from '../components/NotificationCenter';
 import { CronSummary } from '../components/CronSummary';
 import { AutonomyDials } from '../components/AutonomyDials';
+import { AgentKPIStrip } from '../components/AgentKPIStrip';
+import { GovernorUI } from '../components/GovernorUI';
 import { Play, AlertTriangle, Clock, CheckCircle, Cpu, RefreshCw, Shield, Power, BarChart2, Activity } from 'lucide-react';
 
 const API = 'http://localhost:3743';
@@ -226,6 +228,14 @@ function DashboardView() {
         </h2>
         <CronSummary />
       </section>
+
+      {/* Widget F: Agent/Worker Pool KPI Strip */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Activity size={16} style={{ color: ACCENT }} /> Worker Pool Telemetry
+        </h2>
+        <AgentKPIStrip />
+      </section>
     </div>
   );
 }
@@ -288,6 +298,9 @@ function SetupView() {
         <p className="text-xs text-gray-400 mb-4">Controls the worker thread pool size. Hardware limits are enforced — exceeding physical core count triggers a thermal warning.</p>
         <AutonomyDials />
       </section>
+
+      {/* Control A2: Hardware Resource Governor — real-time CPU/thread telemetry + enforcement, distinct from the Budget/Autonomy dials above */}
+      <GovernorUI />
 
       {/* Control B: DAG Safety & Iteration Ceilings */}
       <section className={GLOW_BOX}>

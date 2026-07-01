@@ -48,12 +48,65 @@ todosRouter.post('/resolve', async (c) => {
   }
 });
 
+// Deference UI bulk-approve — resolves a batch of high-confidence (>=0.70)
+// todos in one transaction, mirroring /resolve's per-item logic for each id.
+todosRouter.post('/resolve-bulk', async (c) => {
+  const body = await c.req.json();
+  const { todoIds } = body;
+
+  if (!Array.isArray(todoIds) || todoIds.length === 0) {
+    return c.json({ success: false, error: 'todoIds must be a non-empty array' }, 400);
+  }
+
+  try {
+    const resolved: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+
+    db.transaction(() => {
+      for (const todoId of todoIds) {
+        try {
+          const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved' WHERE id = ?");
+          const info = updateTodo.run(todoId);
+          if (info.changes === 0) {
+            failed.push({ id: todoId, error: 'To-Do not found' });
+            continue;
+          }
+
+          const todo = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
+          if (todo) {
+            const redactedResolution = SensitiveDataRedactor.redactObject('approved', DataTier.INTERNAL);
+            const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
+            updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
+
+            const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
+            if (task) {
+              db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+            }
+          }
+          resolved.push(todoId);
+        } catch (err: any) {
+          failed.push({ id: todoId, error: err.message });
+        }
+      }
+    })();
+
+    return c.json({ success: true, resolved, failed });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 // Promote a ScoutDaemon discovery to the PortGrid HITL approval queue
 todosRouter.post('/promote', async (c) => {
   const body = await c.req.json();
-  const { fact, sourceId } = body;
+  const { fact, sourceId, confidence } = body;
 
   if (!fact) return c.json({ success: false, error: 'fact is required' }, 400);
+
+  // Deference UI (0.70 threshold): optional caller-supplied confidence for
+  // this discovery. Defaults to 0.5 (matches scout_okf_nodes' own default and
+  // the os_todos column default) when the caller doesn't provide one.
+  const confidenceValue = typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? confidence : 0.5;
 
   try {
     const id = require('crypto').randomUUID();
@@ -67,8 +120,8 @@ todosRouter.post('/promote', async (c) => {
       db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(projectId, 'ScoutDaemon Discovery', Date.now());
       db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(sentinelRunId, projectId, JSON.stringify({ nodes: [{ id: sentinelTaskId, prompt: fact }] }), 'pending', Date.now());
       db.prepare('INSERT INTO tasks (id, run_id, status, claim_lease, output_data) VALUES (?, ?, ?, ?, ?)').run(sentinelTaskId, sentinelRunId, 'unclaimed', null, null);
-      db.prepare('INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-        id, sentinelTaskId, 'MEDIUM', `ScoutDaemon Discovery: ${fact.substring(0, 120)}`, 'APPROVE_PROPOSAL', 'open', Date.now()
+      db.prepare('INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id, sentinelTaskId, 'MEDIUM', `ScoutDaemon Discovery: ${fact.substring(0, 120)}`, 'APPROVE_PROPOSAL', 'open', Date.now(), confidenceValue
       );
     })();
 
