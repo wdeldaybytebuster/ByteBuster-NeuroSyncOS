@@ -78,7 +78,8 @@ describe('RouteSwitch Providers', () => {
     const provider = new LlamaCppProvider({ modelPath: '/models/llama-3.gguf' });
     const response = await provider.generate('Test prompt', 10);
     expect(provider.id).toBe('llama-cpp');
-    expect(response).toContain('[LOCAL GGUF RESPONSE via /models/llama-3.gguf]');
+    // Dev-mode fallback response format, matching the real GBNF-aware stub in llama-cpp.ts
+    expect(response).toContain('[LOCAL GGUF] /models/llama-3.gguf:');
   });
 
   it('OpenAICompatibleProvider should handle Auto for FreeLLMAPI', async () => {
