@@ -3,16 +3,17 @@ import { LLMProvider, MockProvider } from './providers';
 import { TriageClassifier } from './triage';
 import { ConsensusSynthesizer } from './council';
 import { AgentStopSupervisor } from './agent-stop';
-import { selectOptimalModel, Benchmark, Model } from '../scoutlogic/dynamic-router';
+import { selectOptimalModel, Benchmark, Model } from './model-selector/dynamic-router';
 import { db } from '../basevault/db';
 import { ProviderHealthState } from './interceptor';
+import { OKFGraphQuery } from '../okf/graph-query';
 
 export interface RouteRequest {
   prompt: string;
   estimatedTokens: number;
   responseSchema?: any;
   /**
-   * OQ-001: Optional ScoutLogic hints. When both are provided, RouteSwitchEngine
+   * OQ-001: Optional model-selection hints. When both are provided, RouteSwitchEngine
    * will call selectOptimalModel() to pick the best available model before routing.
    */
   complexity?: 'trivial' | 'logical' | 'complex';
@@ -31,7 +32,8 @@ export interface RouteResponse {
   content: string;
   provider: string;
   tokensUsed: number;
-  confidence?: 'High' | 'Medium' | 'Low';
+  /** Numeric confidence, 0.0-1.0. */
+  confidence?: number;
   isCouncilMode?: boolean;
 }
 
@@ -47,7 +49,7 @@ export class RouteSwitchEngine {
     this.agentStop = new AgentStopSupervisor({ thresholdH: -1.0, consecutiveTokens: 3 });
   }
 
-  /** Registered providers keyed by id for ScoutLogic model selection and fallback resolution. */
+  /** Registered providers keyed by id for model selection and fallback resolution. */
   private providerRegistry: Map<string, LLMProvider> = new Map();
 
   public setProvider(provider: LLMProvider) {
@@ -118,12 +120,12 @@ export class RouteSwitchEngine {
   }
 
   /**
-   * OQ-001: Resolve the best provider for this request using ScoutLogic.
+   * OQ-001: Resolve the best provider for this request using the model selector.
    * Reads live benchmarks from `model_benchmarks` table. Returns the current
-   * provider unchanged if ScoutLogic cannot improve on it (no benchmarks, no
+   * provider unchanged if the model selector cannot improve on it (no benchmarks, no
    * matching registered provider, or no hints supplied).
    */
-  private _resolveProviderViaScoutLogic(req: RouteRequest, primary: LLMProvider): LLMProvider {
+  private _resolveProviderViaModelSelector(req: RouteRequest, primary: LLMProvider): LLMProvider {
     if (!req.complexity || !req.userPriority) return primary;
     try {
       const rawBenchmarks = db
@@ -141,7 +143,7 @@ export class RouteSwitchEngine {
       );
       const bestProvider = this.providerRegistry.get(bestId);
       if (bestProvider && bestProvider.id !== primary.id) {
-        console.log(`[RouteSwitch] ScoutLogic selected ${bestId} (complexity=${req.complexity}, priority=${req.userPriority})`);
+        console.log(`[RouteSwitch] Model selector chose ${bestId} (complexity=${req.complexity}, priority=${req.userPriority})`);
         return bestProvider;
       }
     } catch (err) {
@@ -154,7 +156,7 @@ export class RouteSwitchEngine {
    * Execute a single provider call with AgentStop post-evaluation.
    * Returns the response content or throws on error.
    */
-  private async _executeWithProvider(provider: LLMProvider, request: RouteRequest): Promise<{ content: string; confidence: 'High' | 'Medium' | 'Low' }> {
+  private async _executeWithProvider(provider: LLMProvider, request: RouteRequest): Promise<{ content: string; confidence: number }> {
     const abortController = new AbortController();
     this.agentStop.reset();
 
@@ -165,11 +167,15 @@ export class RouteSwitchEngine {
     const qualityScore = responseTokens < 3 ? -2.0 : responseTokens < 10 ? -0.8 : 0.0;
     this.agentStop.evaluateToken(qualityScore, abortController);
 
-    let confidence: 'High' | 'Medium' | 'Low' = 'High';
+    // Continuous confidence score, 0.0-1.0. Starts at 1.0 and is penalized for
+    // low-quality generation and/or AgentStop-triggered termination.
+    let confidence = 1.0;
+    if (qualityScore < 0.0) confidence -= 0.3;
     if (abortController.signal.aborted) {
       console.warn('[RouteSwitch] AgentStop terminated response — low confidence detected.');
-      confidence = 'Low';
+      confidence -= 0.6;
     }
+    confidence = Math.max(0, Math.min(1, confidence));
 
     return { content: responseContent, confidence };
   }
@@ -182,23 +188,38 @@ export class RouteSwitchEngine {
     // Resolve the provider chain for this request's scope
     const chain = this.resolveProviderChain(request);
 
-    // OQ-001: If ScoutLogic hints are provided, let it refine the primary choice
-    const primaryProvider = this._resolveProviderViaScoutLogic(request, chain[0]!);
+    // OQ-001: If model-selection hints are provided, let the model selector refine the primary choice
+    const primaryProvider = this._resolveProviderViaModelSelector(request, chain[0]!);
 
-    // Build the effective fallback chain: ScoutLogic pick first, then remaining chain members
+    // Build the effective fallback chain: model selector's pick first, then remaining chain members
     const effectiveChain = [primaryProvider, ...chain.filter(p => p.id !== primaryProvider.id)];
+
+    // OKF Context Injection: resolve relevant knowledge from the graph and prepend to prompt
+    let enrichedPrompt = request.prompt;
+    if (request.prompt.length > 20) { // Skip trivial/test prompts
+      try {
+        const contextChunks = OKFGraphQuery.resolveContext(request.prompt, request.projectId);
+        if (contextChunks.length > 0) {
+          const contextBlock = OKFGraphQuery.formatContextForPrompt(contextChunks);
+          enrichedPrompt = contextBlock + request.prompt;
+        }
+      } catch (err) {
+        // OKF context is best-effort — never block execution
+        console.warn('[RouteSwitch] OKF context injection failed (non-fatal):', err);
+      }
+    }
 
     // Check if Council Mode should be triggered
     const isCouncilTriggered = TriageClassifier.isHighRisk(request.prompt) && this.councilProviders.length >= 2;
 
     let responseContent: string;
     let finalProvider = primaryProvider.id;
-    let confidence: 'High' | 'Medium' | 'Low' = 'High';
+    let confidence = 1.0;
 
     if (isCouncilTriggered) {
       console.log('High-risk prompt detected. Triggering Council Mode.');
       const allProviders = [primaryProvider, ...this.councilProviders];
-      const consensus = await ConsensusSynthesizer.executeCouncilMode(request.prompt, request.estimatedTokens, allProviders, request.responseSchema);
+      const consensus = await ConsensusSynthesizer.executeCouncilMode(enrichedPrompt, request.estimatedTokens, allProviders, request.responseSchema);
       responseContent = consensus.content;
       confidence = consensus.confidence;
       finalProvider = 'Council Consensus';
@@ -216,7 +237,7 @@ export class RouteSwitchEngine {
         }
 
         try {
-          const result = await this._executeWithProvider(provider, request);
+          const result = await this._executeWithProvider(provider, { ...request, prompt: enrichedPrompt });
           responseContent = result.content;
           confidence = result.confidence;
           finalProvider = provider.id;
