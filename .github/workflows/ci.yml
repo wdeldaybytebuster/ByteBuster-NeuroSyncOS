@@ -20,6 +20,9 @@ jobs:
       - name: Install bubblewrap
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
 
+      - name: Allow unprivileged user namespaces (bubblewrap needs this on Ubuntu 24.04+ runners)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Install dependencies
         run: npm ci
 
