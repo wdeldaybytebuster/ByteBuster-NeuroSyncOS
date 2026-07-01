@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
 import { Brain, CheckCircle, XCircle, Search, Clock, Trash2, Pin, Sliders, Database, FileText, AlertTriangle } from 'lucide-react';
+import { OKFMindmap } from '../components/OKFMindmap';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#2DD4BF';
@@ -22,6 +23,11 @@ function DashboardView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [health, setHealth] = useState<{vectorCount:number; status:string; lastReflection:number|null}>({ vectorCount: 0, status: 'cold', lastReflection: null });
+  const [okfNodeCount, setOkfNodeCount] = useState(0);
+  const [okfSearch, setOkfSearch] = useState('');
+  const [okfResults, setOkfResults] = useState<any[]>([]);
+  const [okfIndexing, setOkfIndexing] = useState(false);
+  const [showMindmap, setShowMindmap] = useState(false);
 
   // Fetch approvals queue
   useEffect(() => {
@@ -36,6 +42,13 @@ function DashboardView() {
       if (d.success) setHealth({ vectorCount: d.vectorCount, status: d.status, lastReflection: d.lastReflection });
     }).catch(() => {});
   }, []);
+
+  // Fetch OKF node count
+  useEffect(() => {
+    fetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
+      if (d.success) setOkfNodeCount(d.count || 0);
+    }).catch(() => {});
+  }, [activeProjectId]);
 
   // Search memories
   const handleSearch = async () => {
@@ -166,6 +179,55 @@ function DashboardView() {
           </button>
         </div>
       </section>
+
+      {/* Widget D: OKF Knowledge Graph Browser */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Database size={16} style={{ color: ACCENT }} /> OKF Knowledge Graph
+          </h2>
+          <button onClick={() => setShowMindmap(true)} className="text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20 transition-all" style={{ color: ACCENT }}>
+            {okfNodeCount} nodes — Open Mindmap
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="flex gap-2 mb-4">
+          <input type="text" value={okfSearch} onChange={e => setOkfSearch(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { fetch(`${API}/api/okf/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: okfSearch, projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success) setOkfResults(d.chunks || []); }).catch(() => {}); } }}
+            placeholder="Search knowledge graph..."
+            className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500/50" />
+          <button onClick={() => { setOkfIndexing(true); fetch(`${API}/api/okf/index`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success && d.result) setOkfNodeCount(prev => prev + d.result.indexed); }).catch(() => {}).finally(() => setOkfIndexing(false)); }}
+            disabled={okfIndexing}
+            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
+            {okfIndexing ? 'Indexing...' : 'Re-index'}
+          </button>
+        </div>
+
+        {/* Results */}
+        {okfResults.length > 0 ? (
+          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+            {okfResults.map((r: any, i: number) => (
+              <div key={i} className="p-3 rounded-lg bg-black/30 border border-white/5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-bold text-white">{r.title}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20">{r.type}</span>
+                    <span className="text-[9px] font-mono text-gray-500">{r.tier}</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 line-clamp-2">{r.content?.substring(0, 120)}...</p>
+                <div className="text-[9px] text-gray-600 mt-1 font-mono">Confidence: {(r.confidence || 0).toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[10px] text-gray-500 text-center py-4 border border-dashed border-white/10 rounded-lg">
+            {okfSearch ? 'No results found.' : 'Search the knowledge graph to see indexed concepts.'}
+          </div>
+        )}
+      </section>
+      <OKFMindmap isOpen={showMindmap} onClose={() => setShowMindmap(false)} />
     </div>
   );
 }

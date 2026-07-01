@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
 import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plug, ListOrdered } from 'lucide-react';
+import { PathBrowser } from '../components/PathBrowser';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#FFB300';
@@ -176,7 +177,7 @@ function SetupView() {
   const [formType, setFormType] = useState('openai-compatible');
   const [formBaseUrl, setFormBaseUrl] = useState('http://localhost:1234/v1');
   const [formModelId, setFormModelId] = useState('Auto');
-  const [formModelPath, setFormModelPath] = useState('/models/llama-3.gguf');
+  const [formModelPath, setFormModelPath] = useState('./local_models/');
   const [formApiKey, setFormApiKey] = useState('');
   const [formSaving, setFormSaving] = useState(false);
   const [testResult, setTestResult] = useState<{connected:boolean;latencyMs?:number;error?:string;responsePreview?:string}|null>(null);
@@ -197,6 +198,9 @@ function SetupView() {
   const [saving, setSaving] = useState(false);
   const [mcpConnections, setMcpConnections] = useState<{id:string;name:string;transport:string;status:string}[]>([]);
   const [projects, setProjects] = useState<{id:string;name:string}[]>([]);
+
+  // Path browser state
+  const [showModelBrowser, setShowModelBrowser] = useState(false);
 
   // Load providers, rules, MCP, settings, projects
   useEffect(() => {
@@ -323,7 +327,7 @@ function SetupView() {
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <Key size={16} style={{ color: ACCENT }} /> Provider Registry
           </h2>
-          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('openai-compatible'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId('Auto'); setFormModelPath('/models/llama-3.gguf'); setFormApiKey(''); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
+          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('openai-compatible'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId('Auto'); setFormModelPath('./local_models/'); setFormApiKey(''); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
         </div>
         <p className="text-xs text-gray-400 mb-4">Named LLM endpoint entries. API keys are encrypted at rest. Create multiple entries of the same type for different models or services.</p>
 
@@ -383,7 +387,13 @@ function SetupView() {
               </div>
             )}
             {formType === 'llama-cpp' && (
-              <div><label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Model Path (.gguf)</label><input type="text" value={formModelPath} onChange={e => setFormModelPath(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" /></div>
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Model Path (.gguf)</label>
+                <div className="flex gap-2">
+                  <input type="text" value={formModelPath} onChange={e => setFormModelPath(e.target.value)} placeholder="./local_models/your-model.gguf" className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
+                  <button onClick={() => setShowModelBrowser(true)} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all text-[10px] font-bold">Browse</button>
+                </div>
+              </div>
             )}
             <div className="flex gap-2 pt-2">
               <button onClick={handleSaveProvider} disabled={formSaving || !formName.trim()} className="px-4 py-2 rounded-lg text-black font-bold text-xs disabled:opacity-50 transition-all" style={{ backgroundColor: ACCENT }}>{formSaving ? 'Saving...' : editingId ? 'Update' : 'Save Provider'}</button>
@@ -511,6 +521,15 @@ function SetupView() {
           {saving ? 'Saving...' : 'Commit Configuration'}
         </button>
       </div>
+
+      <PathBrowser
+        isOpen={showModelBrowser}
+        onClose={() => setShowModelBrowser(false)}
+        onSelect={(p) => setFormModelPath(p)}
+        mode="file"
+        fileFilter=".gguf"
+        title="Select GGUF Model File"
+      />
     </div>
   );
 }

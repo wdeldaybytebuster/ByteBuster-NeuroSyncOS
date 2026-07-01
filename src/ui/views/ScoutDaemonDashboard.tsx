@@ -19,6 +19,7 @@ function DashboardView() {
   const [utilization, setUtilization] = useState(12);
   const [discoveries, setDiscoveries] = useState<{id:string;title:string;type:string;created:string}[]>([]);
   const [todos, setTodos] = useState<any[]>([]);
+  const [scoutDrafts, setScoutDrafts] = useState<{id:string;title:string|null;type:string;confidence:number;status:string;createdAt:number}[]>([]);
 
   // SSE connection for system metrics
   useEffect(() => {
@@ -49,6 +50,13 @@ function DashboardView() {
     }).catch(() => {});
     fetch(`${API}/api/todos`).then(r => r.json()).then(d => {
       if (d.success && d.todos) setTodos(d.todos);
+    }).catch(() => {});
+  }, [activeProjectId]);
+
+  // Fetch OKF scout drafts
+  useEffect(() => {
+    fetch(`${API}/api/okf/scout-drafts`).then(r => r.json()).then(d => {
+      if (d.success && d.drafts) setScoutDrafts(d.drafts);
     }).catch(() => {});
   }, [activeProjectId]);
 
@@ -128,6 +136,38 @@ function DashboardView() {
                   <div><div className="text-xs font-bold text-white">{t.escalation_reason}</div><div className="text-[10px] text-gray-500 font-mono">{t.severity}</div></div>
                 </div>
                 <span className="text-[9px] font-mono text-amber-400">AWAITING</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Widget B2: Scout Research Drafts (OKF Quarantine) */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> Scout Research Drafts (OKF)
+          </h2>
+          <span className="text-[10px] font-mono text-gray-500">{scoutDrafts.length} quarantined</span>
+        </div>
+
+        {scoutDrafts.length === 0 ? (
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/5 border border-green-500/20">
+            <CheckCircle size={16} className="text-green-400" />
+            <div><div className="text-xs font-bold text-green-400">No Pending Research</div><div className="text-[10px] text-gray-500">ScoutDaemon has no quarantined OKF drafts awaiting review.</div></div>
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+            {scoutDrafts.map(d => (
+              <div key={d.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5 hover:border-purple-500/20 transition-all">
+                <div className="flex-1 min-w-0 mr-3">
+                  <div className="text-xs font-bold text-white truncate">{d.title || 'Untitled'}</div>
+                  <div className="text-[10px] text-gray-500 font-mono">{d.type} • conf: {d.confidence.toFixed(2)} • {new Date(d.createdAt).toLocaleDateString()}</div>
+                </div>
+                <div className="flex gap-1.5 shrink-0">
+                  <button onClick={async () => { await fetch(`${API}/api/okf/scout-drafts/${d.id}/promote`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); }} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Promote</button>
+                  <button onClick={async () => { await fetch(`${API}/api/okf/scout-drafts/${d.id}/reject`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); }} className="px-2 py-1 rounded text-[9px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
+                </div>
               </div>
             ))}
           </div>

@@ -6,6 +6,34 @@ Full gap analysis between the rebuilt UI dashboards and backend API. Identifies 
 <!-- Append-only log of changes — newest first -->
 
 **Date:** 2026-06-26
+**Agent:** Kiro (Unit Spec: Project Root Directory Mapping)
+
+- **SPEC IMPLEMENTED:** Project Root Directory Mapping — bridges BaseVault schema with UI, P0 Sandbox security, and CoreExec worktree isolation.
+- **Phase 1 — DB Schema:** Added `project_root_path TEXT` column to `projects` table via idempotent ALTER TABLE in `initDB()`. No data loss for existing rows (nullable column).
+- **Phase 2 — API:**
+  - `POST /api/projects` now accepts optional `projectRootPath` in body, validated with `validateProjectRootPath()`: must be absolute, no null bytes, no forbidden system dirs (/etc, /proc, /dev, etc.), must exist on disk, must be a directory.
+  - New `PUT /api/projects/:id` endpoint for updating name and/or projectRootPath with same strict validation.
+  - Returns 400 with descriptive error for invalid paths.
+- **Phase 3 — UI:** `ProjectSwitcher.tsx` (Right Bar) rebuilt:
+  - "New Workspace" form now has "Project Root Path" input field (optional, absolute path with FolderOpen icon).
+  - Each project in the list shows its `project_root_path` in small mono text below the name.
+  - Pencil edit button (hover-reveal) opens inline edit form with name + root path.
+  - Validation errors display inline on both create and edit.
+- **Phase 4 — P0 Sandbox Security:**
+  - Extracted `CommandSandbox.resolveCwd(projectId)` static method.
+  - Resolution priority: `project_root_path` (user source dir) > `workspace_path` (system sandbox) > throw error.
+  - `PathValidator.validateContainment()` enforces all command arguments stay within the resolved directory.
+  - Path traversal attacks (../../etc/passwd) blocked by prefix check.
+- **Phase 5 — Downstream (Worktree Isolation):**
+  - New `src/core/coreexec/worktree.ts` — `WorktreeIsolation` class managing `.nexus_worktrees/` inside project_root_path.
+  - Methods: `createRunWorktree`, `removeRunWorktree`, `listWorktrees`, `getRunWorktreePath`.
+  - Wired into `executeRun()` — creates `.nexus_worktrees/<runId>` on run start so AI-drafted file mutations are quarantined.
+- **GitNexus:** Pre-change impact all LOW. Post-change detect-changes: 5 files, 6 symbols, MEDIUM (aggregate, expected).
+- **Build:** `npx tsc --noEmit` ✓ (0 errors)
+- **Files:** `src/core/basevault/db.ts`, `src/server/routes/projects.ts`, `src/ui/components/ProjectSwitcher.tsx`, `src/core/coreexec/sandbox.ts`, `src/core/coreexec/worktree.ts` (new), `src/core/coreexec/engine.ts`
+
+
+**Date:** 2026-06-26
 **Agent:** Kiro (Cerebro Floating Chatbot + LLM UI Polish)
 
 - **NEW FEATURE: Cerebro Floating Chatbot** — always-visible assistant accessible from every view.

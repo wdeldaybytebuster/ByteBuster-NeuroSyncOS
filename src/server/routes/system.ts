@@ -346,3 +346,39 @@ systemRouter.delete('/proposals/pending', (c) => {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
+
+// Directory browser — lists contents of a local directory for the UI path picker
+systemRouter.post('/browse-directory', async (c) => {
+  try {
+    const { path: dirPath } = await c.req.json();
+    const targetPath = dirPath || os.homedir();
+    
+    if (!fs.existsSync(targetPath)) {
+      return c.json({ success: false, error: 'Directory not found' }, 404);
+    }
+    
+    const stat = fs.statSync(targetPath);
+    if (!stat.isDirectory()) {
+      return c.json({ success: false, error: 'Not a directory' }, 400);
+    }
+
+    const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+    const items = entries
+      .filter(e => !e.name.startsWith('.')) // Hide dotfiles by default
+      .map(e => ({
+        name: e.name,
+        isDirectory: e.isDirectory(),
+        path: path.join(targetPath, e.name),
+      }))
+      .sort((a, b) => {
+        // Directories first, then alphabetical
+        if (a.isDirectory && !b.isDirectory) return -1;
+        if (!a.isDirectory && b.isDirectory) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    return c.json({ success: true, currentPath: targetPath, parentPath: path.dirname(targetPath), items });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
