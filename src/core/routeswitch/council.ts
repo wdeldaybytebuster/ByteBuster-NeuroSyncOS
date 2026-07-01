@@ -2,7 +2,8 @@ import { LLMProvider } from './providers';
 
 export interface ConsensusResult {
   content: string;
-  confidence: 'High' | 'Medium' | 'Low';
+  /** Numeric confidence, 0.0-1.0. Derived from disagreementScore as 1 - min(disagreementScore, 1). */
+  confidence: number;
   disagreementScore: number;
 }
 
@@ -28,7 +29,7 @@ export class ConsensusSynthesizer {
     }
 
     if (validResults.length === 1) {
-      return { content: validResults[0]!, confidence: 'Low', disagreementScore: 1.0 };
+      return { content: validResults[0]!, confidence: 0, disagreementScore: 1.0 };
     }
 
     // In a full implementation, we'd use another LLM call or structural AST diffing to compare the DAGs.
@@ -45,10 +46,8 @@ export class ConsensusSynthesizer {
       if (diff > maxDiff) maxDiff = diff;
     }
 
-    // Higher maxDiff -> Higher disagreement
-    let confidence: 'High' | 'Medium' | 'Low' = 'High';
-    if (maxDiff > 0.5) confidence = 'Low';
-    else if (maxDiff > 0.2) confidence = 'Medium';
+    // Higher maxDiff -> Higher disagreement -> lower confidence
+    const confidence = 1 - Math.min(maxDiff, 1);
 
     const chosenResponse = validResults.reduce((a, b) => a.length > b.length ? a : b);
 

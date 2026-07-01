@@ -33,6 +33,15 @@ describe('BaseVault SQLite Database', () => {
     expect(result.journal_mode.toLowerCase()).toBe('wal');
   });
 
+  it('should give os_todos a numeric confidence column defaulting to 0.5 (Deference UI 0.70 threshold)', () => {
+    const columns = db.prepare(`PRAGMA table_info(os_todos)`).all() as { name: string; type: string; dflt_value: string | null }[];
+    const confidenceCol = columns.find(c => c.name === 'confidence');
+
+    expect(confidenceCol).toBeDefined();
+    expect(confidenceCol!.type.toUpperCase()).toBe('REAL');
+    expect(confidenceCol!.dflt_value).toBe('0.5');
+  });
+
   it('should allow inserting and querying a project', () => {
     const insertProject = db.prepare(`INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)`);
     const projectId = 'test-proj-123';
