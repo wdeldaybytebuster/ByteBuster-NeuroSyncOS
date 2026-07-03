@@ -492,9 +492,10 @@ function DashboardView() {
         ) : (
           <>
             <p className="text-[10px] text-gray-500 mb-3">
-              Interactive shell for CLI tools (Claude CLI, OpenCode, etc.), confined to this
-              project's directory with network access removed. Started only by you — never by an agent.
-              Closing the terminal triggers an automatic project scan so any changes an agent made get picked up.
+              Interactive shell for CLI coding agents (Claude CLI, Codex, OpenCode, etc.), confined to this
+              project's directory. Network access is open so these tools can reach their own APIs. Started only
+              by you, never by an agent. Closing the terminal triggers an automatic project scan so any changes
+              an agent made get picked up.
             </p>
             {autoScanNotice && (
               <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-teal-500/10 border border-teal-500/20 text-[10px] text-teal-300">
