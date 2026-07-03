@@ -2,6 +2,8 @@ import * as pty from 'node-pty';
 import * as fs from 'fs';
 import * as os from 'os';
 import { CommandSandbox } from './sandbox';
+import { scanProjectForDocs } from '../okf/project-scanner';
+import { scoutEmitter } from '../scoutdaemon/sse';
 
 /**
  * Task 8 — Interactive Embedded Terminal (PortGrid).
@@ -40,6 +42,54 @@ import { CommandSandbox } from './sandbox';
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 const BWRAP_BIN = '/usr/bin/bwrap';
+
+// Auto-scan-on-close (the "learning loop" gap): a coding agent run through this
+// terminal can change project files with no automatic path back into OKF's
+// memory system today -- /api/okf/scan-project is manual-click-only. Rather
+// than build a new trigger mechanism, this reuses the same in-process scan
+// function on the one lifecycle event every session (WS close, WS error, and
+// shell exit -- see server/index.ts) already funnels through: dispose().
+// Cooldown avoids re-scanning the same project on every rapid open/close.
+const AUTO_SCAN_COOLDOWN_MS = 60 * 1000;
+const lastAutoScanAtByProject = new Map<string, number>();
+
+/**
+ * Broadcasts a TERMINAL_AUTO_SCAN event over the existing ScoutDaemon SSE
+ * channel (scoutEmitter -> /api/scout/events -> any open dashboard's
+ * EventSource) so the frontend can show "Project scanned" feedback -- this
+ * is NOT silent magic, and it doesn't depend on the terminal's own WebSocket
+ * still being open (by the time dispose() runs, that socket may already be
+ * closed/closing).
+ */
+// Exported (not called externally in production) so it's testable without
+// needing a real bwrap-spawned pty session.
+export function triggerAutoScan(projectId: string): void {
+  const last = lastAutoScanAtByProject.get(projectId) ?? 0;
+  const now = Date.now();
+  if (now - last < AUTO_SCAN_COOLDOWN_MS) return;
+  lastAutoScanAtByProject.set(projectId, now);
+
+  try {
+    const result = scanProjectForDocs(projectId);
+    if (result.success) {
+      console.log(
+        `[Terminal] auto-scan for project ${projectId}: ${result.totalFound} doc(s) found, ${result.unprocessedCount} unprocessed`,
+      );
+      scoutEmitter.emit('update', {
+        type: 'TERMINAL_AUTO_SCAN',
+        projectId,
+        totalFound: result.totalFound,
+        unprocessedCount: result.unprocessedCount,
+      });
+    }
+    // If the project has no project_root_path configured, scanProjectForDocs
+    // returns success:false -- not every project is scannable, and that's
+    // not an error worth surfacing loudly on terminal close.
+  } catch (err) {
+    // Best-effort only: never let a scan failure affect terminal teardown.
+    console.warn(`[Terminal] auto-scan failed for project ${projectId}:`, err);
+  }
+}
 
 export interface TerminalSessionOptions {
   cols?: number;
@@ -189,6 +239,7 @@ export class TerminalSession {
     }
     terminalSessions.delete(this.id);
     console.log(`[Terminal] session ${this.id} disposed (${reason})`);
+    triggerAutoScan(this.projectId);
   }
 }
 

@@ -55,6 +55,7 @@ function DashboardView() {
   const [approving, setApproving] = useState(false);
   const [showMindmap, setShowMindmap] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [autoScanNotice, setAutoScanNotice] = useState<string | null>(null);
 
   // Fetch pending proposal on mount
   useEffect(() => {
@@ -140,10 +141,27 @@ function DashboardView() {
           const time = new Date().toLocaleTimeString('en-US', { hour12: false }).substring(0, 8);
           setToolCalls(prev => [{ tool: data.taskId || 'task', status: 'valid', time }, ...prev.slice(0, 19)]);
         }
+        // A terminal session for this project just closed and its project was
+        // auto-scanned for changes (see terminal-session.ts's dispose()) --
+        // surface this so it's visible feedback, not silent magic.
+        if (data.type === 'TERMINAL_AUTO_SCAN' && data.projectId === activeProjectId) {
+          setAutoScanNotice(
+            data.unprocessedCount > 0
+              ? `Project scanned after terminal close — ${data.unprocessedCount} new/changed doc(s) found.`
+              : 'Project scanned after terminal close — no new docs found.'
+          );
+        }
       } catch {}
     });
     return () => es.close();
-  }, []);
+  }, [activeProjectId]);
+
+  // Auto-dismiss the scan notice after a few seconds.
+  useEffect(() => {
+    if (!autoScanNotice) return;
+    const t = setTimeout(() => setAutoScanNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [autoScanNotice]);
 
   // DAG Canvas state
   const [runs, setRuns] = useState<{id:string;status:string;created_at:number}[]>([]);
@@ -476,7 +494,13 @@ function DashboardView() {
             <p className="text-[10px] text-gray-500 mb-3">
               Interactive shell for CLI tools (Claude CLI, OpenCode, etc.), confined to this
               project's directory with network access removed. Started only by you — never by an agent.
+              Closing the terminal triggers an automatic project scan so any changes an agent made get picked up.
             </p>
+            {autoScanNotice && (
+              <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-teal-500/10 border border-teal-500/20 text-[10px] text-teal-300">
+                <Sparkles size={12} className="shrink-0" /> {autoScanNotice}
+              </div>
+            )}
             {showTerminal && (
               <div
                 className="rounded-lg overflow-hidden border border-white/10 bg-black"

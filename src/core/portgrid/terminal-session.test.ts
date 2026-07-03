@@ -1,13 +1,17 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import crypto from 'crypto';
 import {
   buildBwrapArgs,
   isBwrapAvailable,
   TerminalSession,
   terminalSessions,
+  triggerAutoScan,
 } from './terminal-session';
+import { db, initDB } from '../basevault/db';
+import { scoutEmitter } from '../scoutdaemon/sse';
 
 // ─── Task 8 — Embedded Terminal sandbox ──────────────────────────────────────
 // The terminal spawns a REAL interactive shell (no allowlist), so directory +
@@ -100,5 +104,81 @@ maybe('terminal-session — empirical containment (bwrap present)', () => {
     expect(terminalSessions.has('test-2')).toBe(true);
     session.dispose('test');
     expect(terminalSessions.has('test-2')).toBe(false);
+  });
+});
+
+// ─── Auto-scan-on-close (the "learning loop" gap) ────────────────────────────
+// Tests triggerAutoScan directly rather than via a real pty session -- the
+// scan-trigger logic is independent of bwrap/pty and shouldn't need either.
+describe('terminal-session — auto-scan-on-close', () => {
+  beforeAll(() => {
+    initDB();
+  });
+
+  function makeScannableProject(): { projectId: string; rootPath: string } {
+    const rootPath = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-term-autoscan-'));
+    const projectId = crypto.randomUUID();
+    db.prepare('INSERT INTO projects (id, name, project_root_path, created_at) VALUES (?, ?, ?, ?)').run(
+      projectId,
+      'Auto-scan Test Project',
+      rootPath,
+      Date.now(),
+    );
+    fs.writeFileSync(path.join(rootPath, 'agent-made-change.md'), '# a change');
+    return { projectId, rootPath };
+  }
+
+  it('broadcasts a TERMINAL_AUTO_SCAN event over scoutEmitter with real scan results', async () => {
+    const { projectId, rootPath } = makeScannableProject();
+    const received: any[] = [];
+    const onUpdate = (data: any) => received.push(data);
+    scoutEmitter.on('update', onUpdate);
+
+    try {
+      triggerAutoScan(projectId);
+    } finally {
+      scoutEmitter.off('update', onUpdate);
+      fs.rmSync(rootPath, { recursive: true, force: true });
+    }
+
+    const event = received.find((d) => d.type === 'TERMINAL_AUTO_SCAN' && d.projectId === projectId);
+    expect(event).toBeDefined();
+    expect(event.totalFound).toBe(1);
+    expect(event.unprocessedCount).toBe(1);
+  });
+
+  it('does not re-scan the same project within the cooldown window', async () => {
+    const { projectId, rootPath } = makeScannableProject();
+    const received: any[] = [];
+    const onUpdate = (data: any) => received.push(data);
+    scoutEmitter.on('update', onUpdate);
+
+    try {
+      triggerAutoScan(projectId);
+      triggerAutoScan(projectId); // immediate second call -- should be a no-op
+    } finally {
+      scoutEmitter.off('update', onUpdate);
+      fs.rmSync(rootPath, { recursive: true, force: true });
+    }
+
+    const events = received.filter((d) => d.type === 'TERMINAL_AUTO_SCAN' && d.projectId === projectId);
+    expect(events.length).toBe(1);
+  });
+
+  it('does not throw or emit when the project has no project_root_path', () => {
+    const projectId = crypto.randomUUID();
+    db.prepare('INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+      projectId,
+      'No Root Path Terminal Project',
+      Date.now(),
+    );
+    const received: any[] = [];
+    const onUpdate = (data: any) => received.push(data);
+    scoutEmitter.on('update', onUpdate);
+
+    expect(() => triggerAutoScan(projectId)).not.toThrow();
+    scoutEmitter.off('update', onUpdate);
+
+    expect(received.some((d) => d.type === 'TERMINAL_AUTO_SCAN' && d.projectId === projectId)).toBe(false);
   });
 });
