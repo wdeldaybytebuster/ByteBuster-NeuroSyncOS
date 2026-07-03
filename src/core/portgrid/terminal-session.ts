@@ -1,6 +1,7 @@
 import * as pty from 'node-pty';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import { CommandSandbox } from './sandbox';
 import { scanProjectForDocs } from '../okf/project-scanner';
 import { scoutEmitter } from '../scoutdaemon/sse';
@@ -111,19 +112,98 @@ function resolveShell(): string {
   return '/bin/sh';
 }
 
+// System-only PATH: the value used when no extra Node toolchain bind applies.
+// Kept identical to the terminal's historical PATH so the "nvm absent" shape is
+// byte-for-byte today's behavior.
+const SYSTEM_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+
+/**
+ * The directory containing the currently-running Node binary.
+ *
+ * On this host — and commonly for global npm installs — this same directory
+ * also holds the CLI tools installed alongside Node (`npx`, `opencode`, and
+ * `claude`), regardless of whether Node is nvm-managed, a distro package, or a
+ * standalone install. Using `path.dirname(process.execPath)` resolves it
+ * generically: no hardcoded nvm paths, usernames, or version numbers, and it
+ * generalizes to non-nvm setups (a system Node with tools installed beside it
+ * resolves to the right place too). On hosts where this yields a directory that
+ * doesn't exist / isn't readable (nvm absent, unusual layout), buildBwrapArgs
+ * treats it as absent and no-ops — no extra bind, PATH unchanged.
+ */
+export function currentNodeBinDir(): string {
+  return path.dirname(process.execPath);
+}
+
+// True only for a real, readable, executable-searchable directory. Used to
+// decide whether the optional Node-toolchain bind applies; any failure (missing
+// path, not a dir, permission error) degrades to `false` → graceful no-op.
+function isBindableDir(dir: string): boolean {
+  try {
+    if (!fs.statSync(dir).isDirectory()) return false;
+    fs.accessSync(dir, fs.constants.R_OK | fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Build the hardened bwrap argument vector.
  *
  * Ordering note: the fresh /proc, /dev and /tmp mounts are declared BEFORE the
  * project --bind so that, even if a project directory happens to live under /tmp,
  * the read-write project bind is layered last and always wins.
+ *
+ * ── Node toolchain bind (opt-in per host shape) ───────────────────────────────
+ * Because PATH is cleared to system dirs only, CLI coding tools installed under
+ * an nvm-managed (or otherwise non-system) Node — e.g. `claude`, `npx`,
+ * `opencode` — do not resolve inside the terminal even though the host has them.
+ * To fix this WITHOUT widening filesystem containment more than strictly
+ * necessary, we add exactly ONE extra mount: a READ-ONLY bind of the directory
+ * containing the currently-running Node binary (`nodeBinDir`, default
+ * `currentNodeBinDir()`), and prepend that directory to PATH. We bind ONLY that
+ * one bin directory — never the whole nvm tree, NVM_DIR, or $HOME — and it is
+ * read-only, so the shell cannot replace `node`/tools inside it. When the
+ * directory is absent/unreadable (e.g. no nvm) the whole enhancement no-ops:
+ * no extra bind, PATH stays exactly as it was historically.
+ *
+ * DOCUMENTED LIMITATION: tools in that bin dir that are symlinks pointing into a
+ * *sibling* directory (nvm lays out `bin/claude -> ../lib/node_modules/...`)
+ * become dangling inside the sandbox, because only `bin/` is bound and `lib/` is
+ * not. A real binary in the dir (`node` itself) resolves and runs. Widening the
+ * bind to also cover `lib/node_modules` would expose every globally-installed
+ * npm package's code and is deliberately OUT OF SCOPE for this change.
  */
-export function buildBwrapArgs(projectDir: string, shell: string): string[] {
+export function buildBwrapArgs(
+  projectDir: string,
+  shell: string,
+  nodeBinDir: string | null = currentNodeBinDir(),
+): string[] {
   const username = (() => {
     try { return os.userInfo().username; } catch { return 'user'; }
   })();
   const lang = process.env.LANG || 'C.UTF-8';
   const term = process.env.TERM || 'xterm-256color';
+
+  // Optional Node-toolchain exposure (see the block comment above). Default:
+  // system-only PATH and no extra bind — i.e. exactly today's behavior.
+  let pathValue = SYSTEM_PATH;
+  const nodeBinBind: string[] = [];
+  if (nodeBinDir && isBindableDir(nodeBinDir)) {
+    // Never create a duplicate/conflicting mount for a path already bound: the
+    // read-write project bind, or the read-only /usr and /etc binds. If the dir
+    // is under one of those it's already reachable on the filesystem; we still
+    // surface it on PATH so its executables are found.
+    const alreadyBound =
+      nodeBinDir === projectDir || nodeBinDir.startsWith(projectDir + path.sep) ||
+      nodeBinDir === '/usr' || nodeBinDir.startsWith('/usr/') ||
+      nodeBinDir === '/etc' || nodeBinDir.startsWith('/etc/');
+    if (!alreadyBound) {
+      nodeBinBind.push('--ro-bind', nodeBinDir, nodeBinDir);
+    }
+    // Prepend so these tools take precedence; system dirs remain in PATH.
+    pathValue = `${nodeBinDir}:${SYSTEM_PATH}`;
+  }
 
   return [
     // Read-only OS: everything the shell and tools need to run, nothing writable.
@@ -143,12 +223,15 @@ export function buildBwrapArgs(projectDir: string, shell: string): string[] {
     // The ONLY writable host path: this project's directory.
     '--bind', projectDir, projectDir,
     '--chdir', projectDir,
+    // Read-only bind of the current Node toolchain's bin dir, if applicable
+    // (empty array = no-op when nvm/that dir is absent).
+    ...nodeBinBind,
     // Wipe inherited environment (may contain server secrets / provider API keys)
     // and set only a clean, minimal env for the interactive shell.
     '--clearenv',
     '--setenv', 'HOME', projectDir,
     '--setenv', 'PWD', projectDir,
-    '--setenv', 'PATH', '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+    '--setenv', 'PATH', pathValue,
     '--setenv', 'TERM', term,
     '--setenv', 'USER', username,
     '--setenv', 'LOGNAME', username,

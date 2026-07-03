@@ -5,6 +5,7 @@ import * as path from 'path';
 import crypto from 'crypto';
 import {
   buildBwrapArgs,
+  currentNodeBinDir,
   isBwrapAvailable,
   TerminalSession,
   terminalSessions,
@@ -55,6 +56,69 @@ describe('terminal-session — hardened bwrap recipe', () => {
   });
 });
 
+// ─── Node toolchain bin bind (opt-in per host shape) ─────────────────────────
+// The terminal clears PATH to system dirs only, which hides CLI tools installed
+// under an nvm-managed / non-system Node (claude, npx, opencode, …). We add ONE
+// read-only bind of the current Node bin dir and prepend it to PATH — and it
+// must no-op cleanly (no bind, unchanged PATH) when that dir is absent.
+const SYSTEM_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+
+function pathValueOf(args: string[]): string {
+  const i = args.indexOf('PATH');
+  // The value immediately follows the 'PATH' key in the flattened --setenv list.
+  return args[i + 1] ?? '';
+}
+
+describe('terminal-session — Node toolchain bin bind', () => {
+  it('currentNodeBinDir() returns the dir of the running node binary', () => {
+    expect(currentNodeBinDir()).toBe(path.dirname(process.execPath));
+  });
+
+  it('adds a READ-ONLY bind for an existing node bin dir and prepends it to PATH', () => {
+    // Use a real, guaranteed-existing directory so the readability check passes.
+    const bin = path.dirname(process.execPath);
+    const args = buildBwrapArgs('/tmp/proj', '/bin/bash', bin);
+    const joined = args.join(' ');
+    expect(joined).toContain(`--ro-bind ${bin} ${bin}`);
+    // Must NOT be a writable --bind of the toolchain dir (shell can't replace node).
+    expect(joined).not.toContain(`--bind ${bin} ${bin}`);
+    // PATH is prepended with the bin dir; system dirs are retained after it.
+    expect(pathValueOf(args)).toBe(`${bin}:${SYSTEM_PATH}`);
+  });
+
+  it('no-ops (no extra bind, unchanged PATH) when the dir does not exist', () => {
+    const missing = '/definitely/not/a/real/node/bin/xyzzy';
+    const args = buildBwrapArgs('/tmp/proj', '/bin/bash', missing);
+    expect(args.join(' ')).not.toContain(missing);
+    expect(pathValueOf(args)).toBe(SYSTEM_PATH);
+  });
+
+  it('no-ops when nodeBinDir is null (nvm-absent / non-nvm host shape)', () => {
+    const args = buildBwrapArgs('/tmp/proj', '/bin/bash', null);
+    expect(pathValueOf(args)).toBe(SYSTEM_PATH);
+    // Only /usr and /etc are ro-bound; no third ro-bind was introduced.
+    const roBinds = args.filter((a, i) => a === '--ro-bind').length;
+    expect(roBinds).toBe(2);
+  });
+
+  it('does NOT create a duplicate bind when the dir is already covered by /usr, but still surfaces it on PATH', () => {
+    const args = buildBwrapArgs('/tmp/proj', '/bin/bash', '/usr/bin');
+    expect(args.join(' ')).not.toContain('--ro-bind /usr/bin /usr/bin');
+    expect(pathValueOf(args)).toBe(`/usr/bin:${SYSTEM_PATH}`);
+  });
+
+  it('preserves every other containment property when the bind is added', () => {
+    const bin = path.dirname(process.execPath);
+    const args = buildBwrapArgs('/tmp/proj', '/bin/bash', bin);
+    expect(args).toContain('--clearenv');
+    expect(args).toContain('--unshare-net');
+    expect(args).toContain('--unshare-pid');
+    expect(args).toContain('--die-with-parent');
+    expect(args.join(' ')).toContain('--bind /tmp/proj /tmp/proj'); // single writable bind intact
+    expect(args.join(' ')).not.toContain('--dev-bind');
+  });
+});
+
 describe('terminal-session — availability guard', () => {
   it('isBwrapAvailable returns a boolean', () => {
     expect(typeof isBwrapAvailable()).toBe('boolean');
@@ -83,6 +147,18 @@ maybe('terminal-session — empirical containment (bwrap present)', () => {
     });
   }
 
+  // Like collect(), but resolves as soon as `done(buf)` is satisfied (robust to
+  // slow shell startup), falling back to the max timeout otherwise.
+  function collectUntil(s: TerminalSession, done: (buf: string) => boolean, maxMs: number): Promise<string> {
+    return new Promise((resolve) => {
+      let out = '';
+      let settled = false;
+      const finish = () => { if (!settled) { settled = true; resolve(out); } };
+      s.onData((d) => { out += d; if (done(out)) finish(); });
+      setTimeout(finish, maxMs);
+    });
+  }
+
   it('confines to project dir and blocks /etc/shadow', async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-term-'));
     // NOTE: constructs TerminalSession directly to bypass the DB-backed
@@ -97,6 +173,24 @@ maybe('terminal-session — empirical containment (bwrap present)', () => {
     expect(out).toMatch(/Permission denied|SHADOW_EXIT=1/); // shadow unreadable
     expect(terminalSessions.has('test-1')).toBe(true);
   }, 8000);
+
+  it('resolves the bound Node bin dir via PATH inside the sandbox', async () => {
+    // Positive-case proof that the ro-bind + PATH prepend actually works
+    // end-to-end: the `node` binary in the bound dir must resolve and run.
+    // Resolve as soon as the expected marker appears (robust to slow shell
+    // startup under load), with a hard timeout fallback.
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-term-'));
+    session = new TerminalSession('test-node', 'test-project', tmpDir, { cols: 80, rows: 24 });
+    const expectedNode = path.join(currentNodeBinDir(), 'node');
+    // Match the RESULT ('NODE_EXIT=0'), not the pty's echo of the typed command
+    // (which contains the literal 'NODE_EXIT=$?').
+    const p = collectUntil(session, (buf) => /NODE_EXIT=\d/.test(buf), 9000);
+    session.write('command -v node; echo NODE_EXIT=$?\n');
+    const settled = await p;
+
+    expect(settled).toContain(expectedNode);   // resolves to the bound node, via PATH
+    expect(settled).toMatch(/NODE_EXIT=0/);    // and it actually executes
+  }, 12000);
 
   it('dispose() kills the session and removes it from the registry', async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-term-'));
