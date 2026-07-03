@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Globe, Folder, Plus, X, FolderOpen, Pencil } from 'lucide-react';
+import { Globe, Folder, Plus, X, FolderOpen, Pencil, Archive } from 'lucide-react';
 import { useNavigation } from '../layouts/OSLayout';
 import { PathBrowser } from './PathBrowser';
 
@@ -73,6 +73,19 @@ export function ProjectSwitcher() {
     setEditName(p.name);
     setEditRootPath(p.project_root_path || '');
     setEditError('');
+  };
+
+  const handleArchive = async (p: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Archive "${p.name}"? It will disappear from this list but its data isn't deleted.`)) return;
+    try {
+      const res = await fetch(`${API}/api/projects/${p.id}/archive`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setProjects(prev => prev.filter(proj => proj.id !== p.id));
+        if (activeProjectId === p.id) setActiveProject(null, 'Global');
+      }
+    } catch { /* leave the row in place; user can retry */ }
   };
 
   const handleSaveEdit = async () => {
@@ -168,6 +181,9 @@ export function ProjectSwitcher() {
                   {activeProjectId === p.id && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>}
                   <button onClick={(e) => { e.stopPropagation(); handleStartEdit(p); }} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all shrink-0" aria-label="Edit project">
                     <Pencil size={11} />
+                  </button>
+                  <button onClick={(e) => handleArchive(p, e)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-gray-500 hover:text-red-400 transition-all shrink-0" aria-label="Archive project" title="Archive project">
+                    <Archive size={11} />
                   </button>
                 </div>
               )}

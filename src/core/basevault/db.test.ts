@@ -47,6 +47,15 @@ describe('BaseVault SQLite Database', () => {
     expect(confidenceCol!.dflt_value).toBe('0.5');
   });
 
+  it('should give projects a nullable archived_at column for soft-delete', () => {
+    const columns = db.prepare(`PRAGMA table_info(projects)`).all() as { name: string; type: string; notnull: number }[];
+    const archivedAtCol = columns.find(c => c.name === 'archived_at');
+
+    expect(archivedAtCol).toBeDefined();
+    expect(archivedAtCol!.type.toUpperCase()).toBe('INTEGER');
+    expect(archivedAtCol!.notnull).toBe(0);
+  });
+
   it('should allow inserting and querying a project', () => {
     const insertProject = db.prepare(`INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)`);
     const projectId = 'test-proj-123';

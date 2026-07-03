@@ -234,4 +234,15 @@ export function initDB() {
       console.error('Error adding confidence column to os_todos:', e);
     }
   }
+
+  try {
+    // Soft-delete for projects: archived_at is NULL for active projects.
+    // There was previously no delete/archive path at all, so orphaned/test
+    // project rows had no way to be cleaned up short of a raw DB edit.
+    db.exec(`ALTER TABLE projects ADD COLUMN archived_at INTEGER;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding archived_at column to projects:', e);
+    }
+  }
 }
