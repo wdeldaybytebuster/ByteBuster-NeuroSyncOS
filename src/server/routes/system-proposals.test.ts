@@ -61,6 +61,27 @@ describe('POST /proposals/stage', () => {
     expect(res.data.success).toBe(false);
   });
 
+  it('stores a caller-supplied confidence in [0,1] instead of the default', async () => {
+    const res = await post('/proposals/stage', { proposal: sampleProposal, confidence: 0.83 });
+    expect(res.status).toBe(200);
+    const row = db.prepare('SELECT confidence FROM dag_proposals WHERE id = ?').get(res.data.id) as any;
+    expect(row.confidence).toBe(0.83);
+  });
+
+  it('falls back to 0.5 when confidence is omitted or out of range', async () => {
+    const omitted = await post('/proposals/stage', { proposal: sampleProposal });
+    const omittedRow = db.prepare('SELECT confidence FROM dag_proposals WHERE id = ?').get(omitted.data.id) as any;
+    expect(omittedRow.confidence).toBe(0.5);
+
+    const outOfRange = await post('/proposals/stage', { proposal: sampleProposal, confidence: 1.7 });
+    const outRow = db.prepare('SELECT confidence FROM dag_proposals WHERE id = ?').get(outOfRange.data.id) as any;
+    expect(outRow.confidence).toBe(0.5);
+
+    const nonNumeric = await post('/proposals/stage', { proposal: sampleProposal, confidence: 'high' });
+    const nonNumRow = db.prepare('SELECT confidence FROM dag_proposals WHERE id = ?').get(nonNumeric.data.id) as any;
+    expect(nonNumRow.confidence).toBe(0.5);
+  });
+
   it('supersedes a prior pending proposal so only one is pending at a time', async () => {
     const first = await post('/proposals/stage', { proposal: sampleProposal });
     const second = await post('/proposals/stage', { proposal: sampleProposal });

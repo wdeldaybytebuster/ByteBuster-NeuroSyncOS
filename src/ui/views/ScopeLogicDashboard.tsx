@@ -23,9 +23,11 @@ function DashboardView() {
   const [proposal, setProposal] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Load interview history on mount
+  // Load interview history on mount. Interview sessions are scoped per project
+  // server-side, so pass the active project (nullable → the shared Global scope).
   useEffect(() => {
-    fetch(`${API}/api/scopelogic/history`)
+    const projectQuery = activeProjectId ? `?projectId=${encodeURIComponent(activeProjectId)}` : '';
+    fetch(`${API}/api/scopelogic/history${projectQuery}`)
       .then(r => r.json())
       .then(data => {
         if (data.history && data.history.length > 0) {
@@ -54,7 +56,7 @@ function DashboardView() {
     try {
       const res = await fetch(`${API}/api/scopelogic/prompt`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg })
+        body: JSON.stringify({ message: msg, projectId: activeProjectId || null })
       });
       const data = await res.json();
       const reply = data.reply || data.response || data.message || 'Acknowledged.';
@@ -69,7 +71,9 @@ function DashboardView() {
           // active project (nullable — "Global"/no active project is valid).
           await fetch(`${API}/api/system/proposals/stage`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proposal: prop, projectId: activeProjectId || null })
+            // Forward the LLM's self-reported confidence when present; the server
+            // defaults to 0.5 when it's absent (e.g. the template fallback path).
+            body: JSON.stringify({ proposal: prop, projectId: activeProjectId || null, confidence: prop.confidence })
           }).catch(() => {});
           // Auto-navigate to PortGrid for visual review after a brief delay
           setTimeout(() => navigate('portgrid'), 1500);
@@ -82,7 +86,10 @@ function DashboardView() {
 
   // Reset interview
   const handleReset = async () => {
-    await fetch(`${API}/api/scopelogic/reset`, { method: 'POST' }).catch(() => {});
+    await fetch(`${API}/api/scopelogic/reset`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: activeProjectId || null })
+    }).catch(() => {});
     await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
     setMessages([{ role: 'assistant', text: 'Interview reset. What is the primary objective of the workflow DAG we are building?' }]);
     setRound(1);
@@ -187,13 +194,15 @@ function DashboardView() {
         </h2>
 
         <div className="space-y-3">
-          {/* There is no numeric multi-model consensus score for DAG proposals
-              today -- proposal generation is template-based, not an LLM call,
-              so there's nothing to score. ValidatorLogic.validate() DOES run
-              for real, though: a proposal only ever reaches this component
-              once it has already passed that check (a failed check returns a
-              chat message instead, never a dagProposal), so this status is a
-              real fact, not a fabricated one. */}
+          {/* This is a binary safety-validation status, not a multi-model
+              consensus score. DAG proposals are now LLM-driven and DO carry a
+              real model self-reported confidence (surfaced in the review/Deference
+              queue via dag_proposals.confidence), but ValidatorLogic.validate()
+              remains the gate shown here: a proposal only ever reaches this
+              component once it has already passed that check (a failed check
+              returns a chat message instead, never a dagProposal — on either the
+              LLM path or the template fallback), so this status is a real fact,
+              not a fabricated one. */}
           {proposal ? (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
               <CheckCircle size={14} className="text-green-400" />

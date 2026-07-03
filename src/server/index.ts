@@ -1,7 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { ScopeLogicSession } from '../core/scopelogic/interview';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
 import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
 import { instantiateProvider } from '../core/routeswitch/provider-factory';
@@ -296,56 +295,22 @@ const _cerebroGenerateFn = async (prompt: string) => {
 };
 injectLLMGenerator(_cerebroGenerateFn);
 
-// Pass RouteSwitch generateFn into ScopeLogic so interview uses real LLM when available
-const generateFn = async (prompt: string) => {
-  const result = await routeSwitch.execute({ prompt, estimatedTokens: 200, scope: 'agent', scopeId: 'scopelogic-interview' });
+// Pass RouteSwitch generateFn into ScopeLogic so the interview (and the LLM-
+// driven DAG proposal generation) uses the real LLM when available. The optional
+// `schema` param forwards a JSON-schema hint as responseSchema for structured
+// output on schema-capable providers (see interview.ts DAG_PROPOSAL_SCHEMA).
+// estimatedTokens is 2000 (not 200) so the completed-interview DAG-generation
+// call has output headroom; it maps to the provider's max_tokens.
+const generateFn = async (prompt: string, schema?: any) => {
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 2000, scope: 'agent', scopeId: 'scopelogic-interview', responseSchema: schema });
   return result.content;
 };
-let session = new ScopeLogicSession(generateFn);
+
+import { scopelogicRouter, injectScopeLogicGenerateFn } from './routes/scopelogic-router';
+injectScopeLogicGenerateFn(generateFn);
+app.route('/api/scopelogic', scopelogicRouter);
 
 app.get('/', (c) => c.json({ status: 'ok', service: 'NeuroSync Local API Gateway', version: '0.3.0' }));
-
-// ─── ScopeLogic Routes ───────────────────────────────────────────────────────
-
-app.get('/api/scopelogic/history', (c) => {
-  return c.json({
-    round: session.round,
-    isComplete: session.isComplete,
-    history: session.getHistory()
-  });
-});
-
-app.post('/api/scopelogic/prompt', async (c) => {
-  try {
-    const { message } = await c.req.json();
-    if (!message) return c.json({ error: 'Message is required' }, 400);
-
-    const result = await session.processUserInputAsync(message);
-    return c.json(result);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
-  }
-});
-
-app.post('/api/scopelogic/reset', (c) => {
-  session = new ScopeLogicSession(generateFn);
-  return c.json({ success: true, message: 'Session reset. Ready for a new interview.' });
-});
-
-// There is no real prompt-versioning system (no version number, no CI-gated
-// test count) -- SYSTEM_PROMPT in interview.ts is a plain string constant.
-// This surfaces the one real, honest fact available: when that file was
-// actually last modified on disk, replacing a fabricated "v3.2.1" / fake
-// test-pass count that ScopeLogicDashboard used to show as if it were live.
-app.get('/api/scopelogic/prompt-info', (c) => {
-  try {
-    const interviewFilePath = path.join(process.cwd(), 'src/core/scopelogic/interview.ts');
-    const stat = fs.statSync(interviewFilePath);
-    return c.json({ lastModifiedMs: stat.mtimeMs });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
-  }
-});
 
 // ─── RouteSwitch Engine Routes ───────────────────────────────────────────────
 

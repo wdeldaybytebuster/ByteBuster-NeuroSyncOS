@@ -323,33 +323,39 @@ systemRouter.get('/agents/permissions', (c) => {
 // onto the real `dag_proposals` table.
 //
 // Design call — SINGLE active pending proposal at a time (unchanged UX):
-// ScopeLogic's server-side interview session is a single global instance, the
-// UI only ever surfaces one proposal for review, and multi-proposal review adds
+// ScopeLogic's server-side interview sessions are now scoped per project (see
+// scopelogic-router.ts), but the review queue still surfaces one proposal at a
+// time across the app — the UI only ever surfaces one proposal for review, and multi-proposal review adds
 // UX/scope this task doesn't need. So `stage` rejects any currently-pending
 // proposal before inserting the new one, and `GET /pending` returns the newest
 // still-pending row. The table itself keeps full history (approved/rejected
 // rows are retained) so nothing is lost and multi-proposal is a future
 // non-breaking extension.
 
-// There is no real numeric confidence signal behind a staged proposal today:
-// ScopeLogic's `_generateProposal()` is template-based (fixed 4-node DAG built
-// by truncating chat messages), NOT an LLM call, so there is nothing to
-// "derive" a model-confidence score from. Matching the conservative-default
-// pattern already used for os_todos.confidence and scout_okf_nodes.confidence,
-// every newly staged proposal gets a fixed 0.5 — which always routes it into
-// the manual "Attention Required" review path (< 0.70 Deference threshold),
-// never the auto-approve pill bar. That is the correct conservative outcome
-// while proposal generation is not AI-judged. Wiring real confidence into
-// interview.ts is a separate, deliberately out-of-scope architectural decision.
+// ScopeLogic's LLM-driven `_generateProposal()` now self-reports a real
+// model-confidence per proposal (interview.ts DAG_PROPOSAL_SCHEMA), so the
+// caller MAY supply a `confidence` in [0,1]. When it does, we store that real
+// value; when it's absent or out of range — notably the template fallback
+// path, which has no genuine confidence signal — we fall back to a conservative
+// 0.5. A 0.5 always routes into the manual "Attention Required" review path
+// (< 0.70 Deference threshold), never the auto-approve pill bar, which is the
+// correct conservative outcome when no real confidence exists. This mirrors the
+// exact validation pattern in todos.ts's /promote endpoint.
 const DEFAULT_PROPOSAL_CONFIDENCE = 0.5;
 
 systemRouter.post('/proposals/stage', async (c) => {
   try {
     const body = await c.req.json();
-    const { proposal } = body;
+    const { proposal, confidence } = body;
     // Accept either `projectId` or `project_id`; nullable ("Global" scope is ok).
     const projectId = body.projectId ?? body.project_id ?? null;
     if (!proposal) return c.json({ success: false, error: 'proposal is required' }, 400);
+
+    // Real model-confidence if the caller supplied a valid one; else conservative default.
+    const confidenceValue =
+      typeof confidence === 'number' && confidence >= 0 && confidence <= 1
+        ? confidence
+        : DEFAULT_PROPOSAL_CONFIDENCE;
 
     const id = randomUUID();
     db.transaction(() => {
@@ -358,7 +364,7 @@ systemRouter.post('/proposals/stage', async (c) => {
       db.prepare("UPDATE dag_proposals SET status = 'superseded' WHERE status = 'pending'").run();
       db.prepare(
         'INSERT INTO dag_proposals (id, project_id, proposal, confidence, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(id, projectId, JSON.stringify(proposal), DEFAULT_PROPOSAL_CONFIDENCE, 'pending', Date.now());
+      ).run(id, projectId, JSON.stringify(proposal), confidenceValue, 'pending', Date.now());
     })();
 
     return c.json({ success: true, id, message: 'Proposal staged for review.' });
