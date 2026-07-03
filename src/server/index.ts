@@ -332,6 +332,21 @@ app.post('/api/scopelogic/reset', (c) => {
   return c.json({ success: true, message: 'Session reset. Ready for a new interview.' });
 });
 
+// There is no real prompt-versioning system (no version number, no CI-gated
+// test count) -- SYSTEM_PROMPT in interview.ts is a plain string constant.
+// This surfaces the one real, honest fact available: when that file was
+// actually last modified on disk, replacing a fabricated "v3.2.1" / fake
+// test-pass count that ScopeLogicDashboard used to show as if it were live.
+app.get('/api/scopelogic/prompt-info', (c) => {
+  try {
+    const interviewFilePath = path.join(process.cwd(), 'src/core/scopelogic/interview.ts');
+    const stat = fs.statSync(interviewFilePath);
+    return c.json({ lastModifiedMs: stat.mtimeMs });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // ─── RouteSwitch Engine Routes ───────────────────────────────────────────────
 
 app.post('/api/routeswitch/test', async (c) => {

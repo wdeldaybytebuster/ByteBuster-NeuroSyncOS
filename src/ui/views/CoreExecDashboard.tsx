@@ -25,6 +25,16 @@ interface Task {
   status: string;
   output_data: string | null;
 }
+interface Metrics {
+  successRate: number | null;
+  completedRuns: number;
+  failedRuns: number;
+  activeRuns: number;
+  retryRate: number | null;
+  totalTasks: number;
+  resolvedEscalations: number;
+  avgLatencyMs: number | null;
+}
 
 // ─── Dashboard View: DAG Canvas + Alerts + Cron ─────────────────────────────
 function DashboardView() {
@@ -33,12 +43,8 @@ function DashboardView() {
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
-  const [logs, setLogs] = useState<string[]>([
-    '[10:29:01] COREEXEC: Booting orchestrator...',
-    '[10:29:02] BASEVAULT: SQLite WAL mode confirmed.',
-    '[10:29:05] TASK_CLAIM: Thread-2 locked Node 2 (BEGIN IMMEDIATE)',
-    '[10:29:06] ROUTESWITCH: Forwarding payload to inference engine...'
-  ]);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
   // Append log entries on task status change
@@ -63,6 +69,20 @@ function DashboardView() {
       .then(data => { if (data.runs) setRuns(data.runs); })
       .catch(() => {})
       .finally(() => setLoadingRuns(false));
+  }, [activeProjectId]);
+
+  // Fetch + poll real orchestration metrics (replaces fabricated stat strings)
+  useEffect(() => {
+    const fetchMetrics = () => {
+      const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
+      fetch(`${API}/api/coreexec/metrics${qs}`)
+        .then(r => r.json())
+        .then(data => { if (!data.error) setMetrics(data); })
+        .catch(() => {});
+    };
+    fetchMetrics();
+    const iv = setInterval(fetchMetrics, 10000);
+    return () => clearInterval(iv);
   }, [activeProjectId]);
 
   // Fetch tasks for selected run
@@ -167,39 +187,47 @@ function DashboardView() {
         )}
       </section>
 
-      {/* Widget B: Orchestration Mentrix (from HTML reference) */}
+      {/* Widget B: Orchestration Metrics — real aggregates from workflow_runs/tasks/os_todos */}
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <BarChart2 size={16} style={{ color: ACCENT }} /> Orchestration Mentrix
+            <BarChart2 size={16} style={{ color: ACCENT }} /> Orchestration Metrics
           </h2>
           <span className="text-[9px] font-mono text-gray-500 font-bold">Live Polling</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-xs">
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
-            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">398 Tests</span>
-            <span className="text-sm font-black text-green-500 font-mono">PASSING</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Success Rate</span>
+            <span className={`text-sm font-black font-mono ${metrics?.successRate !== null && metrics?.successRate !== undefined && metrics.successRate >= 90 ? 'text-green-500' : 'text-white'}`}>
+              {metrics?.successRate !== null && metrics?.successRate !== undefined ? `${metrics.successRate.toFixed(0)}%` : '—'}
+            </span>
           </div>
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
-            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Duplicates</span>
-            <span className="text-sm font-black font-mono" style={{ color: ACCENT }}>0</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Active Runs</span>
+            <span className="text-sm font-black font-mono" style={{ color: ACCENT }}>{metrics?.activeRuns ?? '—'}</span>
           </div>
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
             <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Retry Rate</span>
-            <span className="text-sm font-black text-white font-mono">1.2%</span>
+            <span className="text-sm font-black text-white font-mono">
+              {metrics?.retryRate !== null && metrics?.retryRate !== undefined ? `${metrics.retryRate.toFixed(1)}%` : '—'}
+            </span>
           </div>
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
-            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Latency</span>
-            <span className="text-sm font-black text-white font-mono">42ms</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Avg Latency</span>
+            <span className="text-sm font-black text-white font-mono">
+              {metrics?.avgLatencyMs !== null && metrics?.avgLatencyMs !== undefined
+                ? metrics.avgLatencyMs >= 1000 ? `${(metrics.avgLatencyMs / 1000).toFixed(1)}s` : `${Math.round(metrics.avgLatencyMs)}ms`
+                : '—'}
+            </span>
           </div>
         </div>
       </section>
 
-      {/* Widget C: Pino Transaction Log (from HTML reference) */}
+      {/* Widget C: CoreExec Activity Log */}
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Activity size={16} style={{ color: ACCENT }} /> Pino Transaction Log
+            <Activity size={16} style={{ color: ACCENT }} /> CoreExec Activity Log
           </h2>
           <button onClick={() => setLogs([])} className="text-[10px] font-bold hover:underline" style={{ color: ACCENT }}>Clear</button>
         </div>

@@ -245,4 +245,16 @@ export function initDB() {
       console.error('Error adding archived_at column to projects:', e);
     }
   }
+
+  try {
+    // Real "Orchestration Metrics" (CoreExecDashboard) needs a completion
+    // timestamp to compute latency -- previously only created_at existed,
+    // so run duration was uncomputable and the dashboard showed a fabricated
+    // "42ms" string instead.
+    db.exec(`ALTER TABLE workflow_runs ADD COLUMN completed_at INTEGER;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding completed_at column to workflow_runs:', e);
+    }
+  }
 }

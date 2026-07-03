@@ -57,7 +57,7 @@ export async function executeRun(
     const failedTaskIds = new Set(tasks.filter(t => t.status === 'failed').map(t => t.id));
 
     if (failedTaskIds.size > 0) {
-      db.prepare("UPDATE workflow_runs SET status = 'failed' WHERE id = ?").run(runId);
+      db.prepare("UPDATE workflow_runs SET status = 'failed', completed_at = ? WHERE id = ?").run(Date.now(), runId);
       scoutEmitter.emit('update', { type: 'RUN_STATUS', runId, status: 'failed' });
       return false; // Run fails if any task fails
     }
@@ -92,7 +92,7 @@ export async function executeRun(
         }
 
         // Deadlock or disconnected DAG
-        db.prepare("UPDATE workflow_runs SET status = 'failed' WHERE id = ?").run(runId);
+        db.prepare("UPDATE workflow_runs SET status = 'failed', completed_at = ? WHERE id = ?").run(Date.now(), runId);
         return false;
       }
       
@@ -147,7 +147,7 @@ export async function executeRun(
     await Promise.all(promises);
   }
 
-  db.prepare("UPDATE workflow_runs SET status = 'completed' WHERE id = ?").run(runId);
+  db.prepare("UPDATE workflow_runs SET status = 'completed', completed_at = ? WHERE id = ?").run(Date.now(), runId);
   scoutEmitter.emit('update', { type: 'RUN_STATUS', runId, status: 'completed' });
   return true;
 }

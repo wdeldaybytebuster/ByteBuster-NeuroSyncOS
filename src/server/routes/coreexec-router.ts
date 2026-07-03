@@ -85,6 +85,74 @@ coreexecRouter.get('/run/:runId/status', (c) => {
   }
 });
 
+// Real "Orchestration Metrics" for CoreExecDashboard's Widget B, replacing
+// what used to be hardcoded strings ("398 Tests / PASSING", "Duplicates 0",
+// "Retry Rate 1.2%", "Latency 42ms") with numbers aggregated from actual
+// workflow_runs/tasks/os_todos rows. All optionally scoped to a project via
+// ?projectId= (joins workflow_runs.project_id).
+coreexecRouter.get('/metrics', (c) => {
+  try {
+    const projectId = c.req.query('projectId');
+    const runFilter = projectId ? 'WHERE project_id = ?' : '';
+    const runParams = projectId ? [projectId] : [];
+
+    const runCounts = db
+      .prepare(`SELECT status, COUNT(*) AS n FROM workflow_runs ${runFilter} GROUP BY status`)
+      .all(...runParams) as { status: string; n: number }[];
+
+    const completed = runCounts.find((r) => r.status === 'completed')?.n ?? 0;
+    const failed = runCounts.find((r) => r.status === 'failed')?.n ?? 0;
+    const terminalTotal = completed + failed;
+    const successRate = terminalTotal > 0 ? (completed / terminalTotal) * 100 : null;
+
+    const activeStatuses = ['pending', 'running', 'parked'];
+    const activeRuns = runCounts
+      .filter((r) => activeStatuses.includes(r.status))
+      .reduce((sum, r) => sum + r.n, 0);
+
+    const taskFilter = projectId
+      ? 'JOIN workflow_runs ON workflow_runs.id = tasks.run_id WHERE workflow_runs.project_id = ?'
+      : '';
+    const totalTasks = (
+      db.prepare(`SELECT COUNT(*) AS n FROM tasks ${taskFilter}`).get(...runParams) as { n: number }
+    ).n;
+    const resolvedEscalations = (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM os_todos
+           JOIN tasks ON tasks.id = os_todos.dag_node_id
+           ${projectId ? 'JOIN workflow_runs ON workflow_runs.id = tasks.run_id WHERE workflow_runs.project_id = ? AND' : 'WHERE'}
+           os_todos.status = 'resolved'`,
+        )
+        .get(...runParams) as { n: number }
+    ).n;
+    // "Retry rate": how often a task needed a human to resolve an os_todos
+    // escalation before it could be re-queued, relative to total task volume.
+    const retryRate = totalTasks > 0 ? (resolvedEscalations / totalTasks) * 100 : null;
+
+    const avgLatencyRow = db
+      .prepare(
+        `SELECT AVG(completed_at - created_at) AS avgMs FROM workflow_runs
+         ${projectId ? 'WHERE project_id = ? AND' : 'WHERE'}
+         status = 'completed' AND completed_at IS NOT NULL`,
+      )
+      .get(...runParams) as { avgMs: number | null };
+
+    return c.json({
+      successRate,
+      completedRuns: completed,
+      failedRuns: failed,
+      activeRuns,
+      retryRate,
+      totalTasks,
+      resolvedEscalations,
+      avgLatencyMs: avgLatencyRow.avgMs,
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // §1.3 — Retry failed/parked tasks for an existing run.
 // §3.4 — Re-validates `workflow_runs.dag_layout` before retrying. A run may
 // have been inserted when /approve vetted the proposal, but AdminSQL or a
@@ -109,7 +177,7 @@ coreexecRouter.post('/retry/:runId', async (c) => {
        SET status = 'unclaimed', claim_lease = NULL
        WHERE run_id = ? AND status IN ('failed', 'parked')`,
     ).run(runId);
-    db.prepare("UPDATE workflow_runs SET status = 'pending' WHERE id = ?").run(runId);
+    db.prepare("UPDATE workflow_runs SET status = 'pending', completed_at = NULL WHERE id = ?").run(runId);
 
     executeRun(runId).catch((err) => console.error('Run retry failed:', err));
 
