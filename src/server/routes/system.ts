@@ -4,6 +4,7 @@ import * as si from 'systeminformation';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { db, dbPath } from '../../core/basevault/db';
 import { encrypt, decrypt } from '../../core/basevault/crypto';
 import { workerPool } from '../../core/coreexec/worker-pool';
@@ -316,17 +317,51 @@ systemRouter.get('/agents/permissions', (c) => {
   }
 });
 
-// ─── Proposal Staging ────────────────────────────────────────────────────────
-// Persists a ScopeLogic-generated DAG proposal so it survives frontend navigation.
-// Only one pending proposal exists at a time (keyed as 'pending_proposal' in system_settings).
+// ─── Proposal Staging (System B, now table-backed) ───────────────────────────
+// Persists a ScopeLogic-generated DAG proposal so it survives frontend
+// navigation. Migrated off the old single-JSON-blob-in-system_settings hack
+// onto the real `dag_proposals` table.
+//
+// Design call — SINGLE active pending proposal at a time (unchanged UX):
+// ScopeLogic's server-side interview session is a single global instance, the
+// UI only ever surfaces one proposal for review, and multi-proposal review adds
+// UX/scope this task doesn't need. So `stage` rejects any currently-pending
+// proposal before inserting the new one, and `GET /pending` returns the newest
+// still-pending row. The table itself keeps full history (approved/rejected
+// rows are retained) so nothing is lost and multi-proposal is a future
+// non-breaking extension.
+
+// There is no real numeric confidence signal behind a staged proposal today:
+// ScopeLogic's `_generateProposal()` is template-based (fixed 4-node DAG built
+// by truncating chat messages), NOT an LLM call, so there is nothing to
+// "derive" a model-confidence score from. Matching the conservative-default
+// pattern already used for os_todos.confidence and scout_okf_nodes.confidence,
+// every newly staged proposal gets a fixed 0.5 — which always routes it into
+// the manual "Attention Required" review path (< 0.70 Deference threshold),
+// never the auto-approve pill bar. That is the correct conservative outcome
+// while proposal generation is not AI-judged. Wiring real confidence into
+// interview.ts is a separate, deliberately out-of-scope architectural decision.
+const DEFAULT_PROPOSAL_CONFIDENCE = 0.5;
 
 systemRouter.post('/proposals/stage', async (c) => {
   try {
     const body = await c.req.json();
     const { proposal } = body;
+    // Accept either `projectId` or `project_id`; nullable ("Global" scope is ok).
+    const projectId = body.projectId ?? body.project_id ?? null;
     if (!proposal) return c.json({ success: false, error: 'proposal is required' }, 400);
-    db.prepare("INSERT INTO system_settings (key, value) VALUES ('pending_proposal', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(proposal));
-    return c.json({ success: true, message: 'Proposal staged for review.' });
+
+    const id = randomUUID();
+    db.transaction(() => {
+      // Single-active-proposal: supersede any still-pending proposal so the
+      // review queue never shows two competing drafts.
+      db.prepare("UPDATE dag_proposals SET status = 'superseded' WHERE status = 'pending'").run();
+      db.prepare(
+        'INSERT INTO dag_proposals (id, project_id, proposal, confidence, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, projectId, JSON.stringify(proposal), DEFAULT_PROPOSAL_CONFIDENCE, 'pending', Date.now());
+    })();
+
+    return c.json({ success: true, id, message: 'Proposal staged for review.' });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
@@ -334,18 +369,59 @@ systemRouter.post('/proposals/stage', async (c) => {
 
 systemRouter.get('/proposals/pending', (c) => {
   try {
-    const row = db.prepare("SELECT value FROM system_settings WHERE key = 'pending_proposal'").get() as { value: string } | undefined;
+    const row = db
+      .prepare("SELECT id, project_id, proposal, confidence FROM dag_proposals WHERE status = 'pending' ORDER BY created_at DESC LIMIT 1")
+      .get() as { id: string; project_id: string | null; proposal: string; confidence: number } | undefined;
     if (!row) return c.json({ success: true, proposal: null });
-    return c.json({ success: true, proposal: JSON.parse(row.value) });
+    // Keep the `proposal` field shape backward-compatible with existing
+    // consumers (ScopeLogic history check, PortGrid canvas) that read
+    // `d.proposal.nodes`; expose id/confidence/project_id for the merged queue.
+    return c.json({
+      success: true,
+      id: row.id,
+      projectId: row.project_id,
+      confidence: row.confidence,
+      proposal: JSON.parse(row.proposal),
+    });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
 
+// Clears the current pending proposal (marks it rejected). Backward-compatible
+// with the old DELETE contract used by ScopeLogic's reset and PortGrid's reject.
 systemRouter.delete('/proposals/pending', (c) => {
   try {
-    db.prepare("DELETE FROM system_settings WHERE key = 'pending_proposal'").run();
+    db.prepare("UPDATE dag_proposals SET status = 'rejected' WHERE status = 'pending'").run();
     return c.json({ success: true, message: 'Proposal cleared.' });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Mark a specific proposal approved (by id). The actual DAG launch still goes
+// through the human-gated /api/coreexec/approve endpoint; this only records
+// that the draft was accepted, keeping the AI-actions-stay-draft-only invariant.
+systemRouter.post('/proposals/resolve', async (c) => {
+  try {
+    const { id } = await c.req.json();
+    if (!id) return c.json({ success: false, error: 'id is required' }, 400);
+    const info = db.prepare("UPDATE dag_proposals SET status = 'approved' WHERE id = ? AND status = 'pending'").run(id);
+    if (info.changes === 0) return c.json({ success: false, error: 'Pending proposal not found' }, 404);
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Mark a specific proposal rejected (by id).
+systemRouter.post('/proposals/reject', async (c) => {
+  try {
+    const { id } = await c.req.json();
+    if (!id) return c.json({ success: false, error: 'id is required' }, 400);
+    const info = db.prepare("UPDATE dag_proposals SET status = 'rejected' WHERE id = ? AND status = 'pending'").run(id);
+    if (info.changes === 0) return c.json({ success: false, error: 'Pending proposal not found' }, 404);
+    return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }

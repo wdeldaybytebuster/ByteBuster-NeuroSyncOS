@@ -6,14 +6,12 @@ import { OKFWorkspaceWidget } from '../components/OKFWorkspaceWidget';
 import { OKFMindmap } from '../components/OKFMindmap';
 import { DeferenceUI } from '../components/DeferenceUI';
 import { EmbeddedTerminal } from '../components/EmbeddedTerminal';
+import { buildApprovalItems, partitionByConfidence, partitionByKind, type ApprovalItem } from '../lib/approvalQueue';
 import { ReactFlow, Controls, Background, BackgroundVariant, Handle, Position, useNodesState, useEdgesState } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#00FFCC';
-// Deference UI (Master Spec §4): items at/above this confidence skip the
-// per-item modal row and go to the quiet bulk-approve pill bar instead.
-const DEFERENCE_THRESHOLD = 0.70;
 
 // Shared glow box (mint/teal glow)
 const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(0,255,204,0.08)] hover:shadow-[0_0_30px_rgba(0,255,204,0.2)] hover:border-[rgba(0,255,204,0.25)]`;
@@ -48,8 +46,10 @@ function DashboardView() {
   const [approvalQueue, setApprovalQueue] = useState<OsTodo[]>([]);
   const [toolCalls, setToolCalls] = useState<{tool:string;status:string;time:string}[]>([]);
 
-  // Pending proposal from ScopeLogic
+  // Pending proposal from ScopeLogic (System B — now dag_proposals backed)
   const [pendingProposal, setPendingProposal] = useState<any>(null);
+  const [proposalId, setProposalId] = useState<string | null>(null);
+  const [proposalConfidence, setProposalConfidence] = useState<number>(0.5);
   const [proposalNodes, setProposalNodes, onProposalNodesChange] = useNodesState([] as Node[]);
   const [proposalEdges, setProposalEdges, onProposalEdgesChange] = useEdgesState([] as Edge[]);
   const [approving, setApproving] = useState(false);
@@ -61,6 +61,8 @@ function DashboardView() {
     fetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
       if (d.success && d.proposal) {
         setPendingProposal(d.proposal);
+        setProposalId(d.id ?? null);
+        setProposalConfidence(typeof d.confidence === 'number' ? d.confidence : 0.5);
         // Convert proposal nodes to ReactFlow visual nodes
         const nodes = d.proposal.nodes || [];
         const rfNodes: Node[] = nodes.map((n: any, i: number) => ({
@@ -82,7 +84,15 @@ function DashboardView() {
     }).catch(() => {});
   }, []);
 
-  // Approve proposal → send to CoreExec → clear → navigate
+  const clearProposalState = () => {
+    setPendingProposal(null);
+    setProposalId(null);
+    setProposalNodes([]);
+    setProposalEdges([]);
+  };
+
+  // Approve proposal → human-gated CoreExec launch → mark proposal approved →
+  // clear → navigate. The AI never launches on its own; this runs on a click.
   const handleApproveProposal = async () => {
     if (!pendingProposal) return;
     setApproving(true);
@@ -91,21 +101,32 @@ function DashboardView() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposal: pendingProposal, projectId: activeProjectId || undefined })
       });
-      await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' });
-      setPendingProposal(null);
-      setProposalNodes([]);
-      setProposalEdges([]);
+      if (proposalId) {
+        await fetch(`${API}/api/system/proposals/resolve`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: proposalId })
+        });
+      } else {
+        // Legacy path: no id (shouldn't happen post-migration) — fall back to clear.
+        await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' });
+      }
+      clearProposalState();
       navigate('coreexec');
     } catch {}
     setApproving(false);
   };
 
-  // Reject proposal → clear → navigate back to ScopeLogic
+  // Reject proposal → mark rejected → clear → navigate back to ScopeLogic
   const handleRejectProposal = async () => {
-    await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
-    setPendingProposal(null);
-    setProposalNodes([]);
-    setProposalEdges([]);
+    if (proposalId) {
+      await fetch(`${API}/api/system/proposals/reject`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: proposalId })
+      }).catch(() => {});
+    } else {
+      await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
+    }
+    clearProposalState();
     navigate('scopelogic');
   };
 
@@ -199,22 +220,50 @@ function DashboardView() {
     } catch {}
   };
 
-  // Deference UI split: low-confidence items need a human look (Attention
-  // Required); high-confidence items get quick, non-blocking bulk approval.
-  const lowConfidenceTodos = approvalQueue.filter(t => t.confidence < DEFERENCE_THRESHOLD);
-  const highConfidenceTodos = approvalQueue.filter(t => t.confidence >= DEFERENCE_THRESHOLD);
+  // Unified, confidence-gated approval queue spanning BOTH os_todos and the
+  // staged dag_proposal. Low-confidence items (< 0.70) need a human look
+  // (Attention Required); high-confidence items get the quiet bulk pill bar.
+  // Proposals default to 0.5, so today they always land in the low bucket.
+  const pendingProposalLike = pendingProposal && proposalId
+    ? { id: proposalId, confidence: proposalConfidence, proposal: pendingProposal }
+    : null;
+  const approvalItems = buildApprovalItems(approvalQueue, pendingProposalLike);
+  const { low: lowItems, high: highItems } = partitionByConfidence(approvalItems);
+  const todoById = new Map(approvalQueue.map(t => [t.id, t]));
 
-  const handleApproveAll = async (todoIds: string[]) => {
+  const approveItem = (item: ApprovalItem) =>
+    item.kind === 'proposal' ? handleApproveProposal() : handleApprove(item.id);
+  const declineItem = (item: ApprovalItem) =>
+    item.kind === 'proposal' ? handleRejectProposal() : handleDecline(item.id);
+
+  // Mixed-kind bulk actions: partition ids by source, then dispatch todos to
+  // the /api/todos bulk endpoints and proposals to CoreExec + proposal-resolve.
+  const handleApproveAll = async (ids: string[]) => {
+    const { todoIds, proposals } = partitionByKind(approvalItems, ids);
     try {
-      await fetch(`${API}/api/todos/resolve-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
-      setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+      if (todoIds.length > 0) {
+        await fetch(`${API}/api/todos/resolve-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+      }
+      for (const p of proposals) {
+        await fetch(`${API}/api/coreexec/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposal: p.proposal, projectId: activeProjectId || undefined }) });
+        await fetch(`${API}/api/system/proposals/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
+      }
+      if (todoIds.length > 0) setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+      if (proposals.some(p => p.id === proposalId)) clearProposalState();
     } catch {}
   };
 
-  const handleRejectAll = async (todoIds: string[]) => {
+  const handleRejectAll = async (ids: string[]) => {
+    const { todoIds, proposals } = partitionByKind(approvalItems, ids);
     try {
-      await fetch(`${API}/api/todos/reject-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
-      setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+      if (todoIds.length > 0) {
+        await fetch(`${API}/api/todos/reject-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+      }
+      for (const p of proposals) {
+        await fetch(`${API}/api/system/proposals/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
+      }
+      if (todoIds.length > 0) setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+      if (proposals.some(p => p.id === proposalId)) clearProposalState();
     } catch {}
   };
 
@@ -329,34 +378,42 @@ function DashboardView() {
           <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400">Zero-Trust Gate</span>
         </div>
 
-        {lowConfidenceTodos.length === 0 ? (
+        {lowItems.length === 0 ? (
           <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/5 border border-green-500/20">
             <CheckCircle size={18} className="text-green-400" />
             <div><div className="text-xs font-bold text-green-400">All Clear</div><div className="text-[10px] text-gray-500">No pending approvals or staged proposals.</div></div>
           </div>
         ) : (
           <div className="space-y-2 max-h-[200px] overflow-y-auto">
-            {lowConfidenceTodos.map(todo => (
-              <div key={todo.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-amber-500/20">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle size={14} className="text-amber-400" />
-                  <div>
-                    <div className="text-xs font-bold text-white">{todo.escalation_reason}</div>
-                    <div className="text-[10px] text-gray-500 font-mono">{todo.severity} • {todo.required_action_type} • confidence {todo.confidence.toFixed(2)}</div>
+            {lowItems.map(item => {
+              const todo = todoById.get(item.id);
+              const subtitle = item.kind === 'proposal'
+                ? `DAG PROPOSAL • confidence ${item.confidence.toFixed(2)}`
+                : `${todo?.severity ?? ''} • ${todo?.required_action_type ?? ''} • confidence ${item.confidence.toFixed(2)}`;
+              return (
+                <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-amber-500/20">
+                  <div className="flex items-center gap-3">
+                    {item.kind === 'proposal'
+                      ? <Sparkles size={14} className="text-amber-400" />
+                      : <AlertTriangle size={14} className="text-amber-400" />}
+                    <div>
+                      <div className="text-xs font-bold text-white">{item.description}</div>
+                      <div className="text-[10px] text-gray-500 font-mono">{subtitle}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => approveItem(item)} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Approve</button>
+                    <button onClick={() => declineItem(item)} className="px-2 py-1 rounded text-[9px] font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">Decline</button>
                   </div>
                 </div>
-                <div className="flex gap-1.5">
-                  <button onClick={() => handleApprove(todo.id)} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Approve</button>
-                  <button onClick={() => handleDecline(todo.id)} className="px-2 py-1 rounded text-[9px] font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">Decline</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
 
       <DeferenceUI
-        tasks={highConfidenceTodos.map(t => ({ id: t.id, description: t.escalation_reason, confidence: t.confidence }))}
+        tasks={highItems.map(i => ({ id: i.id, description: i.description, confidence: i.confidence, kind: i.kind }))}
         accentColor={ACCENT}
         onApproveAll={handleApproveAll}
         onRejectAll={handleRejectAll}

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db, initDB, dbPath } from './db';
+import { db, initDB, dbPath, migratePendingProposalBlob } from './db';
 import fs from 'fs';
 
 describe('BaseVault SQLite Database', () => {
@@ -54,6 +54,53 @@ describe('BaseVault SQLite Database', () => {
     expect(archivedAtCol).toBeDefined();
     expect(archivedAtCol!.type.toUpperCase()).toBe('INTEGER');
     expect(archivedAtCol!.notnull).toBe(0);
+  });
+
+  it('should create a dag_proposals table with the expected columns/defaults', () => {
+    const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all() as { name: string }[]).map(t => t.name);
+    expect(tables).toContain('dag_proposals');
+
+    const columns = db.prepare(`PRAGMA table_info(dag_proposals)`).all() as { name: string; type: string; notnull: number; dflt_value: string | null }[];
+    const col = (name: string) => {
+      const c = columns.find(x => x.name === name);
+      expect(c, `column ${name} should exist`).toBeDefined();
+      return c!;
+    };
+
+    expect(col('id').type.toUpperCase()).toBe('TEXT');
+    // project_id is nullable ("Global"/no-active-project proposals are valid).
+    expect(col('project_id').notnull).toBe(0);
+    expect(col('proposal').notnull).toBe(1);
+    expect(col('confidence').type.toUpperCase()).toBe('REAL');
+    expect(col('confidence').dflt_value).toBe('0.5');
+    expect(col('status').dflt_value).toContain('pending');
+  });
+
+  it('migrates a legacy system_settings[pending_proposal] blob into dag_proposals', () => {
+    const blob = JSON.stringify({ nodes: [{ id: 'legacy-1', prompt: 'legacy step' }] });
+    db.prepare("INSERT INTO system_settings (key, value) VALUES ('pending_proposal', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(blob);
+
+    migratePendingProposalBlob();
+
+    // Old key cleared
+    const leftover = db.prepare("SELECT value FROM system_settings WHERE key = 'pending_proposal'").get();
+    expect(leftover).toBeUndefined();
+
+    // New row present, pending, default confidence, no project scope
+    const row = db.prepare("SELECT * FROM dag_proposals WHERE status = 'pending' ORDER BY created_at DESC LIMIT 1").get() as any;
+    expect(row).toBeDefined();
+    expect(row.confidence).toBe(0.5);
+    expect(row.project_id).toBeNull();
+    expect(JSON.parse(row.proposal).nodes[0].id).toBe('legacy-1');
+
+    // Idempotent: a second run with no legacy key does not add another row
+    const before = (db.prepare('SELECT COUNT(*) c FROM dag_proposals').get() as any).c;
+    migratePendingProposalBlob();
+    const after = (db.prepare('SELECT COUNT(*) c FROM dag_proposals').get() as any).c;
+    expect(after).toBe(before);
+
+    // Cleanup so it doesn't leak into other assertions in this file
+    db.prepare("UPDATE dag_proposals SET status = 'rejected' WHERE status = 'pending'").run();
   });
 
   it('should allow inserting and querying a project', () => {

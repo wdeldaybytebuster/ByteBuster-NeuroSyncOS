@@ -65,10 +65,11 @@ function DashboardView() {
         const prop = data.dagProposal || data.proposal;
         if (prop) {
           setProposal(prop);
-          // Persist to backend so it survives navigation
+          // Persist to backend so it survives navigation. Scope it to the
+          // active project (nullable — "Global"/no active project is valid).
           await fetch(`${API}/api/system/proposals/stage`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proposal: prop })
+            body: JSON.stringify({ proposal: prop, projectId: activeProjectId || null })
           }).catch(() => {});
           // Auto-navigate to PortGrid for visual review after a brief delay
           setTimeout(() => navigate('portgrid'), 1500);

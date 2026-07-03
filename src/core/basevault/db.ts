@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 import { isMainThread } from 'worker_threads';
 
 import type { Database as BetterSqlite3Database } from 'better-sqlite3';
@@ -118,6 +119,26 @@ export function initDB() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    -- ScopeLogic DAG proposals awaiting human approval (System B).
+    -- Previously crammed as a single JSON blob into system_settings under the
+    -- fixed key 'pending_proposal' with no confidence, no project scoping, and
+    -- no audit trail. This real table lets a staged proposal be confidence-gated
+    -- (Deference UI, 0.70 threshold) and surfaced in the SAME PortGrid approval
+    -- queue as os_todos. project_id is nullable (proposals staged under a
+    -- "Global"/no-active-project scope are legitimate). No FK on project_id:
+    -- proposal history should survive project deletion for audit, and staging
+    -- must not fail if the id doesn't (yet) resolve to a projects row.
+    CREATE TABLE IF NOT EXISTS dag_proposals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      proposal TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dag_proposals_status ON dag_proposals(status, created_at);
 
     CREATE TABLE IF NOT EXISTS model_benchmarks (
       model_id TEXT PRIMARY KEY,
@@ -256,5 +277,33 @@ export function initDB() {
     if (!e.message.includes('duplicate column name')) {
       console.error('Error adding completed_at column to workflow_runs:', e);
     }
+  }
+
+  migratePendingProposalBlob();
+}
+
+/**
+ * One-time migration: an existing staged proposal used to live as a single JSON
+ * blob in system_settings under the key 'pending_proposal'. Move any such blob
+ * into the new dag_proposals table (default confidence 0.5, no project scope,
+ * status 'pending') so it does NOT silently vanish for a user who has one
+ * staged right now, then delete the old key. Idempotent: after the key is
+ * cleared this is a no-op. Only handles the single-key case that exists today.
+ */
+export function migratePendingProposalBlob() {
+  try {
+    const legacy = db
+      .prepare("SELECT value FROM system_settings WHERE key = 'pending_proposal'")
+      .get() as { value: string } | undefined;
+    if (!legacy) return;
+
+    db.transaction(() => {
+      db.prepare(
+        'INSERT INTO dag_proposals (id, project_id, proposal, confidence, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(randomUUID(), null, legacy.value, 0.5, 'pending', Date.now());
+      db.prepare("DELETE FROM system_settings WHERE key = 'pending_proposal'").run();
+    })();
+  } catch (e: any) {
+    console.error('Error migrating legacy pending_proposal blob:', e);
   }
 }
