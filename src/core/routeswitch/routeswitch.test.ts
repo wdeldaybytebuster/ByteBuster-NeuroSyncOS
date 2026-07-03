@@ -74,12 +74,14 @@ import { LlamaCppProvider } from './adapters/llama-cpp';
 import { OpenAICompatibleProvider } from './adapters/openai-compatible';
 
 describe('RouteSwitch Providers', () => {
-  it('LlamaCppProvider should format correctly', async () => {
+  it('LlamaCppProvider should set id and surface a real error for a missing model file', async () => {
     const provider = new LlamaCppProvider({ modelPath: '/models/llama-3.gguf' });
-    const response = await provider.generate('Test prompt', 10);
     expect(provider.id).toBe('llama-cpp');
-    // Dev-mode fallback response format, matching the real GBNF-aware stub in llama-cpp.ts
-    expect(response).toContain('[LOCAL GGUF] /models/llama-3.gguf:');
+    // Real node-llama-cpp inference backs this provider now (no more fake
+    // placeholder responses) — an invalid path must throw a real error so
+    // RouteSwitch's fallback loop can move on to the next provider, instead
+    // of silently returning a fabricated "successful" response.
+    await expect(provider.generate('Test prompt', 10)).rejects.toThrow(/ENOENT|no such file/i);
   });
 
   it('OpenAICompatibleProvider should handle Auto for FreeLLMAPI', async () => {

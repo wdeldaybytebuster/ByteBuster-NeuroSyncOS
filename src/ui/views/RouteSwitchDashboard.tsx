@@ -227,7 +227,10 @@ function SetupView() {
   // Provider CRUD helpers
   const handleSaveProvider = async () => {
     setFormSaving(true);
-    const config = formType === 'openai-compatible' ? { baseUrl: formBaseUrl, modelId: formModelId } : formType === 'llama-cpp' ? { modelPath: formModelPath } : {};
+    const config = formType === 'openai-compatible' ? { baseUrl: formBaseUrl, modelId: formModelId }
+      : formType === 'llama-cpp' ? { modelPath: formModelPath }
+      : (formType === 'opencode' || formType === 'openrouter') ? { modelId: formModelId || undefined }
+      : {};
     const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true };
     try {
       if (editingId) {
@@ -270,6 +273,7 @@ function SetupView() {
     setEditingId(p.id); setFormName(p.name); setFormType(p.type);
     if (p.type === 'openai-compatible') { setFormBaseUrl(p.config.baseUrl || ''); setFormModelId(p.config.modelId || 'Auto'); }
     if (p.type === 'llama-cpp') { setFormModelPath(p.config.modelPath || ''); }
+    if (p.type === 'opencode' || p.type === 'openrouter') { setFormModelId(p.config.modelId || ''); }
     setFormApiKey(''); setShowAddForm(true); setTestResult(null);
   };
 
@@ -327,7 +331,7 @@ function SetupView() {
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <Key size={16} style={{ color: ACCENT }} /> Provider Registry
           </h2>
-          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('openai-compatible'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId('Auto'); setFormModelPath('./local_models/'); setFormApiKey(''); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
+          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('opencode'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId(''); setFormModelPath('./local_models/'); setFormApiKey(''); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
         </div>
         <p className="text-xs text-gray-400 mb-4">Named LLM endpoint entries. API keys are encrypted at rest. Create multiple entries of the same type for different models or services.</p>
 
@@ -343,7 +347,7 @@ function SetupView() {
                   <Server size={14} style={{ color: p.isEnabled ? ACCENT : '#6b7280' }} />
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-white truncate">{p.name}</div>
-                    <div className="text-[10px] text-gray-500 font-mono">{p.type} {p.hasApiKey ? '• key set' : ''} {p.config.baseUrl ? `• ${p.config.baseUrl}` : ''}{p.config.modelPath ? `• ${p.config.modelPath}` : ''}</div>
+                    <div className="text-[10px] text-gray-500 font-mono">{p.type} {p.hasApiKey ? '• key set' : ''} {p.config.baseUrl ? `• ${p.config.baseUrl}` : ''}{p.config.modelPath ? `• ${p.config.modelPath}` : ''}{(p.type === 'opencode' || p.type === 'openrouter') ? `• model: ${p.config.modelId || 'auto'}` : ''}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -373,8 +377,10 @@ function SetupView() {
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Type</label>
                 <select value={formType} onChange={e => setFormType(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50">
-                  <option value="openai-compatible">OpenAI Compatible</option>
+                  <option value="opencode">OpenCode Zen</option>
+                  <option value="openrouter">OpenRouter</option>
                   <option value="llama-cpp">Local GGUF (llama.cpp)</option>
+                  <option value="openai-compatible">OpenAI Compatible (custom endpoint)</option>
                   <option value="mock">Offline Mock</option>
                 </select>
               </div>
@@ -393,6 +399,23 @@ function SetupView() {
                   <input type="text" value={formModelPath} onChange={e => setFormModelPath(e.target.value)} placeholder="./local_models/your-model.gguf" className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
                   <button onClick={() => setShowModelBrowser(true)} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all text-[10px] font-bold">Browse</button>
                 </div>
+              </div>
+            )}
+            {(formType === 'opencode' || formType === 'openrouter') && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">API Key</label>
+                  <input type="password" value={formApiKey} onChange={e => setFormApiKey(e.target.value)} placeholder={editingId ? '(unchanged)' : (formType === 'opencode' ? 'Get one free at opencode.ai/auth' : 'sk-or-...')} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Model ID (optional)</label>
+                  <input type="text" value={formModelId} onChange={e => setFormModelId(e.target.value)} placeholder="Blank = auto-pick a free model" className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+                <p className="text-[10px] text-gray-500 md:col-span-2">
+                  {formType === 'opencode'
+                    ? "Base URL and free-model selection are handled automatically. OpenCode Zen's free promo roster rotates over time — check opencode.ai/docs/zen/ if generation ever fails."
+                    : "Base URL and free-model selection (':free' models) are handled automatically."}
+                </p>
               </div>
             )}
             <div className="flex gap-2 pt-2">

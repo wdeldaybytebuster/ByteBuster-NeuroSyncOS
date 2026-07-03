@@ -4,9 +4,7 @@ import { cors } from 'hono/cors';
 import { ScopeLogicSession } from '../core/scopelogic/interview';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
 import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
-import { LlamaCppProvider } from '../core/routeswitch/adapters/llama-cpp';
-import { OpenAICompatibleProvider } from '../core/routeswitch/adapters/openai-compatible';
-import { MockProvider } from '../core/routeswitch/providers';
+import { instantiateProvider } from '../core/routeswitch/provider-factory';
 import { executeRun } from '../core/coreexec/engine';
 import { db, initDB } from '../core/basevault/db';
 import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
@@ -222,14 +220,7 @@ function bootProviderRegistry() {
     for (const row of rows) {
       const config = JSON.parse(row.config_json || '{}');
       const apiKey = row.api_key_encrypted ? decrypt(row.api_key_encrypted) : '';
-      let provider;
-      if (row.type === 'openai-compatible') {
-        provider = new OpenAICompatibleProvider({ baseUrl: config.baseUrl, modelId: config.modelId || 'Auto', apiKey }, row.id);
-      } else if (row.type === 'llama-cpp') {
-        provider = new LlamaCppProvider({ modelPath: config.modelPath, contextSize: config.contextSize, gpuLayers: config.gpuLayers }, row.id);
-      } else {
-        provider = new MockProvider();
-      }
+      const provider = instantiateProvider(row.type, config, apiKey, row.id);
       routeSwitch.registerProvider(provider);
     }
 
@@ -246,14 +237,7 @@ function bootProviderRegistry() {
           if (pRow) {
             const pConfig = JSON.parse(pRow.config_json || '{}');
             const pKey = pRow.api_key_encrypted ? decrypt(pRow.api_key_encrypted) : '';
-            let primary;
-            if (pRow.type === 'openai-compatible') {
-              primary = new OpenAICompatibleProvider({ baseUrl: pConfig.baseUrl, modelId: pConfig.modelId || 'Auto', apiKey: pKey }, pRow.id);
-            } else if (pRow.type === 'llama-cpp') {
-              primary = new LlamaCppProvider({ modelPath: pConfig.modelPath, contextSize: pConfig.contextSize, gpuLayers: pConfig.gpuLayers }, pRow.id);
-            } else {
-              primary = new MockProvider();
-            }
+            const primary = instantiateProvider(pRow.type, pConfig, pKey, pRow.id);
             routeSwitch.setProvider(primary);
           }
           console.log(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
@@ -267,14 +251,7 @@ function bootProviderRegistry() {
       const firstRow = rows[0];
       const firstConfig = JSON.parse(firstRow.config_json || '{}');
       const firstKey = firstRow.api_key_encrypted ? decrypt(firstRow.api_key_encrypted) : '';
-      let firstProvider;
-      if (firstRow.type === 'openai-compatible') {
-        firstProvider = new OpenAICompatibleProvider({ baseUrl: firstConfig.baseUrl, modelId: firstConfig.modelId || 'Auto', apiKey: firstKey }, firstRow.id);
-      } else if (firstRow.type === 'llama-cpp') {
-        firstProvider = new LlamaCppProvider({ modelPath: firstConfig.modelPath, contextSize: firstConfig.contextSize, gpuLayers: firstConfig.gpuLayers }, firstRow.id);
-      } else {
-        firstProvider = new MockProvider();
-      }
+      const firstProvider = instantiateProvider(firstRow.type, firstConfig, firstKey, firstRow.id);
       routeSwitch.setProvider(firstProvider);
       console.log(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
       return;
@@ -289,9 +266,9 @@ function bootProviderRegistry() {
   const envModel = process.env.NEUROSYNC_LLM_MODEL || 'auto';
   if (envBaseUrl) {
     console.log(`[NeuroSync] Boot: Auto-configuring from env: ${envBaseUrl}`);
-    routeSwitch.setProvider(new OpenAICompatibleProvider({ baseUrl: envBaseUrl, apiKey: envApiKey || '', modelId: envModel }));
+    routeSwitch.setProvider(instantiateProvider('openai-compatible', { baseUrl: envBaseUrl, modelId: envModel }, envApiKey));
   } else {
-    routeSwitch.setProvider(new MockProvider());
+    routeSwitch.setProvider(instantiateProvider('mock', {}, undefined));
   }
 }
 
@@ -302,7 +279,9 @@ injectChatEngine(routeSwitch);
 
 // Inject LLM generate function into OKF routes for document/chat generation
 const _okfGenerateFn = async (prompt: string, schema?: any) => {
-  const result = await routeSwitch.execute({ prompt, estimatedTokens: 500, scope: 'cerebro', responseSchema: schema });
+  // Reasoning models spend most of their budget on chain-of-thought before emitting
+  // the final JSON, so this needs much more headroom than a plain completion call.
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 8000, scope: 'cerebro', responseSchema: schema });
   return result.content;
 };
 injectOKFGenerateFn(_okfGenerateFn);
@@ -368,15 +347,10 @@ app.post('/api/routeswitch/test', async (c) => {
 app.post('/api/routeswitch/provider', async (c) => {
   try {
     const { type, config } = await c.req.json();
-    
-    if (type === 'llama-cpp') {
-      routeSwitch.setProvider(new LlamaCppProvider(config));
-    } else if (type === 'openai-compatible') {
-      routeSwitch.setProvider(new OpenAICompatibleProvider(config));
-    } else {
-      routeSwitch.setProvider(new MockProvider());
-    }
-    
+
+    routeSwitch.setProvider(instantiateProvider(type, config || {}, config?.apiKey));
+
+
     return c.json({ success: true, message: `Switched provider to ${type}` });
   } catch (err: any) {
     return c.json({ error: err.message }, 400);

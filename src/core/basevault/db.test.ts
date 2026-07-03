@@ -26,11 +26,16 @@ describe('BaseVault SQLite Database', () => {
     expect(tableNames).toContain('tasks');
   });
 
-  it('should enforce WAL mode', () => {
+  it('should enforce WAL mode (or SQLite\'s in-memory equivalent under tests)', () => {
     const pragmaQuery = db.prepare(`PRAGMA journal_mode`);
     const result = pragmaQuery.get() as { journal_mode: string };
-    
-    expect(result.journal_mode.toLowerCase()).toBe('wal');
+
+    // SQLite doesn't support WAL for ':memory:' databases (used here to keep
+    // the test suite isolated from the real dev database) — it silently
+    // falls back to 'memory' regardless of the requested pragma. WAL is a
+    // file-backed-database concern; this file db never exists in test mode.
+    const expected = dbPath === ':memory:' ? 'memory' : 'wal';
+    expect(result.journal_mode.toLowerCase()).toBe(expected);
   });
 
   it('should give os_todos a numeric confidence column defaulting to 0.5 (Deference UI 0.70 threshold)', () => {

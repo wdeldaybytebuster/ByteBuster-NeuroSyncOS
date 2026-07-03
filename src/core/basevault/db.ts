@@ -7,12 +7,21 @@ import type { Database as BetterSqlite3Database } from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 
 // Resolve database directory in local workspace (.data)
+//
+// Tests must NEVER touch the real dev/user database — Vitest sets
+// `process.env.VITEST` automatically, so under test we use a private
+// in-memory database instead. Without this, running the test suite while
+// the dev server is running would delete real registered providers,
+// routing rules, and projects (several tests do unscoped `DELETE FROM
+// projects` / `tasks` / `workflow_runs` as cleanup) — live-observed
+// 2026-07-03, wiped a user's provider registry twice mid-session.
+const isTestEnv = !!process.env.VITEST;
 const dataDir = path.join(process.cwd(), '.data');
-if (!fs.existsSync(dataDir)) {
+if (!isTestEnv && !fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-export const dbPath = path.join(dataDir, 'neurosync.db');
+export const dbPath = isTestEnv ? ':memory:' : path.join(dataDir, 'neurosync.db');
 
 // Instantiate better-sqlite3 database
 export const db: BetterSqlite3Database = new Database(dbPath, { 
