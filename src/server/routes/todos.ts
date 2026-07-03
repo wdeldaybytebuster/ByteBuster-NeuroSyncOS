@@ -96,6 +96,53 @@ todosRouter.post('/resolve-bulk', async (c) => {
   }
 });
 
+// Reject a single todo. Unlike /resolve, this does NOT unclaim the associated
+// task or resume the parked workflow run -- rejecting means the escalation was
+// looked at and declined, not that the underlying work should retry.
+todosRouter.post('/reject', async (c) => {
+  const body = await c.req.json();
+  const { todoId } = body;
+
+  try {
+    const info = db.prepare("UPDATE os_todos SET status = 'rejected' WHERE id = ?").run(todoId);
+    if (info.changes === 0) return c.json({ success: false, error: 'To-Do not found' }, 404);
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Deference UI bulk-reject — mirrors /resolve-bulk's batching but only flips
+// status to 'rejected', matching /reject's single-item semantics above.
+todosRouter.post('/reject-bulk', async (c) => {
+  const body = await c.req.json();
+  const { todoIds } = body;
+
+  if (!Array.isArray(todoIds) || todoIds.length === 0) {
+    return c.json({ success: false, error: 'todoIds must be a non-empty array' }, 400);
+  }
+
+  try {
+    const rejected: string[] = [];
+    const failed: { id: string; error: string }[] = [];
+
+    db.transaction(() => {
+      for (const todoId of todoIds) {
+        const info = db.prepare("UPDATE os_todos SET status = 'rejected' WHERE id = ?").run(todoId);
+        if (info.changes === 0) {
+          failed.push({ id: todoId, error: 'To-Do not found' });
+        } else {
+          rejected.push(todoId);
+        }
+      }
+    })();
+
+    return c.json({ success: true, rejected, failed });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 // Promote a ScoutDaemon discovery to the PortGrid HITL approval queue
 todosRouter.post('/promote', async (c) => {
   const body = await c.req.json();

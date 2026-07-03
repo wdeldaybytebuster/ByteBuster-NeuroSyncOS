@@ -42,9 +42,13 @@ systemRouter.get('/metrics', async (c) => {
 
         const utilization = 100 - Math.round((idle / total) * 100);
 
+        // systeminformation returns -1 (or null) when no thermal sensor is readable;
+        // treat that as "unavailable", not a real 0°C reading.
+        const temperature = typeof temp.main === 'number' && temp.main >= 0 ? temp.main : null;
+
         await stream.writeSSE({
           data: JSON.stringify({
-            temperature: temp.main || 0,
+            temperature,
             utilization,
             cores: cpus.length,
             maxWorkersConfig: systemConfig.maxWorkers,

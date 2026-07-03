@@ -151,9 +151,12 @@ export function ProjectSwitcher() {
                 </div>
               ) : (
                 /* Normal project row */
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setActiveProject(p.id, p.name)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveProject(p.id, p.name); } }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${
                     activeProjectId === p.id ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                   }`}
                 >
@@ -166,7 +169,7 @@ export function ProjectSwitcher() {
                   <button onClick={(e) => { e.stopPropagation(); handleStartEdit(p); }} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all shrink-0" aria-label="Edit project">
                     <Pencil size={11} />
                   </button>
-                </button>
+                </div>
               )}
             </div>
           ))

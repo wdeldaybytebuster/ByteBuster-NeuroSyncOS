@@ -192,6 +192,13 @@ function DashboardView() {
     } catch {}
   };
 
+  const handleDecline = async (todoId: string) => {
+    try {
+      await fetch(`${API}/api/todos/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId }) });
+      setApprovalQueue(prev => prev.filter(t => t.id !== todoId));
+    } catch {}
+  };
+
   // Deference UI split: low-confidence items need a human look (Attention
   // Required); high-confidence items get quick, non-blocking bulk approval.
   const lowConfidenceTodos = approvalQueue.filter(t => t.confidence < DEFERENCE_THRESHOLD);
@@ -205,11 +212,10 @@ function DashboardView() {
   };
 
   const handleRejectAll = async (todoIds: string[]) => {
-    // No bulk-reject endpoint exists (declining a todo doesn't resolve it —
-    // it just leaves the DAG parked, matching the existing single-item
-    // "Decline" button at :316 which is also not yet wired to a handler).
-    // Just remove them from local view state so the pill bar clears.
-    setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+    try {
+      await fetch(`${API}/api/todos/reject-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+      setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
+    } catch {}
   };
 
   return (
@@ -341,7 +347,7 @@ function DashboardView() {
                 </div>
                 <div className="flex gap-1.5">
                   <button onClick={() => handleApprove(todo.id)} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Approve</button>
-                  <button className="px-2 py-1 rounded text-[9px] font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">Decline</button>
+                  <button onClick={() => handleDecline(todo.id)} className="px-2 py-1 rounded text-[9px] font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">Decline</button>
                 </div>
               </div>
             ))}
