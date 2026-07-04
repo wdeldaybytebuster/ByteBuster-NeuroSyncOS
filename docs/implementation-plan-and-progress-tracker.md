@@ -830,4 +830,28 @@ Trigger: a request to test every real-world thing a user might want to do (proje
 
 Full scenario-by-scenario results, verdicts, and the marketing-claims scorecard are in the published testing report artifact (not committed to the repo — session-only).
 
+### 2026-07-04 — fixed the highest-priority finding from the reality test: CoreExec's silent no-op fallback
+
+Direct follow-up to the previous pass's biggest finding: most real DAG proposals were executing as no-ops, because `dispatch.ts`'s `'generic'` classification (anything that isn't a shell command or a scrape URL — i.e. most natural-language task prompts, exactly what ScopeLogic's LLM-driven proposal generation produces) fell through to a worker-thread stub the code itself labeled `metadata echo (legacy/no-op fallback)`. The user picked this as the top priority to fix, ranking it above the Free Mode Governor and crash-recovery gaps, since it undermines the core "CoreExec runs actual multi-step workflows" promise more directly than either.
+
+Done by an Opus agent per the plan's model-routing (a real change to the core execution engine): `'generic'`-classified tasks with a non-empty prompt are now intercepted on the **main thread** in `engine.ts`'s dispatch loop, before ever reaching the worker pool — worker threads have no live `RouteSwitchEngine`/provider registry/decrypted keys (each gets its own private `:memory:` DB, no shared singletons), so the real LLM call has to happen where those singletons actually live. Reuses the exact `injectGenerateFn` pattern already established 3 times today (Cerebro, OKF, ScopeLogic): a new `injectCoreExecGenerateFn` in `engine.ts`, wired from `server/index.ts` with `scope: 'agent', scopeId: 'coreexec-generic-task', estimatedTokens: 1000` (middle of the 500-1500 range between Cerebro's 150-token chat budget and ScopeLogic's 2000-token DAG-schema budget — a generic task's output is real work product, bigger than a chat reply, smaller than a full DAG). Confirmed `scopeId` with no matching routing rule falls back to the `global` chain, as already relied on elsewhere. Tasks with an *empty* prompt still go through the old legacy metadata-echo path (nothing to send an LLM) — deliberately unchanged, matches the existing backward-compat comment.
+
+**Scope boundary explicitly preserved:** this only makes the LLM call happen and stores its real text response as `output_data` for a human to read — it does **not** give the model any new ability to write files or execute commands. The "AI actions stay draft-only" ground rule is untouched; this is exactly analogous to ScopeLogic's conversational interview already calling the LLM for pure text generation.
+
+**Failure handling matches the existing pattern exactly:** a null (unwired) or throwing generateFn degrades the same way a worker-thread exception already did before today — task → `parked`, an `os_todos` row inserted with `confidence: 0.0` (deterministic failure, not an AI judgment call) — never a silent fake success.
+
+**Verification:** +4 tests (299 total, was 295) covering: generic task stores the injected mock's real response; shell/scrape tasks still route to `workerPool.execute()` completely unchanged (regression check); null generateFn → parked + 0.0-confidence escalation; throwing generateFn → same. `npx tsc --noEmit` clean, `npm run build` clean. **Live end-to-end verification performed against the running dev server with real registered providers**: approved a DAG with a natural-language ("why do unit tests matter?") task prompt via `POST /api/coreexec/approve`, confirmed the completed task's `output_data.message` contained a genuine LLM-generated sentence, not the old `"metadata echo"` string.
+
+**Found but not fixed, flagged only:** a pre-existing flaky test in `terminal-session.test.ts` (an `ENOTEMPTY` race in a temp-dir cleanup during the PortGrid sandbox's empirical containment tests) surfaced once during this task's test runs, unrelated to CoreExec — passed on rerun, not investigated further.
+
+Commit: `57cb58b`.
+
+**Still open from the reality-test pass, in priority order the user has not yet acted on:**
+1. Free Mode Governor's real behavior (flat token ceiling, no paid/free distinction, no unlock mechanism) doesn't match its marketing description — needs a decision on which side to fix.
+2. No real crash recovery — needs a boot-time scan for in-progress runs plus extending `/api/coreexec/retry/:runId` to cover `claimed`-status tasks, not just `failed`/`parked`.
+3. OpenCode Zen's free-model reliability issue (confirmed non-deterministic empty-content failures) needs investigation or a documented known-limitation note.
+4. The terminal auto-scan cooldown is time-based, not change-aware, and can miss real changes if two sessions close within 60 seconds of each other.
+5. A7 (redaction log) and A8 (archive-with-history) from the reality test are still inconclusive — worth a clean re-run once a provider is behaving reliably.
+6. C3/C4 (idle-triggered ScoutDaemon maintenance / reflection start-stop) still need a genuine 10-minute idle observation window.
+
 <!-- Add new entries above this line, newest at the bottom, each dated -->
