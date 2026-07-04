@@ -7,6 +7,7 @@ import { selectOptimalModel, Benchmark, Model } from './model-selector/dynamic-r
 import { db } from '../basevault/db';
 import { ProviderHealthState } from './interceptor';
 import { OKFGraphQuery } from '../okf/graph-query';
+import { log } from '../observability/logger';
 
 export interface RouteRequest {
   prompt: string;
@@ -112,7 +113,7 @@ export class RouteSwitchEngine {
         }
       }
     } catch (err) {
-      console.warn('[RouteSwitch] resolveProviderChain failed; using default provider:', err);
+      log.warn('[RouteSwitch] resolveProviderChain failed; using default provider:', err);
     }
 
     // Fallback: just the current active provider
@@ -143,11 +144,11 @@ export class RouteSwitchEngine {
       );
       const bestProvider = this.providerRegistry.get(bestId);
       if (bestProvider && bestProvider.id !== primary.id) {
-        console.log(`[RouteSwitch] Model selector chose ${bestId} (complexity=${req.complexity}, priority=${req.userPriority})`);
+        log.info(`[RouteSwitch] Model selector chose ${bestId} (complexity=${req.complexity}, priority=${req.userPriority})`);
         return bestProvider;
       }
     } catch (err) {
-      console.warn('[RouteSwitch] selectOptimalModel failed; using primary provider:', err);
+      log.warn('[RouteSwitch] selectOptimalModel failed; using primary provider:', err);
     }
     return primary;
   }
@@ -172,7 +173,7 @@ export class RouteSwitchEngine {
     let confidence = 1.0;
     if (qualityScore < 0.0) confidence -= 0.3;
     if (abortController.signal.aborted) {
-      console.warn('[RouteSwitch] AgentStop terminated response — low confidence detected.');
+      log.warn('[RouteSwitch] AgentStop terminated response — low confidence detected.');
       confidence -= 0.6;
     }
     confidence = Math.max(0, Math.min(1, confidence));
@@ -205,7 +206,7 @@ export class RouteSwitchEngine {
         }
       } catch (err) {
         // OKF context is best-effort — never block execution
-        console.warn('[RouteSwitch] OKF context injection failed (non-fatal):', err);
+        log.warn('[RouteSwitch] OKF context injection failed (non-fatal):', err);
       }
     }
 
@@ -217,7 +218,7 @@ export class RouteSwitchEngine {
     let confidence = 1.0;
 
     if (isCouncilTriggered) {
-      console.log('High-risk prompt detected. Triggering Council Mode.');
+      log.info('High-risk prompt detected. Triggering Council Mode.');
       const allProviders = [primaryProvider, ...this.councilProviders];
       const consensus = await ConsensusSynthesizer.executeCouncilMode(enrichedPrompt, request.estimatedTokens, allProviders, request.responseSchema);
       responseContent = consensus.content;
@@ -232,7 +233,7 @@ export class RouteSwitchEngine {
         // Skip exhausted providers
         const health = ProviderHealthState.getState(provider.id);
         if (health.isExhausted) {
-          console.log(`[RouteSwitch] Skipping exhausted provider: ${provider.id}`);
+          log.info(`[RouteSwitch] Skipping exhausted provider: ${provider.id}`);
           continue;
         }
 
@@ -247,7 +248,7 @@ export class RouteSwitchEngine {
           break;
         } catch (err: any) {
           lastError = err;
-          console.warn(`[RouteSwitch] Provider ${provider.id} failed: ${err.message}. Trying next in chain...`);
+          log.warn(`[RouteSwitch] Provider ${provider.id} failed: ${err.message}. Trying next in chain...`);
           // Mark as potentially exhausted if it looks like a rate limit
           if (err.message && (err.message.includes('429') || err.message.includes('rate limit') || err.message.includes('Too Many Requests'))) {
             const fakeHeaders = new Headers();

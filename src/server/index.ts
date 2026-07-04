@@ -14,6 +14,7 @@ import path from 'path';
 import fs from 'fs';
 
 import { readiness } from '../core/basevault/readiness';
+import { log } from '../core/observability/logger';
 
 const app = new Hono();
 
@@ -239,7 +240,7 @@ function bootProviderRegistry() {
             const primary = instantiateProvider(pRow.type, pConfig, pKey, pRow.id);
             routeSwitch.setProvider(primary);
           }
-          console.log(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
+          log.info(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
           return;
         }
       }
@@ -252,11 +253,11 @@ function bootProviderRegistry() {
       const firstKey = firstRow.api_key_encrypted ? decrypt(firstRow.api_key_encrypted) : '';
       const firstProvider = instantiateProvider(firstRow.type, firstConfig, firstKey, firstRow.id);
       routeSwitch.setProvider(firstProvider);
-      console.log(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
+      log.info(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
       return;
     }
   } catch (err) {
-    console.warn('[NeuroSync] Boot: Failed to load providers from DB, falling back to env/mock:', err);
+    log.warn('[NeuroSync] Boot: Failed to load providers from DB, falling back to env/mock:', err);
   }
 
   // Legacy fallback: env vars or mock
@@ -264,7 +265,7 @@ function bootProviderRegistry() {
   const envApiKey = process.env.NEUROSYNC_LLM_API_KEY;
   const envModel = process.env.NEUROSYNC_LLM_MODEL || 'auto';
   if (envBaseUrl) {
-    console.log(`[NeuroSync] Boot: Auto-configuring from env: ${envBaseUrl}`);
+    log.info(`[NeuroSync] Boot: Auto-configuring from env: ${envBaseUrl}`);
     routeSwitch.setProvider(instantiateProvider('openai-compatible', { baseUrl: envBaseUrl, modelId: envModel }, envApiKey));
   } else {
     routeSwitch.setProvider(instantiateProvider('mock', {}, undefined));
@@ -377,7 +378,7 @@ app.get('/api/basevault/run/:runId', (c) => {
 
     const runParse = WorkflowRunSchema.safeParse(rawRun);
     if (!runParse.success) {
-      console.error(`[§3.3] /api/basevault/run/${runId} run row failed schema parse:`, runParse.error.format());
+      log.error(`[§3.3] /api/basevault/run/${runId} run row failed schema parse:`, runParse.error.format());
       return c.json({
         error: 'workflow_runs row is schema-dirty; refusing to rehydrate.',
         runId,
@@ -417,13 +418,13 @@ app.get('/api/basevault/run/:runId', (c) => {
 // ─── Server Start ─────────────────────────────────────────────────────────────
 
 const port = 3743;
-console.log(`[NeuroSync] API Gateway running on http://localhost:${port}`);
+log.info(`[NeuroSync] API Gateway running on http://localhost:${port}`);
 
 import { ModelDiscovery } from '../core/routeswitch/discovery';
 ModelDiscovery.fetchModels().then(() => {
-  console.log('[NeuroSync] Model Discovery complete. Available models cached.');
+  log.info('[NeuroSync] Model Discovery complete. Available models cached.');
 }).catch(err => {
-  console.error('[NeuroSync] Model Discovery failed:', err);
+  log.error('[NeuroSync] Model Discovery failed:', err);
 });
 
 const server = serve({

@@ -9,6 +9,7 @@ import { db, dbPath } from '../../core/basevault/db';
 import { encrypt, decrypt } from '../../core/basevault/crypto';
 import { workerPool } from '../../core/coreexec/worker-pool';
 import { SensitiveDataRedactor } from '../../core/basevault/redactor';
+import { log } from '../../core/observability/logger';
 
 export const systemRouter = new Hono();
 
@@ -66,7 +67,7 @@ systemRouter.get('/metrics', async (c) => {
         });
 
       } catch (err) {
-        console.error('Metrics stream error:', err);
+        log.error('Metrics stream error:', err);
       }
       
       // Wait 3 seconds
@@ -152,7 +153,7 @@ systemRouter.get('/backup', async (c) => {
         event: 'backup-complete'
       });
     } catch (err: any) {
-      console.error('Backup failed', err);
+      log.error('Backup failed', err);
       await stream.writeSSE({ data: err.message, event: 'error' });
     }
   });
@@ -170,22 +171,22 @@ systemRouter.post('/restore', async (c) => {
       fs.writeFileSync(tempPath, Buffer.from(arrayBuffer));
 
       // 2. Drain workers & close DB
-      console.warn('[System] Initiating System Restore. Draining workers...');
+      log.warn('[System] Initiating System Restore. Draining workers...');
       workerPool.destroy(); // Wait for workers to finish current jobs then kill
       db.close();
 
       // 3. Overwrite Vault DB
-      console.warn('[System] Overwriting BaseVault SQLite database...');
+      log.warn('[System] Overwriting BaseVault SQLite database...');
       fs.copyFileSync(tempPath, dbPath);
       fs.unlinkSync(tempPath);
 
       // 4. Force process restart (assuming pm2, nodemon, or systemd is watching)
-      console.warn('[System] Restore complete. Triggering process exit for process manager to reboot...');
+      log.warn('[System] Restore complete. Triggering process exit for process manager to reboot...');
       setTimeout(() => process.exit(0), 1000);
 
       return c.json({ success: true, message: 'System restored. Rebooting OS...' });
     } catch (err: any) {
-      console.error('Restore failed', err);
+      log.error('Restore failed', err);
       return c.json({ success: false, error: err.message }, 500);
     }
   }

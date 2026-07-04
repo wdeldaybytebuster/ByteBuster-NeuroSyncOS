@@ -5,6 +5,7 @@ import * as path from 'path';
 import { CommandSandbox } from './sandbox';
 import { scanProjectForDocs } from '../okf/project-scanner';
 import { scoutEmitter } from '../scoutdaemon/sse';
+import { log } from '../observability/logger';
 
 /**
  * Task 8 — Interactive Embedded Terminal (PortGrid).
@@ -89,7 +90,7 @@ export function triggerAutoScan(projectId: string): void {
   try {
     const result = scanProjectForDocs(projectId);
     if (result.success) {
-      console.log(
+      log.info(
         `[Terminal] auto-scan for project ${projectId}: ${result.totalFound} doc(s) found, ${result.unprocessedCount} unprocessed`,
       );
       scoutEmitter.emit('update', {
@@ -104,7 +105,7 @@ export function triggerAutoScan(projectId: string): void {
     // not an error worth surfacing loudly on terminal close.
   } catch (err) {
     // Best-effort only: never let a scan failure affect terminal teardown.
-    console.warn(`[Terminal] auto-scan failed for project ${projectId}:`, err);
+    log.warn(`[Terminal] auto-scan failed for project ${projectId}:`, err);
   }
 }
 
@@ -390,7 +391,7 @@ export class TerminalSession {
       /* already dead */
     }
     terminalSessions.delete(this.id);
-    console.log(`[Terminal] session ${this.id} disposed (${reason})`);
+    log.info(`[Terminal] session ${this.id} disposed (${reason})`);
     triggerAutoScan(this.projectId);
   }
 }
@@ -417,7 +418,7 @@ export function createTerminalSession(projectId: string, opts: TerminalSessionOp
 
   const id = `${Date.now().toString(36)}-${(++seq).toString(36)}`;
   const session = new TerminalSession(id, projectId, projectDir, opts); // self-registers
-  console.log(`[Terminal] session ${id} started for project ${projectId} → ${projectDir}`);
+  log.info(`[Terminal] session ${id} started for project ${projectId} → ${projectDir}`);
   return session;
 }
 

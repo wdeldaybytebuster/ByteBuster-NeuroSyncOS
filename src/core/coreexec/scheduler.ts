@@ -4,6 +4,7 @@ import { sweepOrphanedWorkspaces } from './memory-sweep';
 import crypto from 'crypto';
 import { executeRun } from './engine';
 import { validateDAGTemplate, escalateBlockedDAGToOsTodos } from './validateDAG';
+import { log } from '../observability/logger';
 
 const activeJobs = new Map<string, ScheduledTask>();
 
@@ -37,7 +38,7 @@ export function _stopSchedulerLoopForTests(): void {
 }
 
 export function initScheduler() {
-  console.log('[CoreExec] Initializing Cron Scheduler...');
+  log.info('[CoreExec] Initializing Cron Scheduler...');
   sweepOrphanedWorkspaces();
   refreshJobs();
 
@@ -56,14 +57,14 @@ export function initScheduler() {
     
     reflectionWorker?.on('message', (msg) => {
       if (msg.type === 'reflection_done') {
-        console.log(`[CoreExec] Reflection cycle complete. Pruned ${msg.pruned} memories.`);
+        log.info(`[CoreExec] Reflection cycle complete. Pruned ${msg.pruned} memories.`);
       } else if (msg.type === 'reflection_error') {
-        console.error(`[CoreExec] Reflection cycle failed: ${msg.error}`);
+        log.error(`[CoreExec] Reflection cycle failed: ${msg.error}`);
       }
     });
 
     reflectionWorker?.on('error', (err) => {
-      console.error('[CoreExec] Reflection worker encountered an error:', err);
+      log.error('[CoreExec] Reflection worker encountered an error:', err);
     });
 
     // Run every 10 minutes
@@ -74,7 +75,7 @@ export function initScheduler() {
     // Trigger initial run
     reflectionWorker?.postMessage({ type: 'run_reflection' });
   } catch (err) {
-    console.error('[CoreExec] Failed to initialize reflection worker:', err);
+    log.error('[CoreExec] Failed to initialize reflection worker:', err);
   }
 }
 
@@ -120,7 +121,7 @@ export function refreshJobs(): void {
 
         escalateBlockedDAGToOsTodos(wf.id, validationError, 'scheduler');
 
-        console.error(
+        log.error(
           `[CoreExec] DAG validation gate blocked workflow ${wf.id}: ${validationError}`,
         );
         continue;
@@ -130,16 +131,16 @@ export function refreshJobs(): void {
         if (cron.validate(wf.cron_schedule)) {
           const job = cron.schedule(wf.cron_schedule, () => triggerWorkflow(wf));
           activeJobs.set(wf.id, job);
-          console.log(`[CoreExec] Scheduled workflow ${wf.id} with cron: ${wf.cron_schedule}`);
+          log.info(`[CoreExec] Scheduled workflow ${wf.id} with cron: ${wf.cron_schedule}`);
         } else {
-          console.error(
+          log.error(
             `[CoreExec] Invalid cron schedule for workflow ${wf.id}: ${wf.cron_schedule}`,
           );
         }
       }
     }
   } catch (error) {
-    console.error('[CoreExec] Scheduler refresh error:', error);
+    log.error('[CoreExec] Scheduler refresh error:', error);
   }
 }
 
@@ -157,11 +158,11 @@ async function triggerWorkflow(wf: any) {
       insertTask.run(node.id, runId, 'unclaimed');
     }
 
-    console.log(`[CoreExec] Triggered scheduled workflow run: ${runId}`);
+    log.info(`[CoreExec] Triggered scheduled workflow run: ${runId}`);
 
     // Background execution
-    executeRun(runId).catch((err) => console.error(`[CoreExec] Cron Run ${runId} failed:`, err));
+    executeRun(runId).catch((err) => log.error(`[CoreExec] Cron Run ${runId} failed:`, err));
   } catch (error) {
-    console.error(`[CoreExec] Failed to trigger workflow ${wf.id}:`, error);
+    log.error(`[CoreExec] Failed to trigger workflow ${wf.id}:`, error);
   }
 }

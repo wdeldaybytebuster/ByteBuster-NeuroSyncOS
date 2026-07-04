@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { db } from '../../core/basevault/db';
 import { CerebroVectorStore } from '../../core/memory/cerebro/vector';
 import { ReflectionExecutor } from '../../core/memory/cerebro/reflection';
+import { log } from '../../core/observability/logger';
 
 export const cerebroRouter = new Hono();
 
@@ -53,7 +54,7 @@ cerebroRouter.post('/query', async (c) => {
 cerebroRouter.post('/habituate', async (c) => {
   try {
     // Run reflection asynchronously
-    setTimeout(() => ReflectionExecutor.runReflectionCycle().catch(console.error), 0);
+    setTimeout(() => ReflectionExecutor.runReflectionCycle().catch(log.error), 0);
     return c.json({ success: true, message: 'Reflection cycle initiated' });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -199,14 +200,14 @@ cerebroRouter.post('/chat', async (c) => {
     try {
       const routed = await routeQuery(message);
       routedContextBlock = routed.map((r) => r.contextBlock).filter(Boolean).join('\n');
-      console.log(
+      log.info(
         '[CerebroChat] context router →',
         routed.map((r) => r.source).join(', '),
         routedContextBlock ? `(+${routedContextBlock.length} chars)` : '(no extra block)'
       );
     } catch (err: any) {
       // Context routing is best-effort — never block the chat response.
-      console.warn('[CerebroChat] context routing failed (non-fatal):', err?.message);
+      log.warn('[CerebroChat] context routing failed (non-fatal):', err?.message);
     }
 
     // Build prompt with conversation history for context
