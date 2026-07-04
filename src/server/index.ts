@@ -4,7 +4,7 @@ import { cors } from 'hono/cors';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
 import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
 import { instantiateProvider } from '../core/routeswitch/provider-factory';
-import { executeRun } from '../core/coreexec/engine';
+import { executeRun, injectCoreExecGenerateFn } from '../core/coreexec/engine';
 import { db, initDB } from '../core/basevault/db';
 import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
 import { scoutRouter } from '../core/scoutdaemon/sse';
@@ -310,6 +310,23 @@ const generateFn = async (prompt: string, schema?: any) => {
 import { scopelogicRouter, injectScopeLogicGenerateFn } from './routes/scopelogic-router';
 injectScopeLogicGenerateFn(generateFn);
 app.route('/api/scopelogic', scopelogicRouter);
+
+// Wire the live RouteSwitch into CoreExec so a `'generic'`-classified DAG task
+// (a natural-language work item like "summarize the findings" that maps to no
+// shell command or URL) gets a REAL LLM completion on the main thread instead of
+// the worker pool's old canned "metadata echo" no-op. Own `scopeId`
+// ('coreexec-generic-task') so operators can route generic task execution
+// independently of the ScopeLogic interview or Cerebro chat; it falls back to the
+// plain `agent`-scope rule (then global) when no specific rule is registered.
+// estimatedTokens 1000: a generic task response is real work output (analysis /
+// summary / draft) — larger than Cerebro's 150-token chat reply, smaller than
+// ScopeLogic's 2000-token DAG-schema generation. Text-generation only; the result
+// is stored for a human to read, never executed.
+const _coreExecGenerateFn = async (prompt: string) => {
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 1000, scope: 'agent', scopeId: 'coreexec-generic-task' });
+  return result.content;
+};
+injectCoreExecGenerateFn(_coreExecGenerateFn);
 
 app.get('/', (c) => c.json({ status: 'ok', service: 'NeuroSync Local API Gateway', version: '0.3.0' }));
 
