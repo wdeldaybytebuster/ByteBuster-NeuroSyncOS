@@ -54,7 +54,10 @@ function validateProjectRootPath(inputPath: string | undefined | null): string |
 
 projectsRouter.get('/', (c) => {
   try {
-    const projects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+    const includeArchived = c.req.query('includeArchived') === 'true';
+    const projects = includeArchived
+      ? db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all()
+      : db.prepare('SELECT * FROM projects WHERE archived_at IS NULL ORDER BY created_at DESC').all();
     return c.json({ projects });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -147,6 +150,34 @@ projectsRouter.put('/:id', async (c) => {
     };
     writeProjectConfigYaml(project);
 
+    return c.json({ success: true, project });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+projectsRouter.post('/:id/archive', (c) => {
+  try {
+    const { id } = c.req.param();
+    const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(id);
+    if (!existing) return c.json({ success: false, error: 'Project not found' }, 404);
+
+    db.prepare('UPDATE projects SET archived_at = ? WHERE id = ?').run(Date.now(), id);
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+    return c.json({ success: true, project });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+projectsRouter.post('/:id/restore', (c) => {
+  try {
+    const { id } = c.req.param();
+    const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(id);
+    if (!existing) return c.json({ success: false, error: 'Project not found' }, 404);
+
+    db.prepare('UPDATE projects SET archived_at = NULL WHERE id = ?').run(id);
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
     return c.json({ success: true, project });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);

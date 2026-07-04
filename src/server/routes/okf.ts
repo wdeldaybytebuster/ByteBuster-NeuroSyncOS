@@ -5,6 +5,7 @@ import { OKFGraphQuery } from '../../core/okf/graph-query';
 import { OKFGenerator } from '../../core/okf/generator';
 import { ScoutResearch } from '../../core/scoutdaemon/research';
 import { OKFDirectoryManager } from '../../core/okf/directory-manager';
+import { scanProjectForDocs } from '../../core/okf/project-scanner';
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
@@ -220,6 +221,8 @@ okfRouter.get('/status', (c) => {
 });
 
 // 10.5 POST /api/okf/scan-project — Discover raw documentation in the project tree
+// Logic lives in core/okf/project-scanner.ts so it can also be called in-process
+// (e.g. auto-scan when a PortGrid terminal session for the project closes).
 okfRouter.post('/scan-project', async (c) => {
   try {
     const body = await c.req.json();
@@ -227,90 +230,12 @@ okfRouter.post('/scan-project', async (c) => {
     if (!parsed.success) {
       return c.json({ success: false, error: 'Invalid or missing projectId in request body.' }, 400);
     }
-    const projectId = parsed.data;
 
-    // Resolve project root
-    const project = db.prepare('SELECT project_root_path FROM projects WHERE id = ?').get(projectId) as { project_root_path: string | null } | undefined;
-    if (!project?.project_root_path) {
-      return c.json({ success: false, error: 'Project has no project_root_path configured.' }, 400);
+    const result = scanProjectForDocs(parsed.data);
+    if (!result.success) {
+      return c.json({ success: false, error: result.error }, result.httpStatus);
     }
-
-    const rootPath = project.project_root_path;
-
-    // Directories to skip (common non-documentation paths)
-    const SKIP_DIRS = new Set([
-      'node_modules', '.git', '.gitnexus', '.neurosync', '.nexus_worktrees',
-      'dist', 'build', '.next', '.cache', '__pycache__', '.venv', 'venv',
-      'vendor', 'target', '.data', '.understand-anything', '.antigravity',
-      'coverage', '.nyc_output', '.turbo', '.parcel-cache',
-    ]);
-
-    // Documentation file extensions to discover
-    const DOC_EXTENSIONS = new Set(['.md', '.txt', '.rst', '.adoc', '.mdx']);
-
-    // Recursively scan for documentation files
-    const discoveredDocs: { relativePath: string; absolutePath: string; extension: string; sizeBytes: number }[] = [];
-
-    const walk = (dir: string) => {
-      try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.name.startsWith('.') && entry.name !== '.env.example') continue; // skip dotfiles
-          const fullPath = path.join(dir, entry.name);
-
-          if (entry.isDirectory()) {
-            if (SKIP_DIRS.has(entry.name)) continue;
-            walk(fullPath);
-          } else if (entry.isFile()) {
-            const ext = path.extname(entry.name).toLowerCase();
-            if (DOC_EXTENSIONS.has(ext)) {
-              try {
-                const stat = fs.statSync(fullPath);
-                discoveredDocs.push({
-                  relativePath: path.relative(rootPath, fullPath),
-                  absolutePath: fullPath,
-                  extension: ext,
-                  sizeBytes: stat.size,
-                });
-              } catch {}
-            }
-          }
-        }
-      } catch {}
-    };
-
-    walk(rootPath);
-
-    // Check which docs have already been processed into OKF nodes
-    const okfDir = path.join(rootPath, '.neurosync', 'project_okf');
-    const existingOKFFiles = fs.existsSync(okfDir)
-      ? new Set(OKFDirectoryManager.listMarkdownFiles(okfDir).map(f => path.relative(okfDir, f)))
-      : new Set<string>();
-
-    // Also check if we've tracked any of these source docs in a processing log
-    const processedRow = db.prepare("SELECT value FROM system_settings WHERE key = ?").get(`okf_processed_docs_${projectId}`) as { value: string } | undefined;
-    const processedSet = new Set<string>(processedRow ? JSON.parse(processedRow.value) : []);
-
-    const results = discoveredDocs.map(doc => ({
-      ...doc,
-      isProcessed: processedSet.has(doc.relativePath),
-      sizeKB: (doc.sizeBytes / 1024).toFixed(1),
-    }));
-
-    const unprocessed = results.filter(d => !d.isProcessed);
-    const processed = results.filter(d => d.isProcessed);
-
-    return c.json({
-      success: true,
-      projectId,
-      rootPath,
-      totalFound: results.length,
-      unprocessedCount: unprocessed.length,
-      processedCount: processed.length,
-      unprocessed,
-      processed,
-      okfNodesExisting: existingOKFFiles.size,
-    });
+    return c.json(result);
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }

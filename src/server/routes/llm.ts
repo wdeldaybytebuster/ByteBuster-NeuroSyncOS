@@ -1,8 +1,6 @@
 import { Hono } from 'hono';
 import { RouteSwitchEngine } from '../../core/routeswitch/engine';
-import { MockProvider } from '../../core/routeswitch/providers';
-import { OpenAICompatibleProvider } from '../../core/routeswitch/adapters/openai-compatible';
-import { LlamaCppProvider } from '../../core/routeswitch/adapters/llama-cpp';
+import { instantiateProvider, PROVIDER_TYPES } from '../../core/routeswitch/provider-factory';
 import { FreeModeGovernor } from '../../core/routeswitch/governor';
 import { ProviderHealthState } from '../../core/routeswitch/interceptor';
 import { db } from '../../core/basevault/db';
@@ -61,19 +59,7 @@ llmRouter.post('/config', async (c) => {
   currentConfig = { ...currentConfig, ...body };
 
   try {
-    if (currentConfig.provider === 'mock') {
-      activeEngine.setProvider(new MockProvider());
-    } else if (currentConfig.provider === 'openai-compatible') {
-      activeEngine.setProvider(new OpenAICompatibleProvider({
-        baseUrl: currentConfig.baseUrl,
-        modelId: currentConfig.modelId,
-        apiKey: currentConfig.apiKey
-      }));
-    } else if (currentConfig.provider === 'llama-cpp') {
-      activeEngine.setProvider(new LlamaCppProvider({
-        modelPath: currentConfig.modelPath
-      }));
-    }
+    activeEngine.setProvider(instantiateProvider(currentConfig.provider, currentConfig, currentConfig.apiKey));
 
     return c.json({ success: true, config: currentConfig });
   } catch (err: any) {
@@ -96,14 +82,7 @@ function syncProviderToEngine(row: { id: string; type: string; config_json: stri
   if (row.is_enabled !== 1) return;
   const config = JSON.parse(row.config_json || '{}');
   const apiKey = row.api_key_encrypted ? decrypt(row.api_key_encrypted) : '';
-  let provider;
-  if (row.type === 'openai-compatible') {
-    provider = new OpenAICompatibleProvider({ baseUrl: config.baseUrl, modelId: config.modelId || 'Auto', apiKey }, row.id);
-  } else if (row.type === 'llama-cpp') {
-    provider = new LlamaCppProvider({ modelPath: config.modelPath, contextSize: config.contextSize, gpuLayers: config.gpuLayers }, row.id);
-  } else {
-    provider = new MockProvider();
-  }
+  const provider = instantiateProvider(row.type, config, apiKey, row.id);
   activeEngine.registerProvider(provider);
 }
 
@@ -116,7 +95,7 @@ function syncProviderToEngine(row: { id: string; type: string; config_json: stri
 llmRouter.get('/providers', (c) => {
   try {
     const rows = db.prepare(`
-      SELECT id, name, type, config_json, api_key_encrypted, is_enabled, created_at, updated_at
+      SELECT id, name, type, config_json, api_key_encrypted, is_enabled, is_paid_tier, created_at, updated_at
       FROM llm_providers
       ORDER BY created_at ASC
     `).all() as any[];
@@ -128,6 +107,7 @@ llmRouter.get('/providers', (c) => {
       config: JSON.parse(row.config_json || '{}'),
       hasApiKey: !!row.api_key_encrypted,
       isEnabled: row.is_enabled === 1,
+      isPaidTier: row.is_paid_tier === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -142,26 +122,27 @@ llmRouter.get('/providers', (c) => {
 llmRouter.post('/providers', async (c) => {
   try {
     const body = await c.req.json();
-    const { name, type, config, apiKey, isEnabled } = body;
+    const { name, type, config, apiKey, isEnabled, isPaidTier } = body;
 
     if (!name || !type) {
       return c.json({ success: false, error: 'name and type are required' }, 400);
     }
 
-    const validTypes = ['openai-compatible', 'llama-cpp', 'mock'];
-    if (!validTypes.includes(type)) {
-      return c.json({ success: false, error: `type must be one of: ${validTypes.join(', ')}` }, 400);
+    if (!PROVIDER_TYPES.includes(type)) {
+      return c.json({ success: false, error: `type must be one of: ${PROVIDER_TYPES.join(', ')}` }, 400);
     }
 
     const id = `prov_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`;
     const now = Date.now();
     const configJson = JSON.stringify(config || {});
     const encryptedKey = apiKey ? encrypt(apiKey) : null;
+    // Opt-in only: defaults to free (0) unless the caller explicitly marks it paid.
+    const paidTier = isPaidTier === true ? 1 : 0;
 
     db.prepare(`
-      INSERT INTO llm_providers (id, name, type, config_json, api_key_encrypted, is_enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, type, configJson, encryptedKey, isEnabled !== false ? 1 : 0, now, now);
+      INSERT INTO llm_providers (id, name, type, config_json, api_key_encrypted, is_enabled, is_paid_tier, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, type, configJson, encryptedKey, isEnabled !== false ? 1 : 0, paidTier, now, now);
 
     // Sync to live engine so it's immediately usable without restart
     syncProviderToEngine({ id, type, config_json: configJson, api_key_encrypted: encryptedKey, is_enabled: isEnabled !== false ? 1 : 0 });
@@ -174,21 +155,13 @@ llmRouter.post('/providers', async (c) => {
         // First provider added — make it the active primary
         const config2 = JSON.parse(configJson);
         const key2 = encryptedKey ? decrypt(encryptedKey) : '';
-        let prov;
-        if (type === 'openai-compatible') {
-          prov = new OpenAICompatibleProvider({ baseUrl: config2.baseUrl, modelId: config2.modelId || 'Auto', apiKey: key2 }, id);
-        } else if (type === 'llama-cpp') {
-          prov = new LlamaCppProvider({ modelPath: config2.modelPath, contextSize: config2.contextSize, gpuLayers: config2.gpuLayers }, id);
-        } else {
-          prov = new MockProvider();
-        }
-        activeEngine.setProvider(prov);
+        activeEngine.setProvider(instantiateProvider(type, config2, key2, id));
       }
     }
 
     return c.json({
       success: true,
-      provider: { id, name, type, config: config || {}, hasApiKey: !!apiKey, isEnabled: isEnabled !== false, createdAt: now }
+      provider: { id, name, type, config: config || {}, hasApiKey: !!apiKey, isEnabled: isEnabled !== false, isPaidTier: paidTier === 1, createdAt: now }
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -200,7 +173,7 @@ llmRouter.put('/providers/:id', async (c) => {
   try {
     const { id } = c.req.param();
     const body = await c.req.json();
-    const { name, type, config, apiKey, isEnabled } = body;
+    const { name, type, config, apiKey, isEnabled, isPaidTier } = body;
 
     // Verify exists
     const existing = db.prepare('SELECT id FROM llm_providers WHERE id = ?').get(id);
@@ -221,6 +194,7 @@ llmRouter.put('/providers/:id', async (c) => {
       params.push(apiKey ? encrypt(apiKey) : null);
     }
     if (isEnabled !== undefined) { updates.push('is_enabled = ?'); params.push(isEnabled ? 1 : 0); }
+    if (isPaidTier !== undefined) { updates.push('is_paid_tier = ?'); params.push(isPaidTier ? 1 : 0); }
 
     updates.push('updated_at = ?');
     params.push(now);
@@ -279,15 +253,7 @@ llmRouter.post('/providers/:id/test', async (c) => {
 
     const config = JSON.parse(row.config_json || '{}');
     const apiKey = row.api_key_encrypted ? decrypt(row.api_key_encrypted) : undefined;
-    let provider;
-
-    if (row.type === 'openai-compatible') {
-      provider = new OpenAICompatibleProvider({ baseUrl: config.baseUrl, modelId: config.modelId || 'Auto', apiKey: apiKey || '' });
-    } else if (row.type === 'llama-cpp') {
-      provider = new LlamaCppProvider({ modelPath: config.modelPath, contextSize: config.contextSize, gpuLayers: config.gpuLayers });
-    } else {
-      provider = new MockProvider();
-    }
+    const provider = instantiateProvider(row.type, config, apiKey);
 
     const startMs = Date.now();
     const result = await provider.generate('Hello, respond with a single word to confirm connectivity.', 20);

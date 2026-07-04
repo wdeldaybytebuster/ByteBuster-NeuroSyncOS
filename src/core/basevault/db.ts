@@ -1,18 +1,28 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 import { isMainThread } from 'worker_threads';
 
 import type { Database as BetterSqlite3Database } from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 
 // Resolve database directory in local workspace (.data)
+//
+// Tests must NEVER touch the real dev/user database — Vitest sets
+// `process.env.VITEST` automatically, so under test we use a private
+// in-memory database instead. Without this, running the test suite while
+// the dev server is running would delete real registered providers,
+// routing rules, and projects (several tests do unscoped `DELETE FROM
+// projects` / `tasks` / `workflow_runs` as cleanup) — live-observed
+// 2026-07-03, wiped a user's provider registry twice mid-session.
+const isTestEnv = !!process.env.VITEST;
 const dataDir = path.join(process.cwd(), '.data');
-if (!fs.existsSync(dataDir)) {
+if (!isTestEnv && !fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-export const dbPath = path.join(dataDir, 'neurosync.db');
+export const dbPath = isTestEnv ? ':memory:' : path.join(dataDir, 'neurosync.db');
 
 // Instantiate better-sqlite3 database
 export const db: BetterSqlite3Database = new Database(dbPath, { 
@@ -109,6 +119,26 @@ export function initDB() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    -- ScopeLogic DAG proposals awaiting human approval (System B).
+    -- Previously crammed as a single JSON blob into system_settings under the
+    -- fixed key 'pending_proposal' with no confidence, no project scoping, and
+    -- no audit trail. This real table lets a staged proposal be confidence-gated
+    -- (Deference UI, 0.70 threshold) and surfaced in the SAME PortGrid approval
+    -- queue as os_todos. project_id is nullable (proposals staged under a
+    -- "Global"/no-active-project scope are legitimate). No FK on project_id:
+    -- proposal history should survive project deletion for audit, and staging
+    -- must not fail if the id doesn't (yet) resolve to a projects row.
+    CREATE TABLE IF NOT EXISTS dag_proposals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      proposal TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dag_proposals_status ON dag_proposals(status, created_at);
 
     CREATE TABLE IF NOT EXISTS model_benchmarks (
       model_id TEXT PRIMARY KEY,
@@ -224,5 +254,70 @@ export function initDB() {
     if (!e.message.includes('duplicate column name')) {
       console.error('Error adding confidence column to os_todos:', e);
     }
+  }
+
+  try {
+    // Soft-delete for projects: archived_at is NULL for active projects.
+    // There was previously no delete/archive path at all, so orphaned/test
+    // project rows had no way to be cleaned up short of a raw DB edit.
+    db.exec(`ALTER TABLE projects ADD COLUMN archived_at INTEGER;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding archived_at column to projects:', e);
+    }
+  }
+
+  try {
+    // Real "Orchestration Metrics" (CoreExecDashboard) needs a completion
+    // timestamp to compute latency -- previously only created_at existed,
+    // so run duration was uncomputable and the dashboard showed a fabricated
+    // "42ms" string instead.
+    db.exec(`ALTER TABLE workflow_runs ADD COLUMN completed_at INTEGER;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding completed_at column to workflow_runs:', e);
+    }
+  }
+
+  try {
+    // Free Mode Governor paid-provider lock: opt-in per-provider "this costs
+    // real money" flag. DEFAULT 0 (free) for every row — including all existing
+    // rows — is deliberate: nothing is silently reclassified by provider type.
+    // The global lock (system_settings.free_mode_unlocked) only skips a provider
+    // once a user explicitly marks it paid, so a currently-working free proxy
+    // setup can never be blocked by shipping this migration.
+    db.exec(`ALTER TABLE llm_providers ADD COLUMN is_paid_tier INTEGER NOT NULL DEFAULT 0;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding is_paid_tier column to llm_providers:', e);
+    }
+  }
+
+  migratePendingProposalBlob();
+}
+
+/**
+ * One-time migration: an existing staged proposal used to live as a single JSON
+ * blob in system_settings under the key 'pending_proposal'. Move any such blob
+ * into the new dag_proposals table (default confidence 0.5, no project scope,
+ * status 'pending') so it does NOT silently vanish for a user who has one
+ * staged right now, then delete the old key. Idempotent: after the key is
+ * cleared this is a no-op. Only handles the single-key case that exists today.
+ */
+export function migratePendingProposalBlob() {
+  try {
+    const legacy = db
+      .prepare("SELECT value FROM system_settings WHERE key = 'pending_proposal'")
+      .get() as { value: string } | undefined;
+    if (!legacy) return;
+
+    db.transaction(() => {
+      db.prepare(
+        'INSERT INTO dag_proposals (id, project_id, proposal, confidence, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(randomUUID(), null, legacy.value, 0.5, 'pending', Date.now());
+      db.prepare("DELETE FROM system_settings WHERE key = 'pending_proposal'").run();
+    })();
+  } catch (e: any) {
+    console.error('Error migrating legacy pending_proposal blob:', e);
   }
 }

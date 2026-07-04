@@ -1,5 +1,6 @@
 import { ProviderHealthState } from './interceptor.js';
 import { ZenDiscoveryService } from './discovery';
+import { log } from '../observability/logger';
 
 export async function executeWithFallback(
   prompt: string,
@@ -14,7 +15,7 @@ export async function executeWithFallback(
       currentChain = Array.from(new Set([...fallbackChain, ...freeModels.map(m => m.id)]));
     }
   } catch (e) {
-    console.warn('[RouteSwitch] Failed to fetch dynamic free models:', e);
+    log.warn('[RouteSwitch] Failed to fetch dynamic free models:', e);
   }
 
   for (let i = 0; i < currentChain.length; i++) {
@@ -23,12 +24,12 @@ export async function executeWithFallback(
     const state = ProviderHealthState.getState(model);
     
     if (state.isExhausted) {
-      console.log(`[RouteSwitch] Skipping ${model} due to exhaustion.`);
+      log.info(`[RouteSwitch] Skipping ${model} due to exhaustion.`);
       continue; 
     }
     
     try {
-      console.log(`[RouteSwitch] Routing request to ${model}...`);
+      log.info(`[RouteSwitch] Routing request to ${model}...`);
       
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -53,7 +54,7 @@ export async function executeWithFallback(
              fakeHeaders.set('x-ratelimit-remaining-tokens', '0');
           }
           ProviderHealthState.parseRateLimitHeaders(model, fakeHeaders);
-          console.warn(`[RouteSwitch] 429 Too Many Requests on ${model}. Trying fallback.`);
+          log.warn(`[RouteSwitch] 429 Too Many Requests on ${model}. Trying fallback.`);
           continue; 
         }
         throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -63,7 +64,7 @@ export async function executeWithFallback(
       return data;
       
     } catch (error) {
-      console.error(`[RouteSwitch] Error requesting ${model}:`, error);
+      log.error(`[RouteSwitch] Error requesting ${model}:`, error);
     }
   }
 

@@ -1,3 +1,4 @@
+import type { Llama, LlamaChatSession, LlamaGrammar } from 'node-llama-cpp';
 import { LLMProvider } from '../providers';
 import { OKF_CONCEPT_EXTRACTION_GBNF } from '../../okf/generator';
 
@@ -12,11 +13,11 @@ export interface LlamaCppConfig {
 
 /**
  * Local GGUF model provider via node-llama-cpp.
- * 
+ *
  * CRITICAL: When a `schema` or `grammar` is provided, this provider MUST enforce
  * GBNF grammar-constrained decoding at the token level. This is NOT best-effort —
  * it guarantees the model output is syntactically valid JSON/YAML.
- * 
+ *
  * The grammar is passed directly to node-llama-cpp's createGrammar() API which
  * zeros out logit probabilities for any token that would violate the grammar at
  * each generation step.
@@ -24,58 +25,67 @@ export interface LlamaCppConfig {
 export class LlamaCppProvider implements LLMProvider {
   id: string;
 
+  // The model/context/session are expensive to create (loading a multi-GB
+  // GGUF file can take seconds to minutes), so they're loaded once and
+  // reused across generate() calls for the lifetime of this instance.
+  // `_sessionPromise` also de-dupes concurrent first-call races.
+  private _sessionPromise: Promise<LlamaChatSession> | null = null;
+  private _llamaPromise: Promise<Llama> | null = null;
+  private _grammarCache = new Map<string, Promise<LlamaGrammar>>();
+
   constructor(private config: LlamaCppConfig, customId?: string) {
     this.id = customId || 'llama-cpp';
   }
 
   async generate(prompt: string, estimatedTokens: number, schema?: any): Promise<string> {
-    // Determine which grammar to enforce
+    const session = await this._getSession();
+
     const activeGrammar = this._resolveGrammar(schema);
+    const grammarInstance = activeGrammar ? await this._getGrammar(activeGrammar) : undefined;
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // PRODUCTION IMPLEMENTATION (uncomment when node-llama-cpp is installed):
-    //
-    // const { getLlama } = await import('node-llama-cpp');
-    // const llama = await getLlama();
-    // const model = await llama.loadModel({ modelPath: this.config.modelPath });
-    // const context = await model.createContext({
-    //   contextSize: this.config.contextSize || 4096,
-    // });
-    //
-    // const session = new llama.LlamaChatSession({ context });
-    //
-    // // GBNF Grammar Enforcement — THIS IS THE KEY GUARDRAIL
-    // let grammarInstance = undefined;
-    // if (activeGrammar) {
-    //   grammarInstance = await llama.createGrammar({ grammar: activeGrammar });
-    //   console.log(`[LlamaCpp] GBNF grammar enforced (${activeGrammar.length} chars)`);
-    // }
-    //
-    // const response = await session.prompt(prompt, {
-    //   maxTokens: estimatedTokens,
-    //   temperature: this.config.temperature ?? 0.7,
-    //   grammar: grammarInstance, // Forces valid output at token level
-    // });
-    //
-    // return response;
-    // ═══════════════════════════════════════════════════════════════════════
+    const response = await session.prompt(prompt, {
+      maxTokens: Math.max(estimatedTokens, 512),
+      temperature: this.config.temperature ?? 0.7,
+      // Forces syntactically valid output at the token level; omit the key
+      // entirely (rather than passing `undefined`) under exactOptionalPropertyTypes.
+      ...(grammarInstance ? { grammar: grammarInstance } : {}),
+    });
 
-    // Development fallback: simulate grammar-constrained output
-    if (activeGrammar && schema) {
-      // When grammar is active and schema expects a JSON array of concepts,
-      // return a minimal valid structure so downstream parsing succeeds
-      return JSON.stringify([{
-        type: 'capability',
-        title: `Local analysis of: ${prompt.substring(0, 30)}`,
-        description: `Processed locally via ${this.config.modelPath}`,
-        confidence: 0.85,
-        tags: ['local', 'gguf'],
-        relatedConcepts: []
-      }]);
+    return response;
+  }
+
+  private async _getLlama(): Promise<Llama> {
+    if (!this._llamaPromise) {
+      this._llamaPromise = import('node-llama-cpp').then(({ getLlama }) => getLlama());
     }
+    return this._llamaPromise;
+  }
 
-    // Default: non-grammar response
-    return `[LOCAL GGUF] ${this.config.modelPath}${activeGrammar ? ' [GBNF ACTIVE]' : ''}: ${prompt.substring(0, 50)}...`;
+  private async _getSession(): Promise<LlamaChatSession> {
+    if (!this._sessionPromise) {
+      this._sessionPromise = (async () => {
+        const { LlamaChatSession } = await import('node-llama-cpp');
+        const llama = await this._getLlama();
+        const model = await llama.loadModel({
+          modelPath: this.config.modelPath,
+          ...(this.config.gpuLayers !== undefined ? { gpuLayers: this.config.gpuLayers } : {}),
+        });
+        const context = await model.createContext({
+          contextSize: this.config.contextSize || 4096,
+        });
+        return new LlamaChatSession({ contextSequence: context.getSequence() });
+      })();
+    }
+    return this._sessionPromise;
+  }
+
+  private async _getGrammar(gbnf: string): Promise<LlamaGrammar> {
+    let cached = this._grammarCache.get(gbnf);
+    if (!cached) {
+      cached = this._getLlama().then(llama => llama.createGrammar({ grammar: gbnf }));
+      this._grammarCache.set(gbnf, cached);
+    }
+    return cached;
   }
 
   /**

@@ -38,16 +38,32 @@ export function useNavigation() {
   return useContext(NavigationContext);
 }
 
+const ACTIVE_PROJECT_STORAGE_KEY = 'ns-active-project';
+
+function readStoredActiveProject(): { id: string | null; name: string } {
+  try {
+    const raw = localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY);
+    if (!raw) return { id: null, name: 'Global' };
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.id === 'string' && typeof parsed.name === 'string') return parsed;
+  } catch { /* fall through to default */ }
+  return { id: null, name: 'Global' };
+}
+
 export function OSLayout() {
   const [activeView, setActiveView] = useState('coreexec');
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [activeProjectName, setActiveProjectName] = useState('Global');
+  const initialProject = readStoredActiveProject();
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(initialProject.id);
+  const [activeProjectName, setActiveProjectName] = useState(initialProject.name);
   const [leftBarOpen, setLeftBarOpen] = useState(false);
   const [rightBarOpen, setRightBarOpen] = useState(false);
 
   const setActiveProject = (id: string | null, name: string) => {
     setActiveProjectId(id);
     setActiveProjectName(name);
+    try {
+      localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, JSON.stringify({ id, name }));
+    } catch { /* localStorage unavailable — selection just won't persist */ }
   };
 
   const renderView = () => {
