@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 const API = 'http://localhost:3743';
 
 interface Telemetry {
-  temperature: number;
+  temperature: number | null;
   utilization: number;
   cores: number;
   maxWorkersConfig: number;
@@ -69,9 +69,13 @@ export function GovernorUI() {
       <div className="flex justify-between items-center bg-gray-800 p-3 rounded">
         <div>
           <p className="text-sm text-gray-400">CPU Core Temp</p>
-          <p className={`text-xl ${telemetry.temperature > 85 ? 'text-red-500' : 'text-green-400'}`}>
-            {telemetry.temperature.toFixed(1)}°C
-          </p>
+          {telemetry.temperature === null ? (
+            <p className="text-xl text-gray-500">Unavailable</p>
+          ) : (
+            <p className={`text-xl ${telemetry.temperature > 85 ? 'text-red-500' : 'text-green-400'}`}>
+              {telemetry.temperature.toFixed(1)}°C
+            </p>
+          )}
         </div>
         <div>
           <p className="text-sm text-gray-400">System Load</p>

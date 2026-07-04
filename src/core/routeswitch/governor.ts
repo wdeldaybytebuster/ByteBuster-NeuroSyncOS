@@ -12,9 +12,49 @@
  * the per-provider breakdown is meaningful.
  */
 
+import { db } from '../basevault/db';
+
 export interface GovernorState {
   tokensUsed: number;
   maxTokens: number;
+}
+
+/**
+ * Free Mode Governor paid-provider lock.
+ *
+ * The marketing claim ("blocks paid-provider calls unless explicitly
+ * unlocked") is made real by this gate. The lock state lives in
+ * system_settings under key 'free_mode_unlocked' ('true' = unlocked / paid
+ * providers permitted; anything else or absent = LOCKED, the safe default).
+ * It is re-read at most once per FREE_MODE_CACHE_TTL_MS so a toggle from the
+ * UI takes effect within a couple of seconds without a DB read on every route
+ * resolution — the same short-TTL cache pattern used for log_level in
+ * observability/logger.ts.
+ */
+const FREE_MODE_CACHE_TTL_MS = 2000;
+let cachedUnlocked = false;
+let cachedUnlockedAt = 0;
+
+export function isFreeModeUnlocked(): boolean {
+  const now = Date.now();
+  if (now - cachedUnlockedAt > FREE_MODE_CACHE_TTL_MS) {
+    cachedUnlockedAt = now;
+    try {
+      const row = db
+        .prepare("SELECT value FROM system_settings WHERE key = 'free_mode_unlocked'")
+        .get() as { value: string } | undefined;
+      cachedUnlocked = row?.value === 'true';
+    } catch {
+      // DB not initialized yet (very early boot) — default to LOCKED (safe).
+      cachedUnlocked = false;
+    }
+  }
+  return cachedUnlocked;
+}
+
+/** Test-only: force the lock cache to re-read on the next call. */
+export function _resetFreeModeCache(): void {
+  cachedUnlockedAt = 0;
 }
 
 export interface UsageRecord {
@@ -68,6 +108,25 @@ export class FreeModeGovernor {
 
   public getStatus(): GovernorState {
     return { ...this.state };
+  }
+
+  /**
+   * Whether Free Mode is currently unlocked (paid-tier providers permitted).
+   * Reads the short-TTL cache so callers don't hit the DB on every resolution.
+   */
+  public isUnlocked(): boolean {
+    return isFreeModeUnlocked();
+  }
+
+  /**
+   * Free Mode Governor gate: a paid-tier provider is only allowed to serve a
+   * request when the global lock is unlocked. Free providers are always
+   * allowed. Called per-candidate in RouteSwitchEngine's fallback chain so a
+   * locked+paid provider is *skipped* (not a hard failure) exactly like an
+   * exhausted one — a free provider further down the chain can still serve.
+   */
+  public isProviderAllowed(isPaidTier: boolean): boolean {
+    return !isPaidTier || this.isUnlocked();
   }
 
   public forecastDagTokens(nodes: { prompt?: string }[]): number {

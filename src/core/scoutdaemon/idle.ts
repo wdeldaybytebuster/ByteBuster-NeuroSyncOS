@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import * as si from 'systeminformation';
 import { systemConfig } from '../../server/routes/system';
 import { ScoutResearch } from './research';
+import { log } from '../observability/logger';
 
 export class IdleDetector extends EventEmitter {
   private lastHeartbeat: number;
@@ -26,12 +27,12 @@ export class IdleDetector extends EventEmitter {
       try {
         const temp = await si.cpuTemperature();
         if (temp.main > 85) {
-          console.warn('[ScoutDaemon] Thermal spike detected. Yielding foreground via maxWorkers=0.');
+          log.warn('[ScoutDaemon] Thermal spike detected. Yielding foreground via maxWorkers=0.');
           // Save original config if not already yielding
           if (!this.originalMaxWorkers) this.originalMaxWorkers = systemConfig.maxWorkers;
           systemConfig.maxWorkers = 0; // Suspend coreexec engine
         } else if (this.originalMaxWorkers !== undefined && temp.main < 75) {
-          console.log('[ScoutDaemon] Thermals recovered. Restoring worker config.');
+          log.info('[ScoutDaemon] Thermals recovered. Restoring worker config.');
           systemConfig.maxWorkers = this.originalMaxWorkers;
           delete this.originalMaxWorkers;
         }
@@ -68,7 +69,7 @@ export const idleDetector = new IdleDetector(10); // 10 minutes
 
 // When idle, trigger the built-in system maintenance DAG
 idleDetector.on('idle', () => {
-  console.log('[ScoutDaemon] System is idle. Triggering autonomous maintenance...');
+  log.info('[ScoutDaemon] System is idle. Triggering autonomous maintenance...');
   try {
     const runId = crypto.randomUUID();
     
@@ -88,18 +89,18 @@ idleDetector.on('idle', () => {
       insertTask.run(node.id, runId, 'unclaimed');
     }
 
-    executeRun(runId).catch(err => console.error('[ScoutDaemon] Maintenance failed:', err));
+    executeRun(runId).catch(err => log.error('[ScoutDaemon] Maintenance failed:', err));
   } catch (err) {
-    console.error('[ScoutDaemon] Failed to trigger maintenance:', err);
+    log.error('[ScoutDaemon] Failed to trigger maintenance:', err);
   }
 
   // During idle, review pending scout drafts and log their count
   try {
     const pendingDrafts = ScoutResearch.listDrafts();
     if (pendingDrafts.length > 0) {
-      console.log(`[ScoutDaemon] ${pendingDrafts.length} scout draft(s) pending review.`);
+      log.info(`[ScoutDaemon] ${pendingDrafts.length} scout draft(s) pending review.`);
     }
   } catch (err) {
-    console.error('[ScoutDaemon] Failed to check scout drafts:', err);
+    log.error('[ScoutDaemon] Failed to check scout drafts:', err);
   }
 });

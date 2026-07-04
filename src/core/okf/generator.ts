@@ -26,14 +26,7 @@ export interface ExtractedConcept {
 export const OKF_CONCEPT_EXTRACTION_GBNF = `
 root ::= "[" ws concept-list ws "]"
 concept-list ::= concept ("," ws concept)*
-concept ::= "{" ws
-  "\\"type\\"" ws ":" ws string "," ws
-  "\\"title\\"" ws ":" ws string "," ws
-  "\\"description\\"" ws ":" ws string "," ws
-  "\\"confidence\\"" ws ":" ws number "," ws
-  "\\"tags\\"" ws ":" ws string-array "," ws
-  "\\"relatedConcepts\\"" ws ":" ws string-array
-  ws "}"
+concept ::= "{" ws "\\"type\\"" ws ":" ws string "," ws "\\"title\\"" ws ":" ws string "," ws "\\"description\\"" ws ":" ws string "," ws "\\"confidence\\"" ws ":" ws number "," ws "\\"tags\\"" ws ":" ws string-array "," ws "\\"relatedConcepts\\"" ws ":" ws string-array ws "}"
 string-array ::= "[" ws "]" | "[" ws string ("," ws string)* ws "]"
 string ::= "\\"" ([^"\\\\] | "\\\\" .)* "\\""
 number ::= "0." [0-9] [0-9]? | "1" (".0" | ".00")?

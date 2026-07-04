@@ -207,9 +207,9 @@ function SetupView() {
       {/* Control B: System Observability & Logging */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <FileText size={16} style={{ color: ACCENT }} /> System Observability & Logging (Pino)
+          <FileText size={16} style={{ color: ACCENT }} /> System Observability & Logging
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Global verbosity of structured logging. For legacy laptops, set to "warn" to reduce disk I/O during inference.</p>
+        <p className="text-xs text-gray-400 mb-4">Saved as a preference, but not yet enforced anywhere in the backend — server-side logs are not currently filtered by this setting.</p>
 
         <div>
           <label className="text-xs font-bold text-gray-300 block mb-2">Log Level</label>

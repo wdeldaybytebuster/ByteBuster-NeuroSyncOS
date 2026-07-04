@@ -5,6 +5,10 @@ export interface DeferenceTask {
   id: string;
   description: string;
   confidence: number;
+  // Optional source discriminator. The pill bar renders a plain count, but
+  // carrying the kind lets a mixed todo/proposal batch flow through here and be
+  // routed to the correct backend by the parent's onApproveAll/onRejectAll.
+  kind?: 'todo' | 'proposal';
 }
 
 interface DeferenceUIProps {

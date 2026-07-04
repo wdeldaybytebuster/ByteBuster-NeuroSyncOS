@@ -68,7 +68,13 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
 
           let projectId: string | undefined;
           try {
-            const { db } = require('../basevault/db');
+            const { db, initDB } = require('../basevault/db');
+            // Under the test runner, each worker thread gets its own private
+            // ':memory:' database (see basevault/db.ts) that doesn't share
+            // the main thread's schema the way a real file-backed db does in
+            // production — initDB() no-ops outside test mode via its own
+            // isMainThread guard, so this is safe/cheap to call unconditionally.
+            initDB();
             const res = db.prepare(`
               SELECT r.project_id
               FROM tasks t

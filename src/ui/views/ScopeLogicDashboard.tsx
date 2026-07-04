@@ -21,12 +21,13 @@ function DashboardView() {
   const [round, setRound] = useState(1);
   const [isComplete, setIsComplete] = useState(false);
   const [proposal, setProposal] = useState<any>(null);
-  const [confidence, setConfidence] = useState<{score: number; alerts: string[]}>({ score: 98.4, alerts: [] });
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Load interview history on mount
+  // Load interview history on mount. Interview sessions are scoped per project
+  // server-side, so pass the active project (nullable → the shared Global scope).
   useEffect(() => {
-    fetch(`${API}/api/scopelogic/history`)
+    const projectQuery = activeProjectId ? `?projectId=${encodeURIComponent(activeProjectId)}` : '';
+    fetch(`${API}/api/scopelogic/history${projectQuery}`)
       .then(r => r.json())
       .then(data => {
         if (data.history && data.history.length > 0) {
@@ -55,7 +56,7 @@ function DashboardView() {
     try {
       const res = await fetch(`${API}/api/scopelogic/prompt`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg })
+        body: JSON.stringify({ message: msg, projectId: activeProjectId || null })
       });
       const data = await res.json();
       const reply = data.reply || data.response || data.message || 'Acknowledged.';
@@ -66,10 +67,13 @@ function DashboardView() {
         const prop = data.dagProposal || data.proposal;
         if (prop) {
           setProposal(prop);
-          // Persist to backend so it survives navigation
+          // Persist to backend so it survives navigation. Scope it to the
+          // active project (nullable — "Global"/no active project is valid).
           await fetch(`${API}/api/system/proposals/stage`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proposal: prop })
+            // Forward the LLM's self-reported confidence when present; the server
+            // defaults to 0.5 when it's absent (e.g. the template fallback path).
+            body: JSON.stringify({ proposal: prop, projectId: activeProjectId || null, confidence: prop.confidence })
           }).catch(() => {});
           // Auto-navigate to PortGrid for visual review after a brief delay
           setTimeout(() => navigate('portgrid'), 1500);
@@ -82,7 +86,10 @@ function DashboardView() {
 
   // Reset interview
   const handleReset = async () => {
-    await fetch(`${API}/api/scopelogic/reset`, { method: 'POST' }).catch(() => {});
+    await fetch(`${API}/api/scopelogic/reset`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: activeProjectId || null })
+    }).catch(() => {});
     await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
     setMessages([{ role: 'assistant', text: 'Interview reset. What is the primary objective of the workflow DAG we are building?' }]);
     setRound(1);
@@ -180,35 +187,30 @@ function DashboardView() {
         )}
       </section>
 
-      {/* Widget C: Confidence & Triage Ledger */}
+      {/* Widget C: Draft Validation Status */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <AlertTriangle size={16} className="text-amber-400" /> Confidence & Triage Ledger
+          <AlertTriangle size={16} className="text-amber-400" /> Draft Validation Status
         </h2>
 
         <div className="space-y-3">
-          {/* Consensus score */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300 font-semibold">Multi-Model Consensus Rating</span>
-            <span className="text-sm font-mono font-bold" style={{ color: confidence.score > 90 ? '#00FF41' : confidence.score > 70 ? ACCENT : '#ef4444' }}>{confidence.score}%</span>
-          </div>
-          <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden border border-white/5">
-            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${confidence.score}%`, background: `linear-gradient(to right, ${ACCENT}, #00FF41)` }}></div>
-          </div>
-
-          {/* Alerts */}
-          {confidence.alerts.length === 0 ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/5 border border-green-500/20 mt-3">
+          {/* This is a binary safety-validation status, not a multi-model
+              consensus score. DAG proposals are now LLM-driven and DO carry a
+              real model self-reported confidence (surfaced in the review/Deference
+              queue via dag_proposals.confidence), but ValidatorLogic.validate()
+              remains the gate shown here: a proposal only ever reaches this
+              component once it has already passed that check (a failed check
+              returns a chat message instead, never a dagProposal — on either the
+              LLM path or the template fallback), so this status is a real fact,
+              not a fabricated one. */}
+          {proposal ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
               <CheckCircle size={14} className="text-green-400" />
-              <span className="text-[10px] text-green-400 font-bold">No behavioral assertion violations detected.</span>
+              <span className="text-[10px] text-green-400 font-bold">Draft passed safety validation. No behavioral assertion violations detected.</span>
             </div>
           ) : (
-            <div className="space-y-2 mt-3">
-              {confidence.alerts.map((a, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-red-500/5 border border-red-500/20 text-[10px] text-red-300">
-                  <AlertTriangle size={12} className="text-red-400 shrink-0" /> {a}
-                </div>
-              ))}
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-white/[0.03] border border-white/5">
+              <span className="text-[10px] text-gray-500 font-bold">No draft proposal yet — complete the interview above.</span>
             </div>
           )}
         </div>
@@ -225,6 +227,18 @@ function SetupView() {
   const [maxDisagreement, setMaxDisagreement] = useState(0.25);
   const [highStakesThreshold, setHighStakesThreshold] = useState(70);
   const [saving, setSaving] = useState(false);
+  const [promptLastModifiedMs, setPromptLastModifiedMs] = useState<number | null>(null);
+
+  // Real last-modified timestamp of the system prompt file — there is no
+  // version number or CI-gated test count for it (SYSTEM_PROMPT is a plain
+  // string constant in interview.ts), so this is the one honest fact
+  // available in place of the fabricated "v3.2.1" / "PASSING (398 tests)".
+  useEffect(() => {
+    fetch(`${API}/api/scopelogic/prompt-info`)
+      .then(r => r.json())
+      .then(data => { if (typeof data.lastModifiedMs === 'number') setPromptLastModifiedMs(data.lastModifiedMs); })
+      .catch(() => {});
+  }, []);
 
   // Safety assertions (locked vs toggleable)
   const [assertions, setAssertions] = useState({
@@ -288,22 +302,16 @@ function SetupView() {
       {/* Control B: System Prompt Governance */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <FileText size={16} style={{ color: ACCENT }} /> System Prompt Governance & Versioning
+          <FileText size={16} style={{ color: ACCENT }} /> System Prompt
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Changes to base system instructions auto-increment the prompt version. Safety modifications trigger CI regression gates.</p>
+        <p className="text-xs text-gray-400 mb-4">The ScopeLogic interview's system prompt. There is no version-numbering or CI test gate on it yet — this shows when the file itself last changed.</p>
 
-        <div className="bg-black/30 border border-white/5 rounded-lg p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300 font-bold">Current Prompt Version</span>
-            <span className="text-sm font-mono font-bold" style={{ color: ACCENT }}>v3.2.1</span>
-          </div>
+        <div className="bg-black/30 border border-white/5 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-300 font-bold">Last Modified</span>
-            <span className="text-[10px] font-mono text-gray-500">2026-06-24 14:32:00</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300 font-bold">Safety Gate Status</span>
-            <span className="text-[10px] font-mono text-green-400 font-bold">PASSING (398 tests)</span>
+            <span className="text-[10px] font-mono text-gray-500">
+              {promptLastModifiedMs ? new Date(promptLastModifiedMs).toLocaleString() : '—'}
+            </span>
           </div>
         </div>
       </section>

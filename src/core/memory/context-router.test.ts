@@ -1,7 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { classifyIntent, routeQuery } from './context-router';
 import { CerebroVectorStore } from './cerebro/vector';
 import { _getState } from './gitnexus-client';
+import { initDB } from '../basevault/db';
+
+// Each test file now gets its own isolated in-memory database (see
+// src/core/basevault/db.ts) rather than sharing the real dev database, so
+// this file must create its own schema instead of relying on some other
+// file having already called initDB() against a shared file.
+beforeAll(() => {
+  initDB();
+});
 
 // NOTE: under vitest, gitnexus-client.isDisabled() short-circuits (VITEST==='true'),
 // so no `gitnexus eval-server` subprocess is ever spawned during these tests and
