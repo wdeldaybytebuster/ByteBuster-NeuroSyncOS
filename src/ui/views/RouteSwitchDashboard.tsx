@@ -165,7 +165,7 @@ function DashboardView() {
 }
 
 // ─── Set-up View ────────────────────────────────────────────────────────────
-interface ProviderEntry { id: string; name: string; type: string; config: any; hasApiKey: boolean; isEnabled: boolean; createdAt: number; }
+interface ProviderEntry { id: string; name: string; type: string; config: any; hasApiKey: boolean; isEnabled: boolean; isPaidTier?: boolean; createdAt: number; }
 interface RoutingRule { id: string; scope: string; scopeId: string | null; providerChain: string[]; }
 
 function SetupView() {
@@ -179,6 +179,7 @@ function SetupView() {
   const [formModelId, setFormModelId] = useState('Auto');
   const [formModelPath, setFormModelPath] = useState('./local_models/');
   const [formApiKey, setFormApiKey] = useState('');
+  const [formIsPaidTier, setFormIsPaidTier] = useState(false);
   const [formSaving, setFormSaving] = useState(false);
   const [testResult, setTestResult] = useState<{connected:boolean;latencyMs?:number;error?:string;responsePreview?:string}|null>(null);
   const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
@@ -195,6 +196,9 @@ function SetupView() {
   const [dailyCeiling, setDailyCeiling] = useState(2.0);
   const [externalEnabled, setExternalEnabled] = useState(true);
   const [grammarEnabled, setGrammarEnabled] = useState(true);
+  // Free Mode paid-provider lock. Default LOCKED (false) = safe: paid-flagged
+  // providers are skipped in the routing chain until the user explicitly unlocks.
+  const [freeModeUnlocked, setFreeModeUnlocked] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mcpConnections, setMcpConnections] = useState<{id:string;name:string;transport:string;status:string}[]>([]);
   const [projects, setProjects] = useState<{id:string;name:string}[]>([]);
@@ -213,6 +217,7 @@ function SetupView() {
         if (d.settings.daily_cost_ceiling) setDailyCeiling(Number(d.settings.daily_cost_ceiling));
         if (d.settings.external_calls_enabled !== undefined) setExternalEnabled(d.settings.external_calls_enabled === 'true' || d.settings.external_calls_enabled === true);
         if (d.settings.grammar_constrained !== undefined) setGrammarEnabled(d.settings.grammar_constrained === 'true' || d.settings.grammar_constrained === true);
+        if (d.settings.free_mode_unlocked !== undefined) setFreeModeUnlocked(d.settings.free_mode_unlocked === 'true' || d.settings.free_mode_unlocked === true);
       }
     }).catch(() => {});
   }, []);
@@ -231,7 +236,7 @@ function SetupView() {
       : formType === 'llama-cpp' ? { modelPath: formModelPath }
       : (formType === 'opencode' || formType === 'openrouter') ? { modelId: formModelId || undefined }
       : {};
-    const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true };
+    const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true, isPaidTier: formIsPaidTier };
     try {
       if (editingId) {
         await fetch(`${API}/api/llm/providers/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -274,7 +279,7 @@ function SetupView() {
     if (p.type === 'openai-compatible') { setFormBaseUrl(p.config.baseUrl || ''); setFormModelId(p.config.modelId || 'Auto'); }
     if (p.type === 'llama-cpp') { setFormModelPath(p.config.modelPath || ''); }
     if (p.type === 'opencode' || p.type === 'openrouter') { setFormModelId(p.config.modelId || ''); }
-    setFormApiKey(''); setShowAddForm(true); setTestResult(null);
+    setFormApiKey(''); setFormIsPaidTier(p.isPaidTier || false); setShowAddForm(true); setTestResult(null);
   };
 
   // Routing Rules helpers
@@ -321,6 +326,16 @@ function SetupView() {
     setSaving(false);
   };
 
+  // Free Mode paid-provider lock — persisted immediately (its own POST) so the
+  // safety toggle takes effect within the governor's ~2s cache TTL without
+  // waiting for "Commit Configuration". Uses the generic settings GET/POST.
+  const handleToggleFreeModeLock = async (unlocked: boolean) => {
+    setFreeModeUnlocked(unlocked);
+    try {
+      await fetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ free_mode_unlocked: unlocked ? 'true' : 'false' }) });
+    } catch {}
+  };
+
   const providerLabel = (id: string) => providers.find(p => p.id === id)?.name || id;
 
   return (
@@ -331,7 +346,7 @@ function SetupView() {
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <Key size={16} style={{ color: ACCENT }} /> Provider Registry
           </h2>
-          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('opencode'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId(''); setFormModelPath('./local_models/'); setFormApiKey(''); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
+          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('opencode'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId(''); setFormModelPath('./local_models/'); setFormApiKey(''); setFormIsPaidTier(false); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
         </div>
         <p className="text-xs text-gray-400 mb-4">Named LLM endpoint entries. API keys are encrypted at rest. Create multiple entries of the same type for different models or services.</p>
 
@@ -346,7 +361,10 @@ function SetupView() {
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <Server size={14} style={{ color: p.isEnabled ? ACCENT : '#6b7280' }} />
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-white truncate">{p.name}</div>
+                    <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                      {p.name}
+                      {p.isPaidTier && <span className="text-[8px] font-mono font-bold uppercase tracking-wide border border-amber-500/40 text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded shrink-0">Paid</span>}
+                    </div>
                     <div className="text-[10px] text-gray-500 font-mono">{p.type} {p.hasApiKey ? '• key set' : ''} {p.config.baseUrl ? `• ${p.config.baseUrl}` : ''}{p.config.modelPath ? `• ${p.config.modelPath}` : ''}{(p.type === 'opencode' || p.type === 'openrouter') ? `• model: ${p.config.modelId || 'auto'}` : ''}</div>
                   </div>
                 </div>
@@ -418,6 +436,10 @@ function SetupView() {
                 </p>
               </div>
             )}
+            <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
+              <div><span className="text-xs font-bold text-white block">This provider may incur real charges</span><span className="text-[10px] text-gray-500">Flags it as paid — while the Free Mode lock is engaged (below), this provider is skipped in the routing chain</span></div>
+              <input type="checkbox" checked={formIsPaidTier} onChange={e => setFormIsPaidTier(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            </label>
             <div className="flex gap-2 pt-2">
               <button onClick={handleSaveProvider} disabled={formSaving || !formName.trim()} className="px-4 py-2 rounded-lg text-black font-bold text-xs disabled:opacity-50 transition-all" style={{ backgroundColor: ACCENT }}>{formSaving ? 'Saving...' : editingId ? 'Update' : 'Save Provider'}</button>
               <button onClick={() => { setShowAddForm(false); setEditingId(null); }} className="px-4 py-2 rounded-lg border border-white/10 text-xs font-bold text-gray-400 hover:text-white transition-all">Cancel</button>
@@ -501,6 +523,29 @@ function SetupView() {
           <Shield size={16} style={{ color: ACCENT }} /> Free Mode Governor Limits
         </h2>
         <div className="space-y-4">
+          {/* Paid-provider lock — the real enforcement behind the "blocks paid-provider
+              calls unless explicitly unlocked" claim. Default LOCKED (safe). */}
+          <label
+            className="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all border"
+            style={freeModeUnlocked
+              ? { backgroundColor: 'rgba(255,179,0,0.06)', borderColor: 'rgba(255,179,0,0.35)' }
+              : { backgroundColor: 'rgba(34,197,94,0.05)', borderColor: 'rgba(34,197,94,0.25)' }}
+          >
+            <div className="flex-1 min-w-0 pr-3">
+              <span className="text-xs font-bold text-white flex items-center gap-2">
+                Paid Provider Lock
+                <span className={`text-[8px] font-mono font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${freeModeUnlocked ? 'text-amber-400 border-amber-500/40 bg-amber-500/10' : 'text-green-400 border-green-500/40 bg-green-500/10'}`}>
+                  {freeModeUnlocked ? 'Unlocked' : 'Locked'}
+                </span>
+              </span>
+              <span className="text-[10px] text-gray-500 block mt-0.5">
+                {freeModeUnlocked
+                  ? 'Providers flagged "paid" are allowed to serve requests and may incur real charges.'
+                  : 'Safe default. Providers flagged "paid" are skipped in the routing chain — only free providers serve requests.'}
+              </span>
+            </div>
+            <input type="checkbox" checked={freeModeUnlocked} onChange={e => handleToggleFreeModeLock(e.target.checked)} className="w-4 h-4 rounded shrink-0" style={{ accentColor: ACCENT }} />
+          </label>
           <div>
             <div className="flex justify-between text-xs mb-1">
               <span className="text-gray-300 font-bold">Hard Daily Cost Ceiling (Auto-Park)</span>

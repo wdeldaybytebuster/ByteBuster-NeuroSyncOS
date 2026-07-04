@@ -95,7 +95,7 @@ function syncProviderToEngine(row: { id: string; type: string; config_json: stri
 llmRouter.get('/providers', (c) => {
   try {
     const rows = db.prepare(`
-      SELECT id, name, type, config_json, api_key_encrypted, is_enabled, created_at, updated_at
+      SELECT id, name, type, config_json, api_key_encrypted, is_enabled, is_paid_tier, created_at, updated_at
       FROM llm_providers
       ORDER BY created_at ASC
     `).all() as any[];
@@ -107,6 +107,7 @@ llmRouter.get('/providers', (c) => {
       config: JSON.parse(row.config_json || '{}'),
       hasApiKey: !!row.api_key_encrypted,
       isEnabled: row.is_enabled === 1,
+      isPaidTier: row.is_paid_tier === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -121,7 +122,7 @@ llmRouter.get('/providers', (c) => {
 llmRouter.post('/providers', async (c) => {
   try {
     const body = await c.req.json();
-    const { name, type, config, apiKey, isEnabled } = body;
+    const { name, type, config, apiKey, isEnabled, isPaidTier } = body;
 
     if (!name || !type) {
       return c.json({ success: false, error: 'name and type are required' }, 400);
@@ -135,11 +136,13 @@ llmRouter.post('/providers', async (c) => {
     const now = Date.now();
     const configJson = JSON.stringify(config || {});
     const encryptedKey = apiKey ? encrypt(apiKey) : null;
+    // Opt-in only: defaults to free (0) unless the caller explicitly marks it paid.
+    const paidTier = isPaidTier === true ? 1 : 0;
 
     db.prepare(`
-      INSERT INTO llm_providers (id, name, type, config_json, api_key_encrypted, is_enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, type, configJson, encryptedKey, isEnabled !== false ? 1 : 0, now, now);
+      INSERT INTO llm_providers (id, name, type, config_json, api_key_encrypted, is_enabled, is_paid_tier, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, type, configJson, encryptedKey, isEnabled !== false ? 1 : 0, paidTier, now, now);
 
     // Sync to live engine so it's immediately usable without restart
     syncProviderToEngine({ id, type, config_json: configJson, api_key_encrypted: encryptedKey, is_enabled: isEnabled !== false ? 1 : 0 });
@@ -158,7 +161,7 @@ llmRouter.post('/providers', async (c) => {
 
     return c.json({
       success: true,
-      provider: { id, name, type, config: config || {}, hasApiKey: !!apiKey, isEnabled: isEnabled !== false, createdAt: now }
+      provider: { id, name, type, config: config || {}, hasApiKey: !!apiKey, isEnabled: isEnabled !== false, isPaidTier: paidTier === 1, createdAt: now }
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -170,7 +173,7 @@ llmRouter.put('/providers/:id', async (c) => {
   try {
     const { id } = c.req.param();
     const body = await c.req.json();
-    const { name, type, config, apiKey, isEnabled } = body;
+    const { name, type, config, apiKey, isEnabled, isPaidTier } = body;
 
     // Verify exists
     const existing = db.prepare('SELECT id FROM llm_providers WHERE id = ?').get(id);
@@ -191,6 +194,7 @@ llmRouter.put('/providers/:id', async (c) => {
       params.push(apiKey ? encrypt(apiKey) : null);
     }
     if (isEnabled !== undefined) { updates.push('is_enabled = ?'); params.push(isEnabled ? 1 : 0); }
+    if (isPaidTier !== undefined) { updates.push('is_paid_tier = ?'); params.push(isPaidTier ? 1 : 0); }
 
     updates.push('updated_at = ?');
     params.push(now);

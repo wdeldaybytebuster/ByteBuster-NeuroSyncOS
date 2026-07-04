@@ -279,6 +279,20 @@ export function initDB() {
     }
   }
 
+  try {
+    // Free Mode Governor paid-provider lock: opt-in per-provider "this costs
+    // real money" flag. DEFAULT 0 (free) for every row — including all existing
+    // rows — is deliberate: nothing is silently reclassified by provider type.
+    // The global lock (system_settings.free_mode_unlocked) only skips a provider
+    // once a user explicitly marks it paid, so a currently-working free proxy
+    // setup can never be blocked by shipping this migration.
+    db.exec(`ALTER TABLE llm_providers ADD COLUMN is_paid_tier INTEGER NOT NULL DEFAULT 0;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding is_paid_tier column to llm_providers:', e);
+    }
+  }
+
   migratePendingProposalBlob();
 }
 

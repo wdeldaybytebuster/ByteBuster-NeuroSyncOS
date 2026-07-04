@@ -154,6 +154,23 @@ export class RouteSwitchEngine {
   }
 
   /**
+   * Look up whether a registered provider is flagged as paid-tier in the DB.
+   * Providers not present in llm_providers (MockProvider, env-configured
+   * providers) are treated as free (returns false) — nothing is silently
+   * reclassified; the flag is purely opt-in per the provider registry.
+   */
+  private _isProviderPaidTier(providerId: string): boolean {
+    try {
+      const row = db
+        .prepare('SELECT is_paid_tier FROM llm_providers WHERE id = ?')
+        .get(providerId) as { is_paid_tier: number } | undefined;
+      return row?.is_paid_tier === 1;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Execute a single provider call with AgentStop post-evaluation.
    * Returns the response content or throws on error.
    */
@@ -228,12 +245,22 @@ export class RouteSwitchEngine {
     } else {
       // Fallback loop: try each provider in the chain until one succeeds
       let lastError: Error | null = null;
+      let succeeded = false;
 
       for (const provider of effectiveChain) {
         // Skip exhausted providers
         const health = ProviderHealthState.getState(provider.id);
         if (health.isExhausted) {
           log.info(`[RouteSwitch] Skipping exhausted provider: ${provider.id}`);
+          continue;
+        }
+
+        // Free Mode Governor: skip paid-tier providers while the global lock is
+        // engaged, exactly like an exhausted provider — a free provider later
+        // in the chain can still serve the request. This is what makes the
+        // "blocks paid-provider calls unless explicitly unlocked" claim real.
+        if (!this.governor.isProviderAllowed(this._isProviderPaidTier(provider.id))) {
+          log.info(`[RouteSwitch] Skipping paid provider (Free Mode locked): ${provider.id}`);
           continue;
         }
 
@@ -245,6 +272,7 @@ export class RouteSwitchEngine {
           this.governor.recordUsage(request.estimatedTokens, provider.id);
           // Success — break out of fallback loop
           lastError = null;
+          succeeded = true;
           break;
         } catch (err: any) {
           lastError = err;
@@ -259,9 +287,15 @@ export class RouteSwitchEngine {
         }
       }
 
-      // If we got through the loop without setting responseContent, all providers failed
-      if (lastError !== null) {
-        throw new Error(`[RouteSwitch] All providers in chain failed. Last error: ${lastError.message}`);
+      // If no provider succeeded, surface a clear error. This also covers the
+      // case where every candidate was skipped (all exhausted, and/or all
+      // paid-tier while Free Mode is locked) — previously that fell through and
+      // returned an undefined response.
+      if (!succeeded) {
+        if (lastError !== null) {
+          throw new Error(`[RouteSwitch] All providers in chain failed. Last error: ${lastError.message}`);
+        }
+        throw new Error('[RouteSwitch] No eligible provider available: every provider in the chain was exhausted or blocked by the Free Mode Governor (paid providers are locked). Unlock Free Mode or add a free provider to the chain.');
       }
     }
 

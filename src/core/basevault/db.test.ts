@@ -56,6 +56,27 @@ describe('BaseVault SQLite Database', () => {
     expect(archivedAtCol!.notnull).toBe(0);
   });
 
+  it('should give llm_providers an opt-in is_paid_tier column defaulting to 0 (free)', () => {
+    const columns = db.prepare(`PRAGMA table_info(llm_providers)`).all() as { name: string; type: string; notnull: number; dflt_value: string | null }[];
+    const paidCol = columns.find(c => c.name === 'is_paid_tier');
+
+    expect(paidCol).toBeDefined();
+    expect(paidCol!.type.toUpperCase()).toBe('INTEGER');
+    // NOT NULL DEFAULT 0 — every provider (including pre-existing rows) starts
+    // free; nothing is silently reclassified as paid by provider type.
+    expect(paidCol!.notnull).toBe(1);
+    expect(paidCol!.dflt_value).toBe('0');
+  });
+
+  it('defaults is_paid_tier to 0 for an inserted provider that does not set it', () => {
+    const id = 'prov_test_paidtier';
+    db.prepare(`INSERT INTO llm_providers (id, name, type, config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(id, 'Free Proxy', 'openai-compatible', '{}', Date.now(), Date.now());
+    const row = db.prepare('SELECT is_paid_tier FROM llm_providers WHERE id = ?').get(id) as { is_paid_tier: number };
+    expect(row.is_paid_tier).toBe(0);
+    db.prepare('DELETE FROM llm_providers WHERE id = ?').run(id);
+  });
+
   it('should create a dag_proposals table with the expected columns/defaults', () => {
     const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all() as { name: string }[]).map(t => t.name);
     expect(tables).toContain('dag_proposals');

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { FreeModeGovernor, ESTIMATED_COST_PER_1K_TOKENS_USD } from './governor';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { FreeModeGovernor, ESTIMATED_COST_PER_1K_TOKENS_USD, _resetFreeModeCache } from './governor';
+import { db, initDB } from '../basevault/db';
 
 describe('FreeModeGovernor() — §3.2 24h usage tracking + cost derivation', () => {
   beforeEach(() => {
@@ -131,5 +132,51 @@ describe('FreeModeGovernor() — §3.2 24h usage tracking + cost derivation', ()
     ]; // Total = 3300
 
     expect(() => g.assertCanProceedDAG(nodes)).toThrow(/Governor blocked execution: Estimated DAG tokens \(3300\)/);
+  });
+});
+
+describe('FreeModeGovernor.isProviderAllowed() — paid-tier Free Mode lock', () => {
+  beforeAll(() => {
+    initDB();
+  });
+
+  // Set (or clear) the global lock and force the governor's cache to re-read.
+  const setLock = (unlocked: boolean | null) => {
+    if (unlocked === null) {
+      db.prepare("DELETE FROM system_settings WHERE key = 'free_mode_unlocked'").run();
+    } else {
+      db.prepare(
+        "INSERT INTO system_settings (key, value) VALUES ('free_mode_unlocked', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      ).run(unlocked ? 'true' : 'false');
+    }
+    _resetFreeModeCache();
+  };
+
+  afterAll(() => {
+    setLock(null);
+  });
+
+  it('defaults to LOCKED when the setting is absent (safe default)', () => {
+    setLock(null);
+    const g = new FreeModeGovernor();
+    expect(g.isUnlocked()).toBe(false);
+    expect(g.isProviderAllowed(true)).toBe(false); // locked + paid → blocked
+    expect(g.isProviderAllowed(false)).toBe(true); // locked + free → allowed
+  });
+
+  it('locked: paid provider blocked, free provider allowed', () => {
+    setLock(false);
+    const g = new FreeModeGovernor();
+    expect(g.isUnlocked()).toBe(false);
+    expect(g.isProviderAllowed(true)).toBe(false);
+    expect(g.isProviderAllowed(false)).toBe(true);
+  });
+
+  it('unlocked: both paid and free providers allowed', () => {
+    setLock(true);
+    const g = new FreeModeGovernor();
+    expect(g.isUnlocked()).toBe(true);
+    expect(g.isProviderAllowed(true)).toBe(true);
+    expect(g.isProviderAllowed(false)).toBe(true);
   });
 });
