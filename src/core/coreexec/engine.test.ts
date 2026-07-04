@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { db, initDB, dbPath } from '../basevault/db';
-import { executeRun, injectCoreExecGenerateFn } from './engine';
+import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from './engine';
 import { workerPool } from './worker-pool';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -206,5 +206,69 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     const todo = db.prepare('SELECT confidence FROM os_todos WHERE dag_node_id = ?').get(taskId) as any;
     expect(todo).toBeTruthy();
     expect(todo.confidence).toBe(0.0);
+  });
+
+  // ─── Boot-time crash recovery (dashboard reality pass) ───────────────────────
+  // Proves the marketing claim "if it crashes mid-task, it resumes from the last
+  // completed step": after a hard restart, resumeInProgressRuns() must re-drive
+  // exactly the runs left 'running'/'pending' (never 'completed'/'failed') and,
+  // because executeRun is idempotent, complete them WITHOUT re-running work that
+  // was already 'completed'.
+  function seedRunWithStatus(status: string, taskStatuses: string[]): { runId: string; taskIds: string[] } {
+    const projectId = 'proj-resume';
+    db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+      projectId, 'Resume Project', Date.now()
+    );
+    const runId = crypto.randomUUID();
+    const taskIds = taskStatuses.map(() => crypto.randomUUID());
+    const nodes = taskIds.map((id) => ({ id, dependencies: [] as string[] }));
+    db.prepare(`
+      INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(runId, projectId, JSON.stringify({ nodes }), status, Date.now());
+    const insertTask = db.prepare(
+      `INSERT INTO tasks (id, run_id, status, claim_lease, output_data) VALUES (?, ?, ?, ?, ?)`
+    );
+    taskIds.forEach((id, i) => {
+      const ts = taskStatuses[i];
+      const out = ts === 'completed' ? JSON.stringify({ status: 'success', frozen: true }) : null;
+      insertTask.run(id, runId, ts, null, out);
+    });
+    return { runId, taskIds };
+  }
+
+  it('resumeInProgressRuns re-drives only running/pending runs and returns their count', async () => {
+    const running = seedRunWithStatus('running', ['completed']);
+    const pending = seedRunWithStatus('pending', ['completed']);
+    const done = seedRunWithStatus('completed', ['completed']);
+    const failed = seedRunWithStatus('failed', ['failed']);
+
+    const found = resumeInProgressRuns();
+    expect(found).toBe(2); // only the running + pending runs
+
+    // Let the fire-and-forget executeRun calls settle.
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Both stale runs were resumed to completion by the idempotent loop.
+    const runningRow = db.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(running.runId) as any;
+    const pendingRow = db.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(pending.runId) as any;
+    expect(runningRow.status).toBe('completed');
+    expect(pendingRow.status).toBe('completed');
+
+    // Terminal runs were never touched.
+    const doneRow = db.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(done.runId) as any;
+    const failedRow = db.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(failed.runId) as any;
+    expect(doneRow.status).toBe('completed');
+    expect(failedRow.status).toBe('failed');
+
+    // The already-'completed' task's output_data is untouched — NOT re-executed.
+    const frozen = db.prepare('SELECT output_data FROM tasks WHERE id = ?').get(running.taskIds[0]) as any;
+    expect(JSON.parse(frozen.output_data).frozen).toBe(true);
+  });
+
+  it('resumeInProgressRuns returns 0 and drives nothing when there are no stale runs', () => {
+    seedRunWithStatus('completed', ['completed']);
+    seedRunWithStatus('failed', ['failed']);
+    expect(resumeInProgressRuns()).toBe(0);
   });
 });

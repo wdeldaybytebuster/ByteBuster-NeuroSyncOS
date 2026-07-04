@@ -6,6 +6,7 @@ import { systemConfig } from '../../server/routes/system';
 import { SensitiveDataRedactor, DataTier } from '../basevault/redactor';
 import { WorktreeIsolation } from './worktree';
 import { classifyDirective } from './dispatch';
+import { log } from '../observability/logger';
 import type { WorkerOutput } from './worker';
 
 /**
@@ -211,4 +212,44 @@ export async function executeRun(
   db.prepare("UPDATE workflow_runs SET status = 'completed', completed_at = ? WHERE id = ?").run(Date.now(), runId);
   scoutEmitter.emit('update', { type: 'RUN_STATUS', runId, status: 'completed' });
   return true;
+}
+
+/**
+ * Boot-time crash recovery ("resumes from the last completed step").
+ *
+ * Nothing calls executeRun again after a hard crash, so any run left at
+ * status='running' (crashed mid-flight) or status='pending' (crashed between
+ * the workflow_runs INSERT and its first executeRun call ever firing) sits
+ * stuck forever with no automatic recovery. Called once from server boot
+ * (see server/index.ts, next to initDB/initScheduler), this finds those runs
+ * and re-drives each through the SAME idempotent executeRun loop.
+ *
+ * executeRun is already task-state-driven: on re-entry it re-reads live task
+ * state, recognises tasks already 'completed' and never re-runs them, waits
+ * out any still-valid claim lease on a genuinely in-flight task, then continues
+ * dispatching whatever is left. So simply calling it again is a correct resume
+ * — this is pure infrastructure resilience, it starts NO new AI-initiated work.
+ *
+ * Fire-and-forget with a per-run .catch() (mirrors coreexec-router.ts's retry
+ * handler) so one bad run can't take down boot; returns the number of runs
+ * found so the caller can log/observe it. Exported for unit testing.
+ */
+export function resumeInProgressRuns(): number {
+  const staleRuns = db
+    .prepare("SELECT id FROM workflow_runs WHERE status IN ('running', 'pending')")
+    .all() as { id: string }[];
+
+  if (staleRuns.length === 0) {
+    log.info('[CoreExec] Boot resume: no in-progress (running/pending) runs to resume.');
+    return 0;
+  }
+
+  log.info(
+    `[CoreExec] Boot resume: found ${staleRuns.length} in-progress run(s) after restart; resuming from last completed step.`,
+  );
+  for (const { id } of staleRuns) {
+    log.info(`[CoreExec] Boot resume: re-driving run ${id}.`);
+    executeRun(id).catch((err) => log.error(`[CoreExec] Boot resume failed for run ${id}:`, err));
+  }
+  return staleRuns.length;
 }

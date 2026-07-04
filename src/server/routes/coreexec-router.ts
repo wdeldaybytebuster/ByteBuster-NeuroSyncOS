@@ -172,11 +172,20 @@ coreexecRouter.post('/retry/:runId', async (c) => {
       return c.json({ error: layoutError }, 400);
     }
 
+    // Reset failed/parked tasks AND any 'claimed' task whose lease has ALREADY
+    // expired, so an operator who spots a stuck run doesn't have to wait out the
+    // remaining lease for the engine to self-heal. A 'claimed' task whose lease
+    // is still in the future is left untouched on purpose — resetting it would
+    // break the lease's mutual exclusion and allow a second concurrent attempt at
+    // a task some in-flight process may still legitimately be working on.
     db.prepare(
       `UPDATE tasks
        SET status = 'unclaimed', claim_lease = NULL
-       WHERE run_id = ? AND status IN ('failed', 'parked')`,
-    ).run(runId);
+       WHERE run_id = ? AND (
+         status IN ('failed', 'parked')
+         OR (status = 'claimed' AND claim_lease IS NOT NULL AND claim_lease < ?)
+       )`,
+    ).run(runId, Date.now());
     db.prepare("UPDATE workflow_runs SET status = 'pending', completed_at = NULL WHERE id = ?").run(runId);
 
     executeRun(runId).catch((err) => console.error('Run retry failed:', err));

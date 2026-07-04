@@ -4,7 +4,7 @@ import { cors } from 'hono/cors';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
 import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
 import { instantiateProvider } from '../core/routeswitch/provider-factory';
-import { executeRun, injectCoreExecGenerateFn } from '../core/coreexec/engine';
+import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from '../core/coreexec/engine';
 import { db, initDB } from '../core/basevault/db';
 import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
 import { scoutRouter } from '../core/scoutdaemon/sse';
@@ -71,6 +71,13 @@ initDB();
 // Initialize Scheduler
 import { initScheduler } from '../core/coreexec/scheduler';
 initScheduler();
+
+// Crash recovery: re-drive any workflow_runs left 'running'/'pending' by a hard
+// crash through the existing idempotent executeRun loop, so the "resumes from
+// the last completed step" guarantee actually holds after a non-graceful death.
+// Fire-and-forget per run (executeRun logs/parks its own failures); resumeInProgressRuns
+// itself logs how many it found so this is observable rather than silent.
+resumeInProgressRuns();
 
 // Serve Static UI in Production
 const distPath = path.resolve(__dirname, '../../dist/ui');
