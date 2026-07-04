@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Globe, Folder, Plus, X, FolderOpen, Pencil } from 'lucide-react';
+import { Globe, Folder, Plus, X, FolderOpen, Pencil, Archive } from 'lucide-react';
 import { useNavigation } from '../layouts/OSLayout';
 import { PathBrowser } from './PathBrowser';
 
@@ -73,6 +73,19 @@ export function ProjectSwitcher() {
     setEditName(p.name);
     setEditRootPath(p.project_root_path || '');
     setEditError('');
+  };
+
+  const handleArchive = async (p: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Archive "${p.name}"? It will disappear from this list but its data isn't deleted.`)) return;
+    try {
+      const res = await fetch(`${API}/api/projects/${p.id}/archive`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setProjects(prev => prev.filter(proj => proj.id !== p.id));
+        if (activeProjectId === p.id) setActiveProject(null, 'Global');
+      }
+    } catch { /* leave the row in place; user can retry */ }
   };
 
   const handleSaveEdit = async () => {
@@ -151,9 +164,12 @@ export function ProjectSwitcher() {
                 </div>
               ) : (
                 /* Normal project row */
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setActiveProject(p.id, p.name)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveProject(p.id, p.name); } }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer ${
                     activeProjectId === p.id ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                   }`}
                 >
@@ -166,7 +182,10 @@ export function ProjectSwitcher() {
                   <button onClick={(e) => { e.stopPropagation(); handleStartEdit(p); }} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all shrink-0" aria-label="Edit project">
                     <Pencil size={11} />
                   </button>
-                </button>
+                  <button onClick={(e) => handleArchive(p, e)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-gray-500 hover:text-red-400 transition-all shrink-0" aria-label="Archive project" title="Archive project">
+                    <Archive size={11} />
+                  </button>
+                </div>
               )}
             </div>
           ))

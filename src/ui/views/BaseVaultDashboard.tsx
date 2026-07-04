@@ -53,10 +53,13 @@ function DashboardView() {
     }).catch(() => {});
   }, [activeProjectId]);
 
-  // Fetch runs (project-scoped)
+  // Fetch runs (project-scoped -- the comment already claimed this, but the
+  // fetch never actually sent projectId, so it silently showed every
+  // project's runs regardless of which one was active)
   useEffect(() => {
     setLoadingRuns(true);
-    fetch(`${API}/api/basevault/runs`)
+    const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
+    fetch(`${API}/api/basevault/runs${qs}`)
       .then(r => r.json())
       .then(data => { if (data.runs) setRuns(data.runs); })
       .catch(() => {})

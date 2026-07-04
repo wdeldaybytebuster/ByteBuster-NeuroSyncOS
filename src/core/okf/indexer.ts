@@ -67,6 +67,13 @@ export class OKFIndexer {
     `);
 
     const getExistingHash = db.prepare(`SELECT content_hash FROM okf_nodes WHERE id = ?`);
+    const nodeExists = db.prepare(`SELECT 1 FROM okf_nodes WHERE id = ?`);
+
+    // Two passes: first upsert every eligible node, then upsert edges. A
+    // single-pass approach would drop or fail on forward references (node A's
+    // relatedConcepts links to node B, but B is processed later in file
+    // order) since okf_edges.target_node_id has a FOREIGN KEY on okf_nodes(id).
+    const indexedFiles: { filePath: string; nodeId: string; parsed: ParsedOKFFile }[] = [];
 
     db.transaction(() => {
       for (const filePath of files) {
@@ -115,12 +122,21 @@ export class OKFIndexer {
           now
         );
         result.indexed++;
+        indexedFiles.push({ filePath, nodeId, parsed });
+      }
 
-        // Upsert edges from parsed links
+      // Second pass: upsert edges now that all nodes from this batch exist.
+      // Skip dangling links (e.g. a relatedConcepts title that doesn't
+      // correspond to an actual node, or one gated out by the confidence
+      // threshold above) — inserting one would violate the FOREIGN KEY on
+      // target_node_id and roll back the whole indexing transaction.
+      for (const { nodeId, parsed } of indexedFiles) {
         for (const link of parsed.links) {
           const targetRelative = path.relative(dir, link.resolvedPath);
           const targetNodeId = targetRelative.replace(/\.md$/, '').replace(/\\/g, '/');
-          upsertEdge.run(nodeId, targetNodeId, 'references');
+          if (targetNodeId === nodeId || nodeExists.get(targetNodeId)) {
+            upsertEdge.run(nodeId, targetNodeId, 'references');
+          }
         }
       }
     })();

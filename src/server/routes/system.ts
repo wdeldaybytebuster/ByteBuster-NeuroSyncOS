@@ -4,10 +4,12 @@ import * as si from 'systeminformation';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { db, dbPath } from '../../core/basevault/db';
 import { encrypt, decrypt } from '../../core/basevault/crypto';
 import { workerPool } from '../../core/coreexec/worker-pool';
 import { SensitiveDataRedactor } from '../../core/basevault/redactor';
+import { log } from '../../core/observability/logger';
 
 export const systemRouter = new Hono();
 
@@ -42,9 +44,13 @@ systemRouter.get('/metrics', async (c) => {
 
         const utilization = 100 - Math.round((idle / total) * 100);
 
+        // systeminformation returns -1 (or null) when no thermal sensor is readable;
+        // treat that as "unavailable", not a real 0°C reading.
+        const temperature = typeof temp.main === 'number' && temp.main >= 0 ? temp.main : null;
+
         await stream.writeSSE({
           data: JSON.stringify({
-            temperature: temp.main || 0,
+            temperature,
             utilization,
             cores: cpus.length,
             maxWorkersConfig: systemConfig.maxWorkers,
@@ -61,7 +67,7 @@ systemRouter.get('/metrics', async (c) => {
         });
 
       } catch (err) {
-        console.error('Metrics stream error:', err);
+        log.error('Metrics stream error:', err);
       }
       
       // Wait 3 seconds
@@ -147,7 +153,7 @@ systemRouter.get('/backup', async (c) => {
         event: 'backup-complete'
       });
     } catch (err: any) {
-      console.error('Backup failed', err);
+      log.error('Backup failed', err);
       await stream.writeSSE({ data: err.message, event: 'error' });
     }
   });
@@ -165,22 +171,22 @@ systemRouter.post('/restore', async (c) => {
       fs.writeFileSync(tempPath, Buffer.from(arrayBuffer));
 
       // 2. Drain workers & close DB
-      console.warn('[System] Initiating System Restore. Draining workers...');
+      log.warn('[System] Initiating System Restore. Draining workers...');
       workerPool.destroy(); // Wait for workers to finish current jobs then kill
       db.close();
 
       // 3. Overwrite Vault DB
-      console.warn('[System] Overwriting BaseVault SQLite database...');
+      log.warn('[System] Overwriting BaseVault SQLite database...');
       fs.copyFileSync(tempPath, dbPath);
       fs.unlinkSync(tempPath);
 
       // 4. Force process restart (assuming pm2, nodemon, or systemd is watching)
-      console.warn('[System] Restore complete. Triggering process exit for process manager to reboot...');
+      log.warn('[System] Restore complete. Triggering process exit for process manager to reboot...');
       setTimeout(() => process.exit(0), 1000);
 
       return c.json({ success: true, message: 'System restored. Rebooting OS...' });
     } catch (err: any) {
-      console.error('Restore failed', err);
+      log.error('Restore failed', err);
       return c.json({ success: false, error: err.message }, 500);
     }
   }
@@ -312,17 +318,57 @@ systemRouter.get('/agents/permissions', (c) => {
   }
 });
 
-// ─── Proposal Staging ────────────────────────────────────────────────────────
-// Persists a ScopeLogic-generated DAG proposal so it survives frontend navigation.
-// Only one pending proposal exists at a time (keyed as 'pending_proposal' in system_settings).
+// ─── Proposal Staging (System B, now table-backed) ───────────────────────────
+// Persists a ScopeLogic-generated DAG proposal so it survives frontend
+// navigation. Migrated off the old single-JSON-blob-in-system_settings hack
+// onto the real `dag_proposals` table.
+//
+// Design call — SINGLE active pending proposal at a time (unchanged UX):
+// ScopeLogic's server-side interview sessions are now scoped per project (see
+// scopelogic-router.ts), but the review queue still surfaces one proposal at a
+// time across the app — the UI only ever surfaces one proposal for review, and multi-proposal review adds
+// UX/scope this task doesn't need. So `stage` rejects any currently-pending
+// proposal before inserting the new one, and `GET /pending` returns the newest
+// still-pending row. The table itself keeps full history (approved/rejected
+// rows are retained) so nothing is lost and multi-proposal is a future
+// non-breaking extension.
+
+// ScopeLogic's LLM-driven `_generateProposal()` now self-reports a real
+// model-confidence per proposal (interview.ts DAG_PROPOSAL_SCHEMA), so the
+// caller MAY supply a `confidence` in [0,1]. When it does, we store that real
+// value; when it's absent or out of range — notably the template fallback
+// path, which has no genuine confidence signal — we fall back to a conservative
+// 0.5. A 0.5 always routes into the manual "Attention Required" review path
+// (< 0.70 Deference threshold), never the auto-approve pill bar, which is the
+// correct conservative outcome when no real confidence exists. This mirrors the
+// exact validation pattern in todos.ts's /promote endpoint.
+const DEFAULT_PROPOSAL_CONFIDENCE = 0.5;
 
 systemRouter.post('/proposals/stage', async (c) => {
   try {
     const body = await c.req.json();
-    const { proposal } = body;
+    const { proposal, confidence } = body;
+    // Accept either `projectId` or `project_id`; nullable ("Global" scope is ok).
+    const projectId = body.projectId ?? body.project_id ?? null;
     if (!proposal) return c.json({ success: false, error: 'proposal is required' }, 400);
-    db.prepare("INSERT INTO system_settings (key, value) VALUES ('pending_proposal', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(proposal));
-    return c.json({ success: true, message: 'Proposal staged for review.' });
+
+    // Real model-confidence if the caller supplied a valid one; else conservative default.
+    const confidenceValue =
+      typeof confidence === 'number' && confidence >= 0 && confidence <= 1
+        ? confidence
+        : DEFAULT_PROPOSAL_CONFIDENCE;
+
+    const id = randomUUID();
+    db.transaction(() => {
+      // Single-active-proposal: supersede any still-pending proposal so the
+      // review queue never shows two competing drafts.
+      db.prepare("UPDATE dag_proposals SET status = 'superseded' WHERE status = 'pending'").run();
+      db.prepare(
+        'INSERT INTO dag_proposals (id, project_id, proposal, confidence, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, projectId, JSON.stringify(proposal), confidenceValue, 'pending', Date.now());
+    })();
+
+    return c.json({ success: true, id, message: 'Proposal staged for review.' });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
@@ -330,18 +376,59 @@ systemRouter.post('/proposals/stage', async (c) => {
 
 systemRouter.get('/proposals/pending', (c) => {
   try {
-    const row = db.prepare("SELECT value FROM system_settings WHERE key = 'pending_proposal'").get() as { value: string } | undefined;
+    const row = db
+      .prepare("SELECT id, project_id, proposal, confidence FROM dag_proposals WHERE status = 'pending' ORDER BY created_at DESC LIMIT 1")
+      .get() as { id: string; project_id: string | null; proposal: string; confidence: number } | undefined;
     if (!row) return c.json({ success: true, proposal: null });
-    return c.json({ success: true, proposal: JSON.parse(row.value) });
+    // Keep the `proposal` field shape backward-compatible with existing
+    // consumers (ScopeLogic history check, PortGrid canvas) that read
+    // `d.proposal.nodes`; expose id/confidence/project_id for the merged queue.
+    return c.json({
+      success: true,
+      id: row.id,
+      projectId: row.project_id,
+      confidence: row.confidence,
+      proposal: JSON.parse(row.proposal),
+    });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
 
+// Clears the current pending proposal (marks it rejected). Backward-compatible
+// with the old DELETE contract used by ScopeLogic's reset and PortGrid's reject.
 systemRouter.delete('/proposals/pending', (c) => {
   try {
-    db.prepare("DELETE FROM system_settings WHERE key = 'pending_proposal'").run();
+    db.prepare("UPDATE dag_proposals SET status = 'rejected' WHERE status = 'pending'").run();
     return c.json({ success: true, message: 'Proposal cleared.' });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Mark a specific proposal approved (by id). The actual DAG launch still goes
+// through the human-gated /api/coreexec/approve endpoint; this only records
+// that the draft was accepted, keeping the AI-actions-stay-draft-only invariant.
+systemRouter.post('/proposals/resolve', async (c) => {
+  try {
+    const { id } = await c.req.json();
+    if (!id) return c.json({ success: false, error: 'id is required' }, 400);
+    const info = db.prepare("UPDATE dag_proposals SET status = 'approved' WHERE id = ? AND status = 'pending'").run(id);
+    if (info.changes === 0) return c.json({ success: false, error: 'Pending proposal not found' }, 404);
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Mark a specific proposal rejected (by id).
+systemRouter.post('/proposals/reject', async (c) => {
+  try {
+    const { id } = await c.req.json();
+    if (!id) return c.json({ success: false, error: 'id is required' }, 400);
+    const info = db.prepare("UPDATE dag_proposals SET status = 'rejected' WHERE id = ? AND status = 'pending'").run(id);
+    if (info.changes === 0) return c.json({ success: false, error: 'Pending proposal not found' }, 404);
+    return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }

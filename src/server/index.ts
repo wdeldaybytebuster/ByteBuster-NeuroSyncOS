@@ -1,13 +1,10 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { ScopeLogicSession } from '../core/scopelogic/interview';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
 import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
-import { LlamaCppProvider } from '../core/routeswitch/adapters/llama-cpp';
-import { OpenAICompatibleProvider } from '../core/routeswitch/adapters/openai-compatible';
-import { MockProvider } from '../core/routeswitch/providers';
-import { executeRun } from '../core/coreexec/engine';
+import { instantiateProvider } from '../core/routeswitch/provider-factory';
+import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from '../core/coreexec/engine';
 import { db, initDB } from '../core/basevault/db';
 import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
 import { scoutRouter } from '../core/scoutdaemon/sse';
@@ -17,6 +14,7 @@ import path from 'path';
 import fs from 'fs';
 
 import { readiness } from '../core/basevault/readiness';
+import { log } from '../core/observability/logger';
 
 const app = new Hono();
 
@@ -73,6 +71,13 @@ initDB();
 // Initialize Scheduler
 import { initScheduler } from '../core/coreexec/scheduler';
 initScheduler();
+
+// Crash recovery: re-drive any workflow_runs left 'running'/'pending' by a hard
+// crash through the existing idempotent executeRun loop, so the "resumes from
+// the last completed step" guarantee actually holds after a non-graceful death.
+// Fire-and-forget per run (executeRun logs/parks its own failures); resumeInProgressRuns
+// itself logs how many it found so this is observable rather than silent.
+resumeInProgressRuns();
 
 // Serve Static UI in Production
 const distPath = path.resolve(__dirname, '../../dist/ui');
@@ -222,14 +227,7 @@ function bootProviderRegistry() {
     for (const row of rows) {
       const config = JSON.parse(row.config_json || '{}');
       const apiKey = row.api_key_encrypted ? decrypt(row.api_key_encrypted) : '';
-      let provider;
-      if (row.type === 'openai-compatible') {
-        provider = new OpenAICompatibleProvider({ baseUrl: config.baseUrl, modelId: config.modelId || 'Auto', apiKey }, row.id);
-      } else if (row.type === 'llama-cpp') {
-        provider = new LlamaCppProvider({ modelPath: config.modelPath, contextSize: config.contextSize, gpuLayers: config.gpuLayers }, row.id);
-      } else {
-        provider = new MockProvider();
-      }
+      const provider = instantiateProvider(row.type, config, apiKey, row.id);
       routeSwitch.registerProvider(provider);
     }
 
@@ -246,17 +244,10 @@ function bootProviderRegistry() {
           if (pRow) {
             const pConfig = JSON.parse(pRow.config_json || '{}');
             const pKey = pRow.api_key_encrypted ? decrypt(pRow.api_key_encrypted) : '';
-            let primary;
-            if (pRow.type === 'openai-compatible') {
-              primary = new OpenAICompatibleProvider({ baseUrl: pConfig.baseUrl, modelId: pConfig.modelId || 'Auto', apiKey: pKey }, pRow.id);
-            } else if (pRow.type === 'llama-cpp') {
-              primary = new LlamaCppProvider({ modelPath: pConfig.modelPath, contextSize: pConfig.contextSize, gpuLayers: pConfig.gpuLayers }, pRow.id);
-            } else {
-              primary = new MockProvider();
-            }
+            const primary = instantiateProvider(pRow.type, pConfig, pKey, pRow.id);
             routeSwitch.setProvider(primary);
           }
-          console.log(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
+          log.info(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
           return;
         }
       }
@@ -267,20 +258,13 @@ function bootProviderRegistry() {
       const firstRow = rows[0];
       const firstConfig = JSON.parse(firstRow.config_json || '{}');
       const firstKey = firstRow.api_key_encrypted ? decrypt(firstRow.api_key_encrypted) : '';
-      let firstProvider;
-      if (firstRow.type === 'openai-compatible') {
-        firstProvider = new OpenAICompatibleProvider({ baseUrl: firstConfig.baseUrl, modelId: firstConfig.modelId || 'Auto', apiKey: firstKey }, firstRow.id);
-      } else if (firstRow.type === 'llama-cpp') {
-        firstProvider = new LlamaCppProvider({ modelPath: firstConfig.modelPath, contextSize: firstConfig.contextSize, gpuLayers: firstConfig.gpuLayers }, firstRow.id);
-      } else {
-        firstProvider = new MockProvider();
-      }
+      const firstProvider = instantiateProvider(firstRow.type, firstConfig, firstKey, firstRow.id);
       routeSwitch.setProvider(firstProvider);
-      console.log(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
+      log.info(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
       return;
     }
   } catch (err) {
-    console.warn('[NeuroSync] Boot: Failed to load providers from DB, falling back to env/mock:', err);
+    log.warn('[NeuroSync] Boot: Failed to load providers from DB, falling back to env/mock:', err);
   }
 
   // Legacy fallback: env vars or mock
@@ -288,10 +272,10 @@ function bootProviderRegistry() {
   const envApiKey = process.env.NEUROSYNC_LLM_API_KEY;
   const envModel = process.env.NEUROSYNC_LLM_MODEL || 'auto';
   if (envBaseUrl) {
-    console.log(`[NeuroSync] Boot: Auto-configuring from env: ${envBaseUrl}`);
-    routeSwitch.setProvider(new OpenAICompatibleProvider({ baseUrl: envBaseUrl, apiKey: envApiKey || '', modelId: envModel }));
+    log.info(`[NeuroSync] Boot: Auto-configuring from env: ${envBaseUrl}`);
+    routeSwitch.setProvider(instantiateProvider('openai-compatible', { baseUrl: envBaseUrl, modelId: envModel }, envApiKey));
   } else {
-    routeSwitch.setProvider(new MockProvider());
+    routeSwitch.setProvider(instantiateProvider('mock', {}, undefined));
   }
 }
 
@@ -302,7 +286,9 @@ injectChatEngine(routeSwitch);
 
 // Inject LLM generate function into OKF routes for document/chat generation
 const _okfGenerateFn = async (prompt: string, schema?: any) => {
-  const result = await routeSwitch.execute({ prompt, estimatedTokens: 500, scope: 'cerebro', responseSchema: schema });
+  // Reasoning models spend most of their budget on chain-of-thought before emitting
+  // the final JSON, so this needs much more headroom than a plain completion call.
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 8000, scope: 'cerebro', responseSchema: schema });
   return result.content;
 };
 injectOKFGenerateFn(_okfGenerateFn);
@@ -317,41 +303,39 @@ const _cerebroGenerateFn = async (prompt: string) => {
 };
 injectLLMGenerator(_cerebroGenerateFn);
 
-// Pass RouteSwitch generateFn into ScopeLogic so interview uses real LLM when available
-const generateFn = async (prompt: string) => {
-  const result = await routeSwitch.execute({ prompt, estimatedTokens: 200, scope: 'agent', scopeId: 'scopelogic-interview' });
+// Pass RouteSwitch generateFn into ScopeLogic so the interview (and the LLM-
+// driven DAG proposal generation) uses the real LLM when available. The optional
+// `schema` param forwards a JSON-schema hint as responseSchema for structured
+// output on schema-capable providers (see interview.ts DAG_PROPOSAL_SCHEMA).
+// estimatedTokens is 2000 (not 200) so the completed-interview DAG-generation
+// call has output headroom; it maps to the provider's max_tokens.
+const generateFn = async (prompt: string, schema?: any) => {
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 2000, scope: 'agent', scopeId: 'scopelogic-interview', responseSchema: schema });
   return result.content;
 };
-let session = new ScopeLogicSession(generateFn);
+
+import { scopelogicRouter, injectScopeLogicGenerateFn } from './routes/scopelogic-router';
+injectScopeLogicGenerateFn(generateFn);
+app.route('/api/scopelogic', scopelogicRouter);
+
+// Wire the live RouteSwitch into CoreExec so a `'generic'`-classified DAG task
+// (a natural-language work item like "summarize the findings" that maps to no
+// shell command or URL) gets a REAL LLM completion on the main thread instead of
+// the worker pool's old canned "metadata echo" no-op. Own `scopeId`
+// ('coreexec-generic-task') so operators can route generic task execution
+// independently of the ScopeLogic interview or Cerebro chat; it falls back to the
+// plain `agent`-scope rule (then global) when no specific rule is registered.
+// estimatedTokens 1000: a generic task response is real work output (analysis /
+// summary / draft) — larger than Cerebro's 150-token chat reply, smaller than
+// ScopeLogic's 2000-token DAG-schema generation. Text-generation only; the result
+// is stored for a human to read, never executed.
+const _coreExecGenerateFn = async (prompt: string) => {
+  const result = await routeSwitch.execute({ prompt, estimatedTokens: 1000, scope: 'agent', scopeId: 'coreexec-generic-task' });
+  return result.content;
+};
+injectCoreExecGenerateFn(_coreExecGenerateFn);
 
 app.get('/', (c) => c.json({ status: 'ok', service: 'NeuroSync Local API Gateway', version: '0.3.0' }));
-
-// ─── ScopeLogic Routes ───────────────────────────────────────────────────────
-
-app.get('/api/scopelogic/history', (c) => {
-  return c.json({
-    round: session.round,
-    isComplete: session.isComplete,
-    history: session.getHistory()
-  });
-});
-
-app.post('/api/scopelogic/prompt', async (c) => {
-  try {
-    const { message } = await c.req.json();
-    if (!message) return c.json({ error: 'Message is required' }, 400);
-
-    const result = await session.processUserInputAsync(message);
-    return c.json(result);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
-  }
-});
-
-app.post('/api/scopelogic/reset', (c) => {
-  session = new ScopeLogicSession(generateFn);
-  return c.json({ success: true, message: 'Session reset. Ready for a new interview.' });
-});
 
 // ─── RouteSwitch Engine Routes ───────────────────────────────────────────────
 
@@ -368,15 +352,10 @@ app.post('/api/routeswitch/test', async (c) => {
 app.post('/api/routeswitch/provider', async (c) => {
   try {
     const { type, config } = await c.req.json();
-    
-    if (type === 'llama-cpp') {
-      routeSwitch.setProvider(new LlamaCppProvider(config));
-    } else if (type === 'openai-compatible') {
-      routeSwitch.setProvider(new OpenAICompatibleProvider(config));
-    } else {
-      routeSwitch.setProvider(new MockProvider());
-    }
-    
+
+    routeSwitch.setProvider(instantiateProvider(type, config || {}, config?.apiKey));
+
+
     return c.json({ success: true, message: `Switched provider to ${type}` });
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
@@ -389,14 +368,30 @@ app.post('/api/routeswitch/provider', async (c) => {
 // shared partitionBySchema helper. RunHistory.tsx consumes this list directly
 // via setRuns(data.runs), so dirty rows (status typos, schema-dirty
 // workflow_runs) would silently fall through without this gate.
+//
+// ?projectId= is optional: CoreExecDashboard.tsx, BaseVaultDashboard.tsx, and
+// PortGridDashboard.tsx all re-fetch on activeProjectId change but, until this
+// fix, never actually sent it -- a brand-new project showed another project's
+// run history in its "Active Workflow Runs" widget (confirmed live). Omitting
+// the param preserves the original all-projects behavior for RunHistory.tsx,
+// which has no notion of an active project and legitimately wants everything.
 app.get('/api/basevault/runs', (c) => {
   try {
-    const raw = db.prepare(`
-      SELECT id, project_id, dag_layout, status, created_at
-      FROM workflow_runs
-      ORDER BY created_at DESC
-      LIMIT 50
-    `).all() as Record<string, unknown>[];
+    const projectId = c.req.query('projectId');
+    const raw = projectId
+      ? (db.prepare(`
+          SELECT id, project_id, dag_layout, status, created_at
+          FROM workflow_runs
+          WHERE project_id = ?
+          ORDER BY created_at DESC
+          LIMIT 50
+        `).all(projectId) as Record<string, unknown>[])
+      : (db.prepare(`
+          SELECT id, project_id, dag_layout, status, created_at
+          FROM workflow_runs
+          ORDER BY created_at DESC
+          LIMIT 50
+        `).all() as Record<string, unknown>[]);
 
     const { clean: runs, dirtyIds: dirtyRunIds } = partitionBySchema(raw, WorkflowRunSchema, '/api/basevault/runs');
     return c.json({ runs, dirtyRunIds });
@@ -423,7 +418,7 @@ app.get('/api/basevault/run/:runId', (c) => {
 
     const runParse = WorkflowRunSchema.safeParse(rawRun);
     if (!runParse.success) {
-      console.error(`[§3.3] /api/basevault/run/${runId} run row failed schema parse:`, runParse.error.format());
+      log.error(`[§3.3] /api/basevault/run/${runId} run row failed schema parse:`, runParse.error.format());
       return c.json({
         error: 'workflow_runs row is schema-dirty; refusing to rehydrate.',
         runId,
@@ -463,13 +458,13 @@ app.get('/api/basevault/run/:runId', (c) => {
 // ─── Server Start ─────────────────────────────────────────────────────────────
 
 const port = 3743;
-console.log(`[NeuroSync] API Gateway running on http://localhost:${port}`);
+log.info(`[NeuroSync] API Gateway running on http://localhost:${port}`);
 
 import { ModelDiscovery } from '../core/routeswitch/discovery';
 ModelDiscovery.fetchModels().then(() => {
-  console.log('[NeuroSync] Model Discovery complete. Available models cached.');
+  log.info('[NeuroSync] Model Discovery complete. Available models cached.');
 }).catch(err => {
-  console.error('[NeuroSync] Model Discovery failed:', err);
+  log.error('[NeuroSync] Model Discovery failed:', err);
 });
 
 const server = serve({

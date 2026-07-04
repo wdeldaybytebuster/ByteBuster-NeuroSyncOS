@@ -11,6 +11,13 @@ export interface DAGProposal {
   id: string;
   status: 'draft';
   nodes: { id: string; dependencies: string[]; prompt: string }[];
+  /**
+   * Model self-reported confidence (0.0-1.0) that the DAG captures the user's
+   * intent. Present ONLY on the LLM-driven generation path; left undefined on
+   * the template fallback so downstream (system.ts /proposals/stage) applies its
+   * conservative DEFAULT_PROPOSAL_CONFIDENCE instead of a fabricated number.
+   */
+  confidence?: number;
 }
 
 export interface InterviewResponse {
@@ -18,14 +25,54 @@ export interface InterviewResponse {
   dagProposal?: DAGProposal;
 }
 
-// Optional LLM generator function injected at construction time
-export type GenerateFn = (prompt: string) => Promise<string>;
+// Optional LLM generator function injected at construction time. The optional
+// `schema` param mirrors OKF's generator signature (core/okf/generator.ts): a
+// JSON-schema hint that triggers grammar-constrained / response_format decoding
+// on schema-capable providers.
+export type GenerateFn = (prompt: string, schema?: any) => Promise<string>;
 
 const SYSTEM_PROMPT = `You are ScopeLogic, an expert workflow architect.
 Your job is to conduct a concise requirements-gathering interview to understand what automated workflow the user wants to build.
 Ask ONE focused clarifying question at a time. Be direct and brief.
 Once you have enough information (after 3-8 exchanges), output EXACTLY this JSON on its own line: {"done":true}
 Do not include any other JSON. Do not explain the JSON.`;
+
+/**
+ * JSON-schema hint for LLM-driven DAG proposal generation. Modeled on OKF's
+ * concept-extraction schema (core/okf/generator.ts): passed as the second arg
+ * to `generateFn`, it drives structured output on schema-capable providers
+ * (OpenAI `response_format`, llama.cpp GBNF). The model must self-report a
+ * `confidence` field, exactly as OKF requires per extracted concept.
+ *
+ * Design note — plain JSON-schema hint, NOT a hand-written GBNF grammar: OKF
+ * keeps a GBNF grammar (OKF_CONCEPT_EXTRACTION_GBNF) for its flat concept array,
+ * but the value it actually feeds `generateFn` is this JSON-schema object, and
+ * the responseSchema plumbing already routes it to schema-capable providers. A
+ * DAG is a variable-length node list with nested dependency arrays and free-text
+ * prompts; a correct GBNF for that is materially more complex and error-prone
+ * than the flat-array grammar, for no additional guarantee on providers that
+ * only honor JSON-schema. So we reuse the proven JSON-schema path and keep the
+ * ValidatorLogic gate + template fallback as the real safety net.
+ */
+const DAG_PROPOSAL_SCHEMA = {
+  type: 'object',
+  properties: {
+    nodes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          dependencies: { type: 'array', items: { type: 'string' } },
+          prompt: { type: 'string' },
+        },
+        required: ['id', 'dependencies', 'prompt'],
+      },
+    },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+  },
+  required: ['nodes', 'confidence'],
+};
 
 export class ScopeLogicSession {
   public round: number = 0;
@@ -109,7 +156,9 @@ export class ScopeLogicSession {
       || input.toLowerCase().includes("that's it");
 
     if (forceComplete) {
-      return this._generateProposal();
+      // Legacy sync path can't await the LLM, so it uses the deterministic
+      // template generator directly — same behavior this method always had.
+      return this._generateTemplateProposal();
     }
 
     const staticQuestions = [
@@ -126,7 +175,124 @@ export class ScopeLogicSession {
     return { response: question };
   }
 
-  private _generateProposal(): InterviewResponse {
+  /**
+   * LLM-driven DAG proposal generation with graceful degradation.
+   *
+   * Primary path: prompt the model with the full interview transcript and a
+   * DAG_PROPOSAL_SCHEMA hint (mirroring OKF's generator), parse the JSON, run
+   * the SAME ValidatorLogic.validate() safety gate the template path uses, and
+   * carry the model's self-reported confidence through.
+   *
+   * Fallback path (any of: no generateFn / LLM throws / unparseable JSON /
+   * ValidatorLogic rejects the LLM proposal): delegate to the deterministic
+   * template generator, which itself re-runs the validator and returns a Safety
+   * Alert if even the template violates a Category-A constraint. This mirrors
+   * how conversational Q&A already falls back to static questions — DAG
+   * generation is never less resilient than the conversation that produced it.
+   */
+  private async _generateProposal(): Promise<InterviewResponse> {
+    this.isComplete = true;
+
+    if (this.generateFn) {
+      try {
+        const conversationContext = this.history
+          .map(m => `${m.role === 'user' ? 'User' : 'ScopeLogic'}: ${m.content}`)
+          .join('\n');
+
+        const dagPrompt = `You are ScopeLogic, an expert workflow architect. The requirements-gathering interview below is complete. Design a concrete workflow DAG that fulfills what the user ACTUALLY described — not a generic template.
+
+Output ONLY a single JSON object of this exact shape:
+{"nodes":[{"id":"<unique-id>","dependencies":["<id-of-prerequisite-node>"],"prompt":"<what this step does>"}],"confidence":<0.0-1.0>}
+
+Rules:
+- Each node is one atomic step. "dependencies" lists the ids of nodes that must run first (use an empty array for entry nodes).
+- Tailor nodes and their wiring to the SPECIFIC requirements discussed in the transcript.
+- Do NOT reference internal system services (ScopeLogic, BaseVault, RouteSwitch, CoreExec, ScoutDaemon, PortGrid, Cerebro) as nodes.
+- Do NOT emit destructive SQL (INSERT/UPDATE/DELETE/DROP/...) or shell/exec commands.
+- "confidence" is YOUR self-assessed 0.0-1.0 certainty that this DAG correctly captures the user's intent.
+
+Interview transcript:
+${conversationContext}`;
+
+        const raw = await this.generateFn(dagPrompt, DAG_PROPOSAL_SCHEMA);
+        const proposal = this._parseLLMProposal(raw);
+
+        if (proposal && ValidatorLogic.validate(proposal) === null) {
+          return {
+            response: 'I have gathered enough requirements. Here is your draft workflow — review it on the canvas.',
+            dagProposal: proposal,
+          };
+        }
+        // Parsed-but-invalid, or unparseable: fall through to the template gate.
+      } catch (err: any) {
+        console.warn('ScopeLogic DAG LLM generation failed, using template fallback:', err?.message || err);
+      }
+    }
+
+    return this._generateTemplateProposal();
+  }
+
+  /**
+   * Parse a raw LLM response into a DAGProposal, robustly (LLMs wrap JSON in
+   * markdown fences / add preamble). Mirrors OKF generator's extraction. Returns
+   * null when the response can't be coerced into a well-formed node list; the
+   * caller then falls back to the template path.
+   */
+  private _parseLLMProposal(raw: string): DAGProposal | null {
+    try {
+      let jsonStr = raw.trim();
+
+      const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenceMatch) jsonStr = fenceMatch[1]!.trim();
+
+      const objStart = jsonStr.indexOf('{');
+      const objEnd = jsonStr.lastIndexOf('}');
+      if (objStart !== -1 && objEnd > objStart) {
+        jsonStr = jsonStr.substring(objStart, objEnd + 1);
+      }
+
+      const parsed: any = JSON.parse(jsonStr);
+      if (!parsed || !Array.isArray(parsed.nodes) || parsed.nodes.length === 0) {
+        return null;
+      }
+
+      // Normalize each node into the strict DAGProposal shape. Bad-shaped nodes
+      // are dropped; if nothing survives, treat it as unparseable.
+      const nodes = parsed.nodes
+        .filter((n: any) => n && typeof n === 'object' && typeof n.prompt === 'string' && n.prompt.trim() !== '')
+        .map((n: any) => ({
+          id: typeof n.id === 'string' && n.id.trim() !== '' ? n.id : crypto.randomUUID(),
+          dependencies: Array.isArray(n.dependencies)
+            ? n.dependencies.filter((d: any) => typeof d === 'string')
+            : [],
+          prompt: n.prompt,
+        }));
+
+      if (nodes.length === 0) return null;
+
+      const confidence =
+        typeof parsed.confidence === 'number' && parsed.confidence >= 0 && parsed.confidence <= 1
+          ? parsed.confidence
+          : undefined;
+
+      return {
+        id: crypto.randomUUID(),
+        status: 'draft',
+        nodes,
+        ...(confidence !== undefined ? { confidence } : {}),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Deterministic template-based DAG generator (the original, pre-LLM behavior).
+   * Retained as the fallback path AND as the generator the legacy sync
+   * `processUserInput` uses. No `confidence` field — the template has no real
+   * model-confidence signal, so downstream applies its conservative default.
+   */
+  private _generateTemplateProposal(): InterviewResponse {
     this.isComplete = true;
 
     // Extract meaningful node labels from user messages

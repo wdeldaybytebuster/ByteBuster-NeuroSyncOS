@@ -10,10 +10,16 @@ export class MockProvider implements LLMProvider {
 
     if (schema) {
       // Return a valid empty DAG structure if schema resembles our DAG requirements
-      // Or a generic JSON object if it's an arbitrary schema
       if (schema.type === 'object' && schema.properties?.nodes) {
         return JSON.stringify({ nodes: [{ id: 'mock-1', dependencies: [], prompt: 'mock node' }] });
       }
+      // Array-shaped schemas (e.g. OKF concept extraction) must get an array
+      // back — returning '{}' here always failed the caller's Array.isArray()
+      // check downstream, silently producing zero concepts every time.
+      if (schema.type === 'array') {
+        return JSON.stringify([]);
+      }
+      // Generic object fallback for any other arbitrary schema shape
       return JSON.stringify({});
     }
 

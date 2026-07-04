@@ -1,6 +1,7 @@
 import { db } from '../../basevault/db';
 import { CerebroVectorStore } from './vector';
 import { OKFGenerator } from '../../okf/generator';
+import { log } from '../../observability/logger';
 
 /** Injected by server/index.ts at startup. Avoids circular import. */
 let _generateFn: ((prompt: string) => Promise<string>) | null = null;
@@ -48,7 +49,7 @@ export class ReflectionExecutor {
    * The core learning logic. Safe to call manually for tests.
    */
   public static async runReflectionCycle(mockChatHistory?: string[]) {
-    console.log('Cerebro: Starting Async Reflection Cycle...');
+    log.info('Cerebro: Starting Async Reflection Cycle...');
 
     // Fetch real chat history from BaseVault when available; fall back to the
     // provided test array or the built-in fixture so the method is always
@@ -77,9 +78,9 @@ export class ReflectionExecutor {
 
       if (!isContradiction) {
         CerebroVectorStore.insert(fact, 'preference');
-        console.log(`Cerebro: Consolidated new preference: "${fact}"`);
+        log.info(`Cerebro: Consolidated new preference: "${fact}"`);
       } else {
-        console.log(`Cerebro: Ignored duplicate/contradictory fact: "${fact}"`);
+        log.info(`Cerebro: Ignored duplicate/contradictory fact: "${fact}"`);
       }
     }
 
@@ -87,9 +88,9 @@ export class ReflectionExecutor {
     if (extractedFacts.length > 0 && _generateFn) {
       try {
         await OKFGenerator.fromChat(_generateFn, historyToProcess, 'USER');
-        console.log(`Cerebro: Generated OKF files from ${extractedFacts.length} extracted fact(s).`);
+        log.info(`Cerebro: Generated OKF files from ${extractedFacts.length} extracted fact(s).`);
       } catch (err) {
-        console.warn('[Cerebro] OKF generation from reflection failed (non-fatal):', err);
+        log.warn('[Cerebro] OKF generation from reflection failed (non-fatal):', err);
       }
     }
 
@@ -122,7 +123,7 @@ export class ReflectionExecutor {
           .map((l) => l.trim())
           .filter((l) => l.length > 10); // strip empty / trivial lines
       } catch (err) {
-        console.warn('[Cerebro] LLM extraction failed; falling back to keyword extraction:', err);
+        log.warn('[Cerebro] LLM extraction failed; falling back to keyword extraction:', err);
       }
     }
 

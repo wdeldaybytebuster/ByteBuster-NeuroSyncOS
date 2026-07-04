@@ -16,6 +16,11 @@ async function post(path: string, body: any): Promise<{ status: number; data: an
   return { status: res.status, data: await res.json() };
 }
 
+async function get(path: string): Promise<{ status: number; data: any }> {
+  const res = await coreexecRouter.request(path);
+  return { status: res.status, data: await res.json() };
+}
+
 describe('coreexecRouter /approve — §3.4 DB-bypass gate', () => {
   it('accepts a valid proposal and returns 200 + runId', async () => {
     const nodeId = crypto.randomUUID();
@@ -96,5 +101,82 @@ describe('coreexecRouter /approve — §3.4 DB-bypass gate', () => {
     });
     // Either 400 or 500 — both acceptable per Hono contract.
     expect([400, 500]).toContain(raw.status);
+  });
+});
+
+describe('coreexecRouter /metrics — real aggregates, not fabricated strings', () => {
+  function seedRun(projectId: string, status: string, durationMs: number | null) {
+    const runId = crypto.randomUUID();
+    const createdAt = Date.now() - (durationMs ?? 0);
+    const completedAt = durationMs !== null ? createdAt + durationMs : null;
+    db.prepare(
+      'INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at, completed_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(runId, projectId, JSON.stringify({ nodes: [] }), status, createdAt, completedAt);
+    return runId;
+  }
+
+  function seedTask(runId: string, status: string) {
+    const taskId = crypto.randomUUID();
+    db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)').run(taskId, runId, status);
+    return taskId;
+  }
+
+  function seedResolvedEscalation(taskId: string) {
+    const todoId = crypto.randomUUID();
+    db.prepare(
+      "INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, 'MEDIUM', 'test', 'APPROVE_PROPOSAL', 'resolved', ?, 0.5)",
+    ).run(todoId, taskId, Date.now());
+  }
+
+  it('computes success rate, active runs, retry rate, and avg latency from real rows', async () => {
+    const projectId = `metrics-test-${crypto.randomUUID()}`;
+    db.prepare('INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+      projectId,
+      'Metrics Test Project',
+      Date.now(),
+    );
+
+    // 2 completed (1000ms, 3000ms -> avg 2000ms), 1 failed, 1 active (pending)
+    seedRun(projectId, 'completed', 1000);
+    seedRun(projectId, 'completed', 3000);
+    seedRun(projectId, 'failed', 500);
+    seedRun(projectId, 'pending', null);
+
+    // 4 tasks total, 1 escalation resolved -> retryRate 25%
+    const run = seedRun(projectId, 'completed', 100);
+    seedTask(run, 'completed');
+    const escalatedTask = seedTask(run, 'completed');
+    seedTask(run, 'completed');
+    seedTask(run, 'completed');
+    seedResolvedEscalation(escalatedTask);
+
+    const res = await get(`/metrics?projectId=${projectId}`);
+    expect(res.status).toBe(200);
+    expect(res.data.completedRuns).toBe(3);
+    expect(res.data.failedRuns).toBe(1);
+    expect(res.data.successRate).toBeCloseTo(75, 1); // 3 completed / 4 terminal
+    expect(res.data.activeRuns).toBe(1);
+    expect(res.data.totalTasks).toBe(4);
+    expect(res.data.resolvedEscalations).toBe(1);
+    expect(res.data.retryRate).toBeCloseTo(25, 1);
+    // avgLatencyMs averages ALL completed runs with a completed_at, including
+    // the 100ms one seeded for the retry-rate case above -> (1000+3000+100)/3
+    expect(res.data.avgLatencyMs).toBeCloseTo((1000 + 3000 + 100) / 3, -1);
+  });
+
+  it('returns nulls instead of fabricated numbers when there is no data yet', async () => {
+    const projectId = `metrics-empty-${crypto.randomUUID()}`;
+    db.prepare('INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+      projectId,
+      'Empty Metrics Project',
+      Date.now(),
+    );
+
+    const res = await get(`/metrics?projectId=${projectId}`);
+    expect(res.status).toBe(200);
+    expect(res.data.successRate).toBeNull();
+    expect(res.data.retryRate).toBeNull();
+    expect(res.data.avgLatencyMs).toBeNull();
+    expect(res.data.activeRuns).toBe(0);
   });
 });
