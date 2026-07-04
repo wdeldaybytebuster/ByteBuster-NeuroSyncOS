@@ -61,10 +61,12 @@ function DashboardView() {
   // Auto-scroll log
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [logs]);
 
-  // Fetch runs
+  // Fetch runs (project-scoped -- omitting projectId here used to leak every
+  // project's runs into this widget regardless of which one was active)
   useEffect(() => {
     setLoadingRuns(true);
-    fetch(`${API}/api/basevault/runs`)
+    const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
+    fetch(`${API}/api/basevault/runs${qs}`)
       .then(r => r.json())
       .then(data => { if (data.runs) setRuns(data.runs); })
       .catch(() => {})

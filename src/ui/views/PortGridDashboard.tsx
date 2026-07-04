@@ -170,9 +170,11 @@ function DashboardView() {
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState([] as Node[]);
   const [flowEdges, setFlowEdges, onEdgesChange] = useEdgesState([] as Edge[]);
 
-  // Fetch runs for DAG canvas
+  // Fetch runs for DAG canvas (project-scoped -- previously leaked every
+  // project's runs into this widget regardless of which one was active)
   useEffect(() => {
-    fetch(`${API}/api/basevault/runs`).then(r => r.json()).then(d => {
+    const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
+    fetch(`${API}/api/basevault/runs${qs}`).then(r => r.json()).then(d => {
       if (d.runs) setRuns(d.runs);
     }).catch(() => {});
   }, [activeProjectId]);

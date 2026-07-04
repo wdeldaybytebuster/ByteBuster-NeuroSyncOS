@@ -344,14 +344,30 @@ app.post('/api/routeswitch/provider', async (c) => {
 // shared partitionBySchema helper. RunHistory.tsx consumes this list directly
 // via setRuns(data.runs), so dirty rows (status typos, schema-dirty
 // workflow_runs) would silently fall through without this gate.
+//
+// ?projectId= is optional: CoreExecDashboard.tsx, BaseVaultDashboard.tsx, and
+// PortGridDashboard.tsx all re-fetch on activeProjectId change but, until this
+// fix, never actually sent it -- a brand-new project showed another project's
+// run history in its "Active Workflow Runs" widget (confirmed live). Omitting
+// the param preserves the original all-projects behavior for RunHistory.tsx,
+// which has no notion of an active project and legitimately wants everything.
 app.get('/api/basevault/runs', (c) => {
   try {
-    const raw = db.prepare(`
-      SELECT id, project_id, dag_layout, status, created_at
-      FROM workflow_runs
-      ORDER BY created_at DESC
-      LIMIT 50
-    `).all() as Record<string, unknown>[];
+    const projectId = c.req.query('projectId');
+    const raw = projectId
+      ? (db.prepare(`
+          SELECT id, project_id, dag_layout, status, created_at
+          FROM workflow_runs
+          WHERE project_id = ?
+          ORDER BY created_at DESC
+          LIMIT 50
+        `).all(projectId) as Record<string, unknown>[])
+      : (db.prepare(`
+          SELECT id, project_id, dag_layout, status, created_at
+          FROM workflow_runs
+          ORDER BY created_at DESC
+          LIMIT 50
+        `).all() as Record<string, unknown>[]);
 
     const { clean: runs, dirtyIds: dirtyRunIds } = partitionBySchema(raw, WorkflowRunSchema, '/api/basevault/runs');
     return c.json({ runs, dirtyRunIds });
