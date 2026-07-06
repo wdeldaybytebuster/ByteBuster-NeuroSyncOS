@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
 import { Radar, Activity, Inbox, Cpu, Thermometer, Power, Zap, Rss, Clock, Shield, AlertTriangle, CheckCircle, Skull } from 'lucide-react';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#8E24AA';
@@ -14,7 +16,7 @@ const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-
 function DashboardView() {
   const { activeProjectId } = useNavigation();
   const [daemonState, setDaemonState] = useState<'passive'|'active'|'quarantine'|'sleeping'>('passive');
-  const [cpuLoad, setCpuLoad] = useState(0.42);
+  const [cpuLoad, setCpuLoad] = useState<number | null>(null);
   const [cpuTemp, setCpuTemp] = useState(38);
   const [utilization, setUtilization] = useState(12);
   const [discoveries, setDiscoveries] = useState<{id:string;title:string;type:string;created:string}[]>([]);
@@ -75,7 +77,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Radar size={16} style={{ color: ACCENT_LIGHT }} /> Ambient Vanguard Monitor
+            <Radar size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Watcher Status" dev="Ambient Vanguard Monitor" />
           </h2>
           <span className="text-[10px] font-mono uppercase tracking-widest text-gray-500">Deference UI</span>
         </div>
@@ -106,7 +108,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> Quarantine Staging & Discovery Ledger
+            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="New Discoveries (Waiting For You)" dev="Quarantine Staging & Discovery Ledger" />
           </h2>
           <span className="text-[10px] font-mono text-gray-500">{discoveries.length} pending</span>
         </div>
@@ -146,7 +148,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> Scout Research Drafts (OKF)
+            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Draft Notes From The Watcher" dev="Scout Research Drafts (OKF)" />
           </h2>
           <span className="text-[10px] font-mono text-gray-500">{scoutDrafts.length} quarantined</span>
         </div>
@@ -177,9 +179,9 @@ function DashboardView() {
       {/* Widget C: Hardware-Adaptive Telemetry */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Thermometer size={16} className="text-orange-400" /> Hardware Telemetry ("Machine Persona")
+          <Thermometer size={16} className="text-orange-400" /> <ModeLabel simple="Computer Load" dev={'Hardware Telemetry ("Machine Persona")'} />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Visual justification of why ScoutDaemon is active or sleeping. Demonstrates graceful resource yielding.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Shows why the watcher is running or sleeping — it backs off automatically when your computer is busy or hot." dev="Visual justification of why ScoutDaemon is active or sleeping. Demonstrates graceful resource yielding." /></p>
 
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
@@ -197,7 +199,7 @@ function DashboardView() {
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Daemon State</div>
             <div className="text-sm font-bold font-mono" style={{ color: state.color }}>{daemonState.toUpperCase()}</div>
-            <div className="text-[10px] text-gray-600 mt-2 font-mono">Load: {(cpuLoad * 100).toFixed(0)}%</div>
+            <div className="text-[10px] text-gray-600 mt-2 font-mono">Load: {cpuLoad === null ? '—' : `${(cpuLoad * 100).toFixed(0)}%`}</div>
           </div>
         </div>
       </section>
@@ -245,14 +247,14 @@ function SetupView() {
       {/* Control A: Predictive Early Termination (AgentStop) */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Zap size={16} style={{ color: ACCENT_LIGHT }} /> Predictive Early Termination (AgentStop)
+          <Zap size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Stop Runaway AI Early" dev="Predictive Early Termination (AgentStop)" /> <HelpTip text="If a background AI task starts producing nonsense, it gets stopped automatically before it wastes your time and battery." />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Algorithmic circuit breaker. Monitors token-level entropy during background inference. If hallucination detected, executes kill-before-compute abort.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="A safety cutoff for background AI work — if the AI starts rambling or making things up, the task is stopped early." dev="Algorithmic circuit breaker. Monitors token-level entropy during background inference. If hallucination detected, executes kill-before-compute abort." /></p>
 
         <div className="space-y-4">
           <div>
             <div className="flex justify-between text-xs mb-1">
-              <span className="text-gray-300 font-bold">Entropy Kill Threshold</span>
+              <span className="text-gray-300 font-bold"><ModeLabel simple="How Quickly To Pull The Plug" dev="Entropy Kill Threshold" /></span>
               <span className="font-mono font-bold" style={{ color: ACCENT_LIGHT }}>{agentStopThreshold.toFixed(2)}</span>
             </div>
             <input type="range" min={0.3} max={0.95} step={0.05} value={agentStopThreshold} onChange={e => setAgentStopThreshold(+e.target.value)} className="w-full h-2 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
@@ -272,21 +274,21 @@ function SetupView() {
       {/* Control B: Passive Ingestion & Sensing Modalities */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Rss size={16} style={{ color: ACCENT_LIGHT }} /> Passive Ingestion & Sensing Modalities
+          <Rss size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="How It Watches For Changes" dev="Passive Ingestion & Sensing Modalities" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Configure what ScoutDaemon monitors. Push-based feeds only — no aggressive polling that drains battery.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Choose how the background watcher notices new things. The recommended option waits quietly for updates instead of checking constantly (which drains battery)." dev="Configure what ScoutDaemon monitors. Push-based feeds only — no aggressive polling that drains battery." /></p>
 
         <div className="space-y-3">
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Server-Sent Events (SSE)</span><span className="text-[10px] text-gray-500">Passive push-based feeds (recommended)</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Wait For Updates (Recommended)" dev="Server-Sent Events (SSE)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Updates arrive on their own — easy on your battery" dev="Passive push-based feeds (recommended)" /></span></div>
             <input type="checkbox" checked={sseEnabled} onChange={e => setSseEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Active HTTP Polling</span><span className="text-[10px] text-red-400">⚠ Battery intensive — not recommended for laptops</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Check Constantly" dev="Active HTTP Polling" /></span><span className="text-[10px] text-red-400">⚠ Battery intensive — not recommended for laptops</span></div>
             <input type="checkbox" checked={pollingEnabled} onChange={e => setPollingEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Manual Scout Mode (MVP)</span><span className="text-[10px] text-gray-500">Triggered one-off sweeps only, no autonomous scheduling</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Only When I Ask" dev="Manual Scout Mode (MVP)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="The watcher only runs when you start it yourself" dev="Triggered one-off sweeps only, no autonomous scheduling" /></span></div>
             <input type="checkbox" checked={manualMode} onChange={e => setManualMode(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
         </div>
@@ -295,9 +297,9 @@ function SetupView() {
       {/* Control C: Idle-Detection & Hardware Yield Thresholds */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Clock size={16} style={{ color: ACCENT_LIGHT }} /> Idle-Detection & Hardware Yield
+          <Clock size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Auto-Pause Limits" dev="Idle-Detection & Hardware Yield" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Physical limits at which ScoutDaemon suspends all operations to protect the host machine.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="When your computer gets too hot or too busy, the watcher pauses itself to protect your machine." dev="Physical limits at which ScoutDaemon suspends all operations to protect the host machine." /></p>
 
         <div className="space-y-4">
           <div>
@@ -322,10 +324,10 @@ function SetupView() {
       {/* Control D: Absolute Manual Kill Switch */}
       <section className={`bg-white/[0.02] border rounded-xl p-5 backdrop-blur-sm transition-all duration-300 ${killSwitchActive ? 'border-red-500/40 shadow-[0_0_30px_rgba(220,38,38,0.2)]' : 'border-white/5 shadow-[0_0_15px_rgba(142,36,170,0.08)] hover:shadow-[0_0_30px_rgba(142,36,170,0.2)] hover:border-[rgba(142,36,170,0.25)]'}`}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Skull size={16} className="text-red-400" /> Absolute Manual Kill Switch
+          <Skull size={16} className="text-red-400" /> <ModeLabel simple="Emergency Stop" dev="Absolute Manual Kill Switch" />
         </h2>
         <p className="text-xs text-gray-400 mb-4">
-          Forcefully terminates the ScoutDaemon process (SIGKILL). Because it runs as a separate OS process, this instantly sheds CPU load without disrupting CoreExec or active workflows.
+          <ModeLabel simple="Instantly shuts down the background watcher and frees up your computer. Your workflows and other work are not affected." dev="Forcefully terminates the ScoutDaemon process (SIGKILL). Because it runs as a separate OS process, this instantly sheds CPU load without disrupting CoreExec or active workflows." />
         </p>
 
         <div className="flex items-center justify-between p-4 rounded-lg border transition-all" style={{ backgroundColor: killSwitchActive ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.3)', borderColor: killSwitchActive ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.05)' }}>

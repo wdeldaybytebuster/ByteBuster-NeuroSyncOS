@@ -118,6 +118,16 @@ export function initDB() {
       created_at INTEGER NOT NULL
     );
 
+    -- Cerebro prune history: one row per manual prune action. Powers the
+    -- "Pruned (30d)" counter (SUM(count) over the last 30 days). Pruning is
+    -- manual-trigger only (never a silent background auto-delete) since it
+    -- permanently removes user memory rows from cerebro_memories_meta/_vec.
+    CREATE TABLE IF NOT EXISTS cerebro_prune_log (
+      id TEXT PRIMARY KEY,
+      pruned_at INTEGER NOT NULL,
+      count INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS system_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -313,6 +323,19 @@ export function initDB() {
   } catch (e: any) {
     if (!e.message.includes('duplicate column name')) {
       console.error('Error adding gitnexus_repo_name column to projects:', e);
+    }
+  }
+
+  // Per-project execution permission archetype (real enforcement, gated in
+  // core/coreexec/worker.ts). Nullable with NO default: NULL means "no
+  // archetype assigned — behave exactly as today, fully permissive". A
+  // non-NULL value (e.g. 'code_execute' | 'research_only' | 'admin_operator')
+  // opts the project into gating of the shell/scrape task actions.
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN permission_archetype TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding permission_archetype column to projects:', e);
     }
   }
 

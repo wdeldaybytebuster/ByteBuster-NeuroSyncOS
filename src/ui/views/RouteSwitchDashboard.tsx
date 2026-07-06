@@ -3,6 +3,8 @@ import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
 import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plug, ListOrdered } from 'lucide-react';
 import { PathBrowser } from '../components/PathBrowser';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#FFB300';
@@ -18,11 +20,14 @@ interface UsageData {
 }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────
+interface FleetProvider { id: string; name: string; type: string; isEnabled: boolean; }
+
 function DashboardView() {
   const { activeProjectId } = useNavigation();
   const [usage, setUsage] = useState<UsageData>({ tokens: 0, costUsd: 0, requests: 0 });
   const [config, setConfig] = useState<any>(null);
   const [alerts, setAlerts] = useState<string[]>([]);
+  const [fleetProviders, setFleetProviders] = useState<FleetProvider[]>([]);
 
   // Poll usage every 5s
   useEffect(() => {
@@ -39,6 +44,16 @@ function DashboardView() {
     fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => { if (d.success) setConfig(d); }).catch(() => {});
   }, []);
 
+  // Fetch real provider registry for the Fleet Health widget (was 3 hardcoded rows)
+  useEffect(() => {
+    const fetchProviders = () => {
+      fetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setFleetProviders(d.providers); }).catch(() => {});
+    };
+    fetchProviders();
+    const iv = setInterval(fetchProviders, 10000);
+    return () => clearInterval(iv);
+  }, []);
+
   const currentMode = config?.config?.provider === 'mock' ? 'Offline Mode' : config?.config?.provider === 'openai-compatible' ? 'Free-Cloud Mode' : 'Local Mode';
   const dailyCap = config?.telemetry?.dailyTokenCap || 50000;
   const tokensUsed = usage.tokens || 0;
@@ -50,7 +65,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Zap size={16} style={{ color: ACCENT }} /> 24h Telemetry & Quota Ledger
+            <Zap size={16} style={{ color: ACCENT }} /> <ModeLabel simple="AI Usage (Last 24 Hours)" dev="24h Telemetry & Quota Ledger" />
           </h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-white/10 bg-white/5" style={{ color: ACCENT }}>{currentMode}</span>
         </div>
@@ -89,34 +104,32 @@ function DashboardView() {
       {/* Widget B: LLM Fleet Health & Fallback Monitor */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Activity size={16} style={{ color: ACCENT }} /> LLM Fleet Health & Fallback Monitor
+          <Activity size={16} style={{ color: ACCENT }} /> <ModeLabel simple="AI Model Status" dev="LLM Fleet Health & Fallback Monitor" /> <HelpTip text="If your first-choice AI model isn't available, the app automatically tries the next one on the list — that's the 'fallback' order shown below." />
         </h2>
 
         <div className="space-y-2">
-          {/* Provider rows */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-green-500/20">
-            <div className="flex items-center gap-3">
-              <Server size={14} className="text-green-400" />
-              <div><div className="text-xs font-bold text-white">Local Mock Provider</div><div className="text-[10px] text-gray-500 font-mono">Level 3 — Air-gapped fallback</div></div>
+          {/* Provider rows — real entries from the llm_providers registry */}
+          {fleetProviders.length === 0 ? (
+            <div className="text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">
+              No providers configured yet. Add one in Set-up → Provider Registry.
             </div>
-            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-[10px] font-mono text-green-400">ACTIVE</span></div>
-          </div>
-
-          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5">
-            <div className="flex items-center gap-3">
-              <Cloud size={14} className="text-amber-400" />
-              <div><div className="text-xs font-bold text-white">OpenRouter (Free Tier)</div><div className="text-[10px] text-gray-500 font-mono">Level 1 — Agent Preference</div></div>
+          ) : fleetProviders.map(p => (
+            <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg bg-black/30 border ${p.isEnabled ? 'border-green-500/20' : 'border-white/5 opacity-60'}`}>
+              <div className="flex items-center gap-3">
+                {p.type === 'openai-compatible'
+                  ? (p.isEnabled ? <Cloud size={14} className="text-amber-400" /> : <CloudOff size={14} className="text-gray-500" />)
+                  : <Server size={14} className={p.isEnabled ? 'text-green-400' : 'text-gray-500'} />}
+                <div>
+                  <div className={`text-xs font-bold ${p.isEnabled ? 'text-white' : 'text-gray-400'}`}>{p.name}</div>
+                  <div className="text-[10px] text-gray-500 font-mono">{p.type}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${p.isEnabled ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></span>
+                <span className={`text-[10px] font-mono ${p.isEnabled ? 'text-green-400' : 'text-gray-600'}`}>{p.isEnabled ? 'ACTIVE' : 'DISABLED'}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="text-[10px] font-mono text-amber-400">{config?.config?.provider === 'openai-compatible' ? 'CONNECTED' : 'STANDBY'}</span></div>
-          </div>
-
-          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5 opacity-60">
-            <div className="flex items-center gap-3">
-              <CloudOff size={14} className="text-gray-500" />
-              <div><div className="text-xs font-bold text-gray-400">OpenCode Zen (Paid)</div><div className="text-[10px] text-gray-600 font-mono">Level 2 — Category Default</div></div>
-            </div>
-            <span className="text-[10px] font-mono text-gray-600 border border-white/5 px-1.5 py-0.5 rounded bg-black/40">DISABLED</span>
-          </div>
+          ))}
         </div>
 
         {/* Fallback Cascade */}
@@ -135,7 +148,7 @@ function DashboardView() {
       {/* Widget C: Routing Alerts & Forecasting Blockers */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <AlertTriangle size={16} className="text-red-400" /> Routing Alerts & Forecasting Blockers
+          <AlertTriangle size={16} className="text-red-400" /> <ModeLabel simple="AI Connection Alerts" dev="Routing Alerts & Forecasting Blockers" />
         </h2>
 
         {alerts.length === 0 ? (
@@ -344,7 +357,7 @@ function SetupView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Key size={16} style={{ color: ACCENT }} /> Provider Registry
+            <Key size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Your AI Services" dev="Provider Registry" /> <HelpTip text="A 'provider' is whatever runs the AI for you — an app on your own computer (like LM Studio) or an online service you have a key for. Your keys are stored encrypted." />
           </h2>
           <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('opencode'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId(''); setFormModelPath('./local_models/'); setFormApiKey(''); setFormIsPaidTier(false); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
         </div>
@@ -451,9 +464,9 @@ function SetupView() {
       {/* Section B: Default & Fallback Chain (Routing Rules) */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <ListOrdered size={16} style={{ color: ACCENT }} /> Default & Fallback Chain
+          <ListOrdered size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Which AI To Try First" dev="Default & Fallback Chain" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Set the provider priority order per scope. Position 1 is primary; remaining are fallbacks tried on failure. Most specific scope wins at runtime.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Put your AI services in order of preference. Number 1 is tried first; if it fails, the app moves down the list automatically." dev="Set the provider priority order per scope. Position 1 is primary; remaining are fallbacks tried on failure. Most specific scope wins at runtime." /></p>
 
         {/* Scope tabs */}
         <div className="flex gap-1 mb-4 bg-black/30 p-1 rounded-lg border border-white/5">
@@ -520,7 +533,7 @@ function SetupView() {
       {/* Section C: Free Mode Governor Limits */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Shield size={16} style={{ color: ACCENT }} /> Free Mode Governor Limits
+          <Shield size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Spending Limits" dev="Free Mode Governor Limits" />
         </h2>
         <div className="space-y-4">
           {/* Paid-provider lock — the real enforcement behind the "blocks paid-provider
@@ -559,7 +572,7 @@ function SetupView() {
             <input type="checkbox" checked={externalEnabled} onChange={e => setExternalEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Grammar-Constrained Decoding (GBNF)</span><span className="text-[10px] text-gray-500">Force valid JSON output via logit masking</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Force AI to answer in a strict format" dev="Grammar-Constrained Decoding (GBNF)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Keeps AI answers in a predictable structure so the app can always read them" dev="Force valid JSON output via logit masking" /></span></div>
             <input type="checkbox" checked={grammarEnabled} onChange={e => setGrammarEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
         </div>
@@ -568,7 +581,7 @@ function SetupView() {
       {/* Section D: MCP Connection Manager */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Plug size={16} style={{ color: ACCENT }} /> MCP Connection Manager
+          <Plug size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Connected Tools" dev="MCP Connection Manager" /> <HelpTip text="Extra tools the AI can plug into for added abilities (they connect through a standard called MCP)." />
         </h2>
         <div className="space-y-2">
           {mcpConnections.map(conn => (

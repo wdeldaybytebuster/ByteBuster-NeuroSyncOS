@@ -133,6 +133,151 @@ cerebroRouter.post('/learning-approvals/:id/reject', (c) => {
   }
 });
 
+// Decay stats — real "Nearing Decay" count for the Habituation Decay widget,
+// replacing its hardcoded 0. Mirrors HabituationScorer.rank's decay term
+// (src/core/memory/cerebro/habituation.ts: decayFactor = e^-(daysSinceAccess*0.3))
+// applied per-row against cerebro_memories_meta.last_accessed_at. A memory
+// "nearing decay" is one whose decayFactor has fallen below 0.1 (~7.7+ days
+// since last access), independent of the boost/similarity terms rank() also
+// applies (those rank search results; this just measures raw idleness).
+cerebroRouter.get('/decay-stats', (c) => {
+  try {
+    const NEARING_DECAY_THRESHOLD = 0.1;
+    const rows = db.prepare('SELECT last_accessed_at FROM cerebro_memories_meta').all() as { last_accessed_at: number }[];
+    const now = Date.now();
+
+    let nearingDecay = 0;
+    for (const row of rows) {
+      const daysSinceAccess = Math.max(0, (now - row.last_accessed_at) / (1000 * 60 * 60 * 24));
+      const decayFactor = Math.exp(-(daysSinceAccess * 0.3));
+      if (decayFactor < NEARING_DECAY_THRESHOLD) nearingDecay++;
+    }
+
+    return c.json({ success: true, nearingDecay, total: rows.length, threshold: NEARING_DECAY_THRESHOLD });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// ─── Pruning ────────────────────────────────────────────────────────────────
+// Conservative by design: manual trigger only, never a silent background
+// auto-delete. Preview (dry run) and confirm (destructive) MUST use identical
+// selection logic — both recompute server-side from the same threshold so the
+// UI can never show one set and delete a different one (no TOCTOU / no
+// client-supplied id list is trusted). A memory only becomes prune-eligible
+// once it is already "nearing decay" by the /decay-stats definition, so the
+// default threshold is the SAME 0.1 the decay-stats widget uses — we do not
+// introduce a second, divergent threshold.
+const PRUNE_DECAY_THRESHOLD = 0.1;
+
+// Shared selection: returns memories whose decayFactor has fallen below the
+// given threshold, using the exact same decay formula as /decay-stats
+// (decayFactor = e^-(daysSinceAccess * 0.3)). Content is truncated for display.
+function selectPruneCandidates(threshold: number) {
+  const rows = db
+    .prepare('SELECT id, content, last_accessed_at FROM cerebro_memories_meta')
+    .all() as { id: string; content: string; last_accessed_at: number }[];
+  const now = Date.now();
+
+  const candidates: {
+    id: string;
+    content: string;
+    decayFactor: number;
+    daysSinceAccess: number;
+  }[] = [];
+
+  for (const row of rows) {
+    const daysSinceAccess = Math.max(0, (now - row.last_accessed_at) / (1000 * 60 * 60 * 24));
+    const decayFactor = Math.exp(-(daysSinceAccess * 0.3));
+    if (decayFactor < threshold) {
+      candidates.push({
+        id: row.id,
+        content: (row.content ?? '').length > 80 ? row.content.slice(0, 80) + '…' : (row.content ?? ''),
+        decayFactor,
+        daysSinceAccess: Math.round(daysSinceAccess * 10) / 10,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+// Parse an optional threshold query/body param, falling back to the shared
+// default. Guards against NaN / out-of-range values so preview and confirm
+// stay consistent.
+function resolveThreshold(raw: unknown): number {
+  const n = typeof raw === 'string' ? parseFloat(raw) : typeof raw === 'number' ? raw : NaN;
+  if (!Number.isFinite(n) || n <= 0 || n > 1) return PRUNE_DECAY_THRESHOLD;
+  return n;
+}
+
+// Prune preview — DRY RUN, no deletion. Returns the actual candidate list so
+// the UI can show the user exactly what would be removed before they confirm.
+cerebroRouter.get('/prune-preview', (c) => {
+  try {
+    const threshold = resolveThreshold(c.req.query('threshold'));
+    const candidates = selectPruneCandidates(threshold);
+    return c.json({ success: true, candidates, count: candidates.length, threshold });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Prune confirm — DESTRUCTIVE. Recomputes the candidate set server-side from
+// the same threshold (does NOT trust a client id list), deletes matching rows
+// from BOTH cerebro_memories_meta AND cerebro_memories_vec (they share id), and
+// logs the real count to cerebro_prune_log. All in a single transaction.
+cerebroRouter.post('/prune-confirm', async (c) => {
+  try {
+    // Threshold may arrive as a query param or a JSON body param; both must
+    // match what the preview showed the user.
+    let bodyThreshold: unknown;
+    try {
+      const body = await c.req.json();
+      bodyThreshold = body?.threshold;
+    } catch {
+      // No/invalid body is fine — fall through to query param / default.
+    }
+    const threshold = resolveThreshold(c.req.query('threshold') ?? bodyThreshold);
+
+    const candidates = selectPruneCandidates(threshold);
+
+    const prune = db.transaction((ids: string[]) => {
+      const delMeta = db.prepare('DELETE FROM cerebro_memories_meta WHERE id = ?');
+      const delVec = db.prepare('DELETE FROM cerebro_memories_vec WHERE id = ?');
+      for (const id of ids) {
+        delMeta.run(id);
+        delVec.run(id);
+      }
+      db.prepare('INSERT INTO cerebro_prune_log (id, pruned_at, count) VALUES (?, ?, ?)').run(
+        crypto.randomUUID(),
+        Date.now(),
+        ids.length
+      );
+    });
+
+    prune(candidates.map((m) => m.id));
+
+    return c.json({ success: true, pruned: candidates.length, threshold });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Prune history — real rolling 30-day sum of pruned memories, replacing the
+// hardcoded "Pruned (30d): 0" counter. Defaults to 0 when nothing pruned.
+cerebroRouter.get('/prune-history', (c) => {
+  try {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const row = db
+      .prepare('SELECT SUM(count) AS total FROM cerebro_prune_log WHERE pruned_at >= ?')
+      .get(thirtyDaysAgo) as { total: number | null } | undefined;
+    return c.json({ success: true, pruned30d: row?.total ?? 0 });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 // Pin high-confidence memories — resets last_accessed_at to now for all memories with access_count > threshold
 cerebroRouter.post('/pin-high-confidence', (c) => {
   try {
