@@ -5,11 +5,14 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { performance } from 'perf_hooks';
 import { db, dbPath } from '../../core/basevault/db';
 import { encrypt, decrypt } from '../../core/basevault/crypto';
 import { workerPool } from '../../core/coreexec/worker-pool';
 import { SensitiveDataRedactor } from '../../core/basevault/redactor';
 import { log } from '../../core/observability/logger';
+import { activeGovernor } from './llm';
+import { isBwrapAvailable } from '../../core/portgrid/terminal-session';
 
 export const systemRouter = new Hono();
 
@@ -257,14 +260,163 @@ systemRouter.get('/retention-stats', (c) => {
   }
 });
 
-// MCP Connection Manager — stored as JSON in system_settings under key 'mcp_connections'
-systemRouter.get('/mcp/connections', (c) => {
+// Real-time DB health — actual SELECT 1 round-trip latency + real WAL checkpoint
+// count, replacing the BaseVault dashboard's old Math.random() jitter.
+systemRouter.get('/db-health', (c) => {
+  try {
+    const start = performance.now();
+    db.prepare('SELECT 1').get();
+    const latencyMs = performance.now() - start;
+
+    // better-sqlite3's .pragma() runs PRAGMA wal_checkpoint(PASSIVE) for real and
+    // returns [{ busy, log, checkpointed }] — checkpointed is the real count of
+    // WAL frames actually written back to the main DB file this cycle.
+    const checkpointRows = db.pragma('wal_checkpoint(PASSIVE)') as { busy: number; log: number; checkpointed: number }[];
+    const walCheckpoints = checkpointRows?.[0]?.checkpointed ?? 0;
+
+    return c.json({
+      success: true,
+      latencyMs: Math.round(latencyMs * 100) / 100,
+      walCheckpoints,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Verifiable Confidence Badges — computes all 8 PortGrid "proof badge" flags
+// server-side from real signals instead of a hand-typed literal array.
+systemRouter.get('/proof-badges', (c) => {
+  try {
+    const projectId = c.req.query('projectId') || '';
+
+    // Local Only — no *enabled* external (cloud) provider configured. llama-cpp
+    // and mock providers are both local/offline, so only openai-compatible counts.
+    const externalProviderRow = db.prepare(
+      "SELECT COUNT(*) as cnt FROM llm_providers WHERE is_enabled = 1 AND type = 'openai-compatible'"
+    ).get() as { cnt: number } | undefined;
+    const localOnly = (externalProviderRow?.cnt || 0) === 0;
+
+    // Redacted — the real SensitiveDataRedactor ring buffer has at least one entry.
+    const redacted = SensitiveDataRedactor.getRecentEvents().length > 0;
+
+    // Human Approved — at least one os_todos row actually resolved (approved) in
+    // the last 30 days (mirrors the 30-day window used by /retention-stats).
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const approvedRow = db.prepare(
+      "SELECT COUNT(*) as cnt FROM os_todos WHERE status = 'resolved' AND created_at >= ?"
+    ).get(thirtyDaysAgo) as { cnt: number } | undefined;
+    const humanApproved = (approvedRow?.cnt || 0) > 0;
+
+    // Source Linked — no clean automated signal exists yet for "the current/last
+    // proposal references an OKF node". Left honestly static rather than faking
+    // a check that wouldn't mean anything.
+    const sourceLinked = false;
+
+    // Low Confidence — a pending (open) os_todos row below the Deference UI
+    // threshold (0.70), same threshold already used in PortGridDashboard/todos.ts.
+    const lowConfRow = db.prepare(
+      "SELECT COUNT(*) as cnt FROM os_todos WHERE status = 'open' AND confidence < 0.70"
+    ).get() as { cnt: number } | undefined;
+    const lowConfidence = (lowConfRow?.cnt || 0) > 0;
+
+    // Quota Protected — the live RouteSwitch governor is wired in and actually
+    // gates every generation call via canProceed() in engine.ts before any
+    // provider is invoked (real enforcement, not a display-only number).
+    const quotaProtected = !!activeGovernor;
+
+    // Project Scoped — caller supplies the active project id (client nav state);
+    // active whenever a real (non-Global) project is selected.
+    const projectScoped = !!projectId;
+
+    // Sandbox Enforced — mirrors terminal-session.ts's real bwrap availability
+    // check (same function the Embedded Terminal uses to gate itself).
+    const sandboxEnforced = isBwrapAvailable();
+
+    const badges = [
+      { label: 'Local Only', active: localOnly },
+      { label: 'Redacted', active: redacted },
+      { label: 'Human Approved', active: humanApproved },
+      { label: 'Source Linked', active: sourceLinked },
+      { label: 'Low Confidence', active: lowConfidence },
+      { label: 'Quota Protected', active: quotaProtected },
+      { label: 'Project Scoped', active: projectScoped },
+      { label: 'Sandbox Enforced', active: sandboxEnforced },
+    ];
+
+    return c.json({ success: true, badges });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// MCP Connection Manager — stored as JSON in system_settings under key 'mcp_connections'.
+//
+// SCOPE NOTE: this performs a real *reachability* probe of each configured
+// endpoint — it does NOT implement the MCP JSON-RPC protocol, tool listing, or
+// tool invocation (there is no MCP client anywhere in this codebase). For a
+// stdio/command server we check the executable exists (on PATH or as an
+// absolute file); for a URL server we attempt a bounded-timeout HTTP connect.
+// Each connection is returned with a real reachability status instead of the
+// old behaviour of echoing the stored/default list back as if all were live.
+
+const MCP_PROBE_TIMEOUT_MS = 2000;
+
+async function probeMcpReachability(
+  conn: { command?: string; url?: string; transport?: string; [k: string]: unknown }
+): Promise<'reachable' | 'unreachable' | 'unknown'> {
+  // URL-based (http/sse) server — real bounded HTTP connect.
+  if (typeof conn.url === 'string' && conn.url.trim() !== '') {
+    try {
+      const res = await fetch(conn.url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(MCP_PROBE_TIMEOUT_MS),
+      });
+      // Any HTTP response (even 4xx/405) proves the host answered the socket.
+      return res ? 'reachable' : 'unreachable';
+    } catch {
+      return 'unreachable';
+    }
+  }
+
+  // Command/stdio server — verify the executable resolves without spawning it.
+  if (typeof conn.command === 'string' && conn.command.trim() !== '') {
+    const cmd = conn.command.trim();
+    try {
+      // Absolute/relative path to a binary → check the file directly.
+      if (cmd.includes('/')) {
+        return fs.existsSync(cmd) ? 'reachable' : 'unreachable';
+      }
+      // Bare command name → resolve on PATH via `which` (short-timeout, no spawn
+      // of the actual MCP server process).
+      const { spawnSync } = require('child_process') as typeof import('child_process');
+      const res = spawnSync('which', [cmd], { timeout: MCP_PROBE_TIMEOUT_MS });
+      return res.status === 0 ? 'reachable' : 'unreachable';
+    } catch {
+      return 'unreachable';
+    }
+  }
+
+  // Neither a URL nor a command to probe (e.g. legacy stored entries that only
+  // carried a display transport) — we honestly cannot determine liveness.
+  return 'unknown';
+}
+
+systemRouter.get('/mcp/connections', async (c) => {
   try {
     const row = db.prepare("SELECT value FROM system_settings WHERE key = 'mcp_connections'").get() as { value: string } | undefined;
-    const connections = row ? JSON.parse(row.value) : [
+    const stored = row ? JSON.parse(row.value) : [
       { id: 'sqlite-vec', name: 'SQLite Vector Adapter', transport: 'stdio', status: 'active' },
       { id: 'gitnexus', name: 'GitNexus AST Map', transport: 'stdio', status: 'active' },
     ];
+
+    const connections = await Promise.all(
+      (Array.isArray(stored) ? stored : []).map(async (conn: any) => ({
+        ...conn,
+        status: await probeMcpReachability(conn),
+      }))
+    );
+
     return c.json({ success: true, connections });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -292,6 +444,7 @@ systemRouter.get('/tools', (c) => {
       { id: 'write_file', name: 'write_file', type: 'Write', status: 'Active' },
       { id: 'list_directory', name: 'list_directory', type: 'Read', status: 'Active' },
       { id: 'run_command', name: 'run_command', type: 'Execute', status: 'Sandboxed' },
+      { id: 'web_scrape', name: 'web_scrape', type: 'Network', status: 'Active' },
       { id: 'git_nexus', name: 'git_nexus', type: 'Read', status: 'Active' },
       { id: 'sqlite_vec', name: 'sqlite_vec', type: 'Read', status: 'Active' },
     ];
@@ -307,9 +460,9 @@ systemRouter.get('/agents/permissions', (c) => {
     const row = db.prepare("SELECT value FROM system_settings WHERE key = 'agent_permissions'").get() as { value: string } | undefined;
     const permissions = row ? JSON.parse(row.value) : {
       archetypes: [
-        { id: 'code_execute', label: 'code_execute', read: true, write: true, exec: 'sandboxed', git: true },
-        { id: 'research_only', label: 'research_only', read: true, write: false, exec: false, git: true },
-        { id: 'admin_operator', label: 'admin_operator', read: true, write: true, exec: true, git: true },
+        { id: 'code_execute', label: 'code_execute', read: true, write: true, exec: 'sandboxed', git: true, network: true },
+        { id: 'research_only', label: 'research_only', read: true, write: false, exec: false, git: true, network: true },
+        { id: 'admin_operator', label: 'admin_operator', read: true, write: true, exec: true, git: true, network: true },
       ]
     };
     return c.json({ success: true, permissions });

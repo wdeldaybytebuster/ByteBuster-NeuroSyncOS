@@ -2,6 +2,7 @@ import { ThreadWorker } from 'poolifier';
 import { CommandSandbox } from '../portgrid/sandbox';
 import { StealthScraper } from './scraping';
 import { classifyDirective, NodeDirective } from './dispatch';
+import { checkActionPermission } from './permission-gate';
 
 /**
  * Single-shape worker input. Backward-compat is preserved by `kind: 'legacy'`
@@ -88,11 +89,30 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
             console.error('Failed to resolve project_id for task', taskId, err);
           }
 
-          const sandbox = new CommandSandbox(projectId);
-          const scraper = new StealthScraper(projectId);
+          // ── Permission enforcement (Phase 5) ─────────────────────────────
+          // Gate the two real executable actions (shell / scrape) against the
+          // project's assigned permission archetype + the tool registry. When
+          // a project has NO archetype (permission_archetype IS NULL) this is a
+          // no-op and behaviour is exactly as before — the non-negotiable
+          // permissive default for existing/unconfigured projects. Only a
+          // project that has explicitly opted in (non-NULL archetype) is gated.
+          if (directive.action === 'shell' || directive.action === 'scrape') {
+            const gate = await checkActionPermission(projectId, directive.action);
+            if (gate.blocked) {
+              return errEnvelope(gate.reason, taskId, directive.action);
+            }
+          }
 
+          // CommandSandbox/StealthScraper both resolve the project's on-disk
+          // cwd in their constructor and throw if the project has neither a
+          // project_root_path nor a workspace_path configured. Construct each
+          // lazily, only inside the branch that actually needs it — a
+          // 'generic' no-op task (the common case for a bare/default DAG
+          // node) must never fail just because the project has no root path,
+          // since it never touches the filesystem at all.
           switch (directive.action) {
             case 'shell': {
+              const sandbox = new CommandSandbox(projectId);
               const { stdout, stderr } = await sandbox.execute(directive.payload);
               return {
                 status: 'success', action: 'shell',
@@ -103,6 +123,7 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
               };
             }
             case 'scrape': {
+              const scraper = new StealthScraper(projectId);
               const result = await scraper.scrape(directive.payload, true);
               return {
                 status: 'success', action: 'scrape',
@@ -136,14 +157,18 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
   }
 }
 
-function errEnvelope(error: string, taskId?: string): WorkerOutput {
+function errEnvelope(
+  error: string,
+  taskId?: string,
+  action: WorkerOutput['action'] = 'generic',
+): WorkerOutput {
   return {
-    status: 'error', action: 'generic',
+    status: 'error', action,
     taskId,
     stdout: undefined, stderr: undefined,
     markdown: undefined, pageMetadata: undefined,
     message: undefined, prompt: undefined, data: undefined,
-    error, reason: undefined,
+    error, reason: error,
   };
 }
 

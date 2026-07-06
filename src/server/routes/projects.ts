@@ -147,6 +147,24 @@ projectsRouter.put('/:id', async (c) => {
       params.push(trimmed);
     }
 
+    // Update permission_archetype (Phase 5 real enforcement). null/'' clears the
+    // restriction (permissive default); otherwise must be one of the three known
+    // archetype ids so a typo can't silently disable gating.
+    if (body.permissionArchetype !== undefined || body.permission_archetype !== undefined) {
+      const rawArchetype = body.permissionArchetype ?? body.permission_archetype;
+      if (rawArchetype === null || rawArchetype === '') {
+        updates.push('permission_archetype = ?');
+        params.push(null);
+      } else {
+        const allowed = ['code_execute', 'research_only', 'admin_operator'];
+        if (!allowed.includes(rawArchetype)) {
+          return c.json({ success: false, error: `Invalid permission_archetype: ${rawArchetype}` }, 400);
+        }
+        updates.push('permission_archetype = ?');
+        params.push(rawArchetype);
+      }
+    }
+
     if (updates.length === 0) {
       return c.json({ success: false, error: 'No valid fields to update' }, 400);
     }
