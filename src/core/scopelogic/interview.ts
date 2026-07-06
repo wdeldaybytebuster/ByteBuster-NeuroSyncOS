@@ -29,7 +29,7 @@ export interface InterviewResponse {
 // `schema` param mirrors OKF's generator signature (core/okf/generator.ts): a
 // JSON-schema hint that triggers grammar-constrained / response_format decoding
 // on schema-capable providers.
-export type GenerateFn = (prompt: string, schema?: any) => Promise<string>;
+export type GenerateFn = (prompt: string, schema?: any, projectId?: string) => Promise<string>;
 
 const SYSTEM_PROMPT = `You are ScopeLogic, an expert workflow architect.
 Your job is to conduct a concise requirements-gathering interview to understand what automated workflow the user wants to build.
@@ -85,7 +85,7 @@ export class ScopeLogicSession {
     this.generateFn = generateFn || null;
   }
 
-  public async processUserInputAsync(input: string): Promise<InterviewResponse> {
+  public async processUserInputAsync(input: string, projectId?: string): Promise<InterviewResponse> {
     if (this.isComplete) {
       throw new Error('Interview is already complete. Cannot accept more input.');
     }
@@ -100,7 +100,7 @@ export class ScopeLogicSession {
       || input.toLowerCase().includes('done');
 
     if (forceComplete) {
-      return this._generateProposal();
+      return this._generateProposal(projectId);
     }
 
     // Try LLM-generated question
@@ -111,7 +111,7 @@ export class ScopeLogicSession {
           .join('\n');
 
         const llmPrompt = `${SYSTEM_PROMPT}\n\nConversation so far:\n${conversationContext}\n\nScopeLogic:`;
-        const rawResponse = await this.generateFn(llmPrompt);
+        const rawResponse = await this.generateFn(llmPrompt, undefined, projectId);
 
         // Check if LLM signals completion
         if (rawResponse.includes('"done":true')) {
@@ -190,7 +190,7 @@ export class ScopeLogicSession {
    * how conversational Q&A already falls back to static questions — DAG
    * generation is never less resilient than the conversation that produced it.
    */
-  private async _generateProposal(): Promise<InterviewResponse> {
+  private async _generateProposal(projectId?: string): Promise<InterviewResponse> {
     this.isComplete = true;
 
     if (this.generateFn) {
@@ -214,7 +214,7 @@ Rules:
 Interview transcript:
 ${conversationContext}`;
 
-        const raw = await this.generateFn(dagPrompt, DAG_PROPOSAL_SCHEMA);
+        const raw = await this.generateFn(dagPrompt, DAG_PROPOSAL_SCHEMA, projectId);
         const proposal = this._parseLLMProposal(raw);
 
         if (proposal && ValidatorLogic.validate(proposal) === null) {

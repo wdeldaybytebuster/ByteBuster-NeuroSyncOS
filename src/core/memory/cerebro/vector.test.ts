@@ -41,9 +41,38 @@ describe('CerebroVectorStore (sqlite-vec & Fallback)', () => {
     queryEmbed[0] = 0.8;
 
     const results = CerebroVectorStore.search('dummy query', 'test', queryEmbed);
-    
+
     expect(results.length).toBeGreaterThan(0);
     // embed1 should be closer than embed2
     expect(results[0]!.content).toBe('Memory A');
+  });
+
+  it('scopes keyword-fallback search to a project plus untagged (GLOBAL) memories', () => {
+    CerebroVectorStore.insert('Project Alpha uses a custom deployment pipeline', 'fact', undefined, 'proj-alpha');
+    CerebroVectorStore.insert('Project Beta uses a custom deployment pipeline', 'fact', undefined, 'proj-beta');
+    CerebroVectorStore.insert('Global convention: custom deployment pipeline notes go here', 'fact', undefined, null);
+
+    const results = CerebroVectorStore.search('custom deployment pipeline', undefined, undefined, 10, 'proj-alpha');
+    const contents = results.map(r => r.content);
+
+    expect(contents).toContain('Project Alpha uses a custom deployment pipeline');
+    expect(contents).toContain('Global convention: custom deployment pipeline notes go here');
+    expect(contents).not.toContain('Project Beta uses a custom deployment pipeline');
+  });
+
+  it('scopes vector search to a project plus untagged (GLOBAL) memories', () => {
+    const embed = new Float32Array(1536);
+    embed[0] = 0.9;
+
+    CerebroVectorStore.insert('Alpha memory', 'test', embed, 'proj-alpha');
+    CerebroVectorStore.insert('Beta memory', 'test', embed, 'proj-beta');
+    CerebroVectorStore.insert('Global memory', 'test', embed, null);
+
+    const results = CerebroVectorStore.search('dummy query', 'test', embed, 10, 'proj-alpha');
+    const contents = results.map(r => r.content);
+
+    expect(contents).toContain('Alpha memory');
+    expect(contents).toContain('Global memory');
+    expect(contents).not.toContain('Beta memory');
   });
 });
