@@ -309,8 +309,11 @@ injectLLMGenerator(_cerebroGenerateFn);
 // output on schema-capable providers (see interview.ts DAG_PROPOSAL_SCHEMA).
 // estimatedTokens is 2000 (not 200) so the completed-interview DAG-generation
 // call has output headroom; it maps to the provider's max_tokens.
-const generateFn = async (prompt: string, schema?: any) => {
-  const result = await routeSwitch.execute({ prompt, estimatedTokens: 2000, scope: 'agent', scopeId: 'scopelogic-interview', responseSchema: schema });
+const generateFn = async (prompt: string, schema?: any, projectId?: string) => {
+  const result = await routeSwitch.execute({
+    prompt, estimatedTokens: 2000, scope: 'agent', scopeId: 'scopelogic-interview', responseSchema: schema,
+    ...(projectId !== undefined ? { projectId } : {}),
+  });
   return result.content;
 };
 

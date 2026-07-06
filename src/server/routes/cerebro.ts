@@ -67,10 +67,10 @@ cerebroRouter.post('/habituate', async (c) => {
 // mode which is fully functional for free-tier testing.
 cerebroRouter.post('/vector-search', async (c) => {
   try {
-    const { query } = await c.req.json();
+    const { query, projectId } = await c.req.json();
     if (!query) return c.json({ success: false, error: 'No query provided' }, 400);
 
-    const results = CerebroVectorStore.search(query, undefined, undefined, 3);
+    const results = CerebroVectorStore.search(query, undefined, undefined, 3, projectId);
 
     return c.json({
       success: true,
@@ -185,7 +185,7 @@ Keep answers concise and actionable. If the user asks something you can't help w
 
 cerebroRouter.post('/chat', async (c) => {
   try {
-    const { message, history } = await c.req.json();
+    const { message, history, projectId } = await c.req.json();
     if (!message) return c.json({ success: false, error: 'message is required' }, 400);
 
     if (!chatEngine) {
@@ -198,7 +198,7 @@ cerebroRouter.post('/chat', async (c) => {
     // no block here — see context-router.ts for the rationale.)
     let routedContextBlock = '';
     try {
-      const routed = await routeQuery(message);
+      const routed = await routeQuery(message, projectId);
       routedContextBlock = routed.map((r) => r.contextBlock).filter(Boolean).join('\n');
       log.info(
         '[CerebroChat] context router →',
@@ -221,6 +221,7 @@ cerebroRouter.post('/chat', async (c) => {
       prompt: fullPrompt,
       estimatedTokens: 300,
       scope: 'cerebro',
+      ...(projectId !== undefined ? { projectId } : {}),
     });
 
     // Extract navigation hints from the response
