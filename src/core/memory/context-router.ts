@@ -92,7 +92,7 @@ function formatGitNexusBlock(text: string): string {
 
 function vectorContext(query: string, projectId?: string): RoutedContext {
   try {
-    const results = CerebroVectorStore.search(query, undefined, undefined, 3)
+    const results = CerebroVectorStore.search(query, undefined, undefined, 3, projectId)
       .filter((r) => (r.similarity ?? 0) > 0);
     if (results.length === 0) return { source: 'none', contextBlock: '' };
     return { source: 'vector', contextBlock: formatVectorBlock(results) };
@@ -119,7 +119,7 @@ export async function routeQuery(query: string, projectId?: string): Promise<Rou
   if (intent === 'code') {
     // Best-effort GitNexus. If unavailable (the common case for end users), fall
     // back to conversational memory so the user still gets *some* context.
-    const gnText = await queryCodeStructure(query);
+    const gnText = await queryCodeStructure(query, projectId);
     if (gnText) {
       return [{ source: 'gitnexus', contextBlock: formatGitNexusBlock(gnText) }];
     }

@@ -58,4 +58,17 @@ describe('routeQuery', () => {
     expect(routed[0]!.source).toBe('vector');
     expect(routed[0]!.contextBlock).toContain('CONVERSATIONAL MEMORY CONTEXT');
   });
+
+  it('only surfaces the active project\'s memories (plus untagged/GLOBAL), never another project\'s', async () => {
+    const marker = 'zzscopeisolationprobe';
+    CerebroVectorStore.insert(`Project A note about ${marker} gadgets`, 'fact', undefined, 'proj-a-router');
+    CerebroVectorStore.insert(`Project B note about ${marker} gadgets`, 'fact', undefined, 'proj-b-router');
+    CerebroVectorStore.insert(`Global note about ${marker} gadgets`, 'fact', undefined, null);
+
+    const routed = await routeQuery(`Tell me something about ${marker} gadgets`, 'proj-a-router');
+    expect(routed[0]!.source).toBe('vector');
+    expect(routed[0]!.contextBlock).toContain('Project A note');
+    expect(routed[0]!.contextBlock).toContain('Global note');
+    expect(routed[0]!.contextBlock).not.toContain('Project B note');
+  });
 });

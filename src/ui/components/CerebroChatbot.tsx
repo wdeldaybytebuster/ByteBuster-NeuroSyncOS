@@ -11,7 +11,7 @@ interface ChatMessage {
 }
 
 export function CerebroChatbot() {
-  const { navigate } = useNavigation();
+  const { navigate, activeProjectId } = useNavigation();
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -36,7 +36,7 @@ export function CerebroChatbot() {
       const res = await fetch(`${API}/api/cerebro/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, history: messages.slice(-6) }),
+        body: JSON.stringify({ message: msg, history: messages.slice(-6), projectId: activeProjectId }),
       });
       const data = await res.json();
       if (data.success) {

@@ -10,6 +10,7 @@ interface Project {
   name: string;
   workspace_path?: string;
   project_root_path?: string | null;
+  gitnexus_repo_name?: string | null;
   created_at: number;
 }
 
@@ -27,6 +28,7 @@ export function ProjectSwitcher() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editRootPath, setEditRootPath] = useState('');
+  const [editGitnexusRepoName, setEditGitnexusRepoName] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -72,6 +74,7 @@ export function ProjectSwitcher() {
     setEditingId(p.id);
     setEditName(p.name);
     setEditRootPath(p.project_root_path || '');
+    setEditGitnexusRepoName(p.gitnexus_repo_name || '');
     setEditError('');
   };
 
@@ -96,7 +99,11 @@ export function ProjectSwitcher() {
       const res = await fetch(`${API}/api/projects/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editName.trim(), projectRootPath: editRootPath.trim() || null })
+        body: JSON.stringify({
+          name: editName.trim(),
+          projectRootPath: editRootPath.trim() || null,
+          gitnexusRepoName: editGitnexusRepoName.trim() || null,
+        })
       });
       const data = await res.json();
       if (data.success && data.project) {
@@ -156,6 +163,13 @@ export function ProjectSwitcher() {
                       <Folder size={10} />
                     </button>
                   </div>
+                  <input
+                    type="text"
+                    value={editGitnexusRepoName}
+                    onChange={e => setEditGitnexusRepoName(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded px-2 py-1.5 text-[10px] font-mono text-white focus:outline-none focus:border-amber-500/50"
+                    placeholder="GitNexus repo name (optional, disambiguates code-structure lookups)"
+                  />
                   {editError && <div className="text-[9px] text-red-400">{editError}</div>}
                   <div className="flex gap-1.5">
                     <button onClick={handleSaveEdit} disabled={editSaving} className="flex-1 px-2 py-1 rounded bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold disabled:opacity-40">{editSaving ? 'Saving...' : 'Save'}</button>
@@ -177,6 +191,7 @@ export function ProjectSwitcher() {
                   <div className="flex-1 min-w-0 text-left">
                     <span className="font-semibold truncate block">{p.name}</span>
                     {p.project_root_path && <span className="text-[9px] font-mono text-gray-600 truncate block">{p.project_root_path}</span>}
+                    {p.gitnexus_repo_name && <span className="text-[9px] font-mono text-gray-600 truncate block">gitnexus: {p.gitnexus_repo_name}</span>}
                   </div>
                   {activeProjectId === p.id && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>}
                   <button onClick={(e) => { e.stopPropagation(); handleStartEdit(p); }} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-all shrink-0" aria-label="Edit project">

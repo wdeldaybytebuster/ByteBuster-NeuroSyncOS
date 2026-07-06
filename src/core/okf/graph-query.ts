@@ -50,8 +50,21 @@ export class OKFGraphQuery {
       params.push(opts.type);
     }
     if (opts.keyword) {
-      conditions.push('(title LIKE ? OR id LIKE ?)');
-      params.push(`%${opts.keyword}%`, `%${opts.keyword}%`);
+      // Tokenize (same scheme as CerebroVectorStore._keywordFallbackSearch) so
+      // long inputs like a full conversation transcript or enriched prompt can
+      // still match a short node title/id, instead of requiring the entire
+      // query to appear verbatim.
+      const tokens = opts.keyword.toLowerCase().split(/\W+/).filter(t => t.length > 3);
+      if (tokens.length > 0) {
+        const tokenConditions = tokens.map(() => '(title LIKE ? OR id LIKE ?)');
+        conditions.push(`(${tokenConditions.join(' OR ')})`);
+        for (const token of tokens) {
+          params.push(`%${token}%`, `%${token}%`);
+        }
+      } else {
+        conditions.push('(title LIKE ? OR id LIKE ?)');
+        params.push(`%${opts.keyword}%`, `%${opts.keyword}%`);
+      }
     }
     if (opts.tier) {
       conditions.push('tier = ?');
