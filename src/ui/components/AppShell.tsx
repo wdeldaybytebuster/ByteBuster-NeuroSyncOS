@@ -5,6 +5,7 @@ import { ProjectSwitcher } from './ProjectSwitcher';
 import { useNavigation } from '../layouts/OSLayout';
 import { useTheme } from './ThemeContext';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { MODULE_LABELS } from './moduleLabels';
 
 interface AppShellProps {
   moduleId: string;
@@ -21,6 +22,10 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
   const { theme, setTheme } = useTheme();
   const { isDeveloperMode, setDeveloperMode } = useDeveloperMode();
 
+  // Hobbyist Mode shows the plain-English module name from the shared map;
+  // Developer Mode keeps the technical moduleName each dashboard passes in.
+  const displayName = isDeveloperMode ? moduleName : (MODULE_LABELS[moduleId]?.simple ?? moduleName);
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* TOP NAVIGATION BAR */}
@@ -32,7 +37,7 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
           </button>
           <img src={moduleLogo} alt={moduleName} className="h-11 w-11 object-contain drop-shadow-lg" style={{ filter: `drop-shadow(0 0 8px ${accentColor}40)` }} />
           <div className="hidden sm:flex flex-col">
-            <span className="text-base font-black tracking-wide" style={{ color: accentColor }}>{moduleName}</span>
+            <span className="text-base font-black tracking-wide" style={{ color: accentColor }}>{displayName}</span>
             <span className="text-[9px] font-mono text-gray-500 tracking-widest uppercase -mt-0.5">ByteBuster NeuroSyncOS v1.0</span>
           </div>
         </div>
@@ -59,13 +64,14 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
         <div className="flex items-center gap-3">
           <button
             onClick={() => setDeveloperMode(!isDeveloperMode)}
-            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all ${isDeveloperMode ? 'text-black' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+            className={`h-8 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all ${isDeveloperMode ? 'text-black' : 'text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'}`}
             style={isDeveloperMode ? { backgroundColor: accentColor } : {}}
             aria-label="Toggle Developer Mode"
             aria-pressed={isDeveloperMode}
-            title={isDeveloperMode ? 'Developer Mode: ON — showing raw technical details' : 'Developer Mode: OFF — showing simple explanations'}
+            title={isDeveloperMode ? 'Developer Mode: ON — showing raw technical details. Click for simple explanations.' : 'Simple Mode: ON — showing plain-English labels. Click for raw technical details.'}
           >
             <Code2 size={16} />
+            <span className="text-[10px] font-bold tracking-wide">{isDeveloperMode ? 'Dev' : 'Simple'}</span>
           </button>
           <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all" aria-label="Toggle theme">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}

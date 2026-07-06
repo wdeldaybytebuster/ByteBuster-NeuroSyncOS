@@ -414,6 +414,23 @@ okfRouter.get('/file-content', (c) => {
   }
 });
 
+// Global Knowledge Base — real file listing for the Cerebro "Global Knowledge
+// Base" widget, replacing its old 3-name hardcoded array. Uses the same
+// resolver + .md filter the OKF indexer itself uses (OKFIndexer.indexDirectory
+// calls OKFDirectoryManager.listMarkdownFiles), so this reflects exactly what
+// would actually be indexed.
+okfRouter.get('/global-files', (c) => {
+  try {
+    const dir = OKFDirectoryManager.resolveGlobalDir();
+    const files = OKFDirectoryManager.listMarkdownFiles(dir)
+      .map(f => path.relative(dir, f))
+      .sort();
+    return c.json({ success: true, files, count: files.length });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 // LLM generate function injection (set from server/index.ts)
 let _generateFn: ((prompt: string, schema?: any) => Promise<string>) | null = null;
 export function injectOKFGenerateFn(fn: (prompt: string, schema?: any) => Promise<string>) {

@@ -3,6 +3,7 @@ import { ReactFlow, Controls, Background, BackgroundVariant, MiniMap, Handle, Po
 import type { Node, Edge } from '@xyflow/react';
 import { useNavigation } from '../layouts/OSLayout';
 import { X, Brain, Globe, User, FolderOpen } from 'lucide-react';
+import { ModeLabel } from './ModeLabel';
 
 const API = 'http://localhost:3743';
 
@@ -110,7 +111,7 @@ export function OKFMindmap({ isOpen, onClose }: OKFMindmapProps) {
         <div className="h-14 shrink-0 flex items-center justify-between px-4 border-b border-white/5 bg-black/60">
           <div className="flex items-center gap-3">
             <Brain size={18} className="text-teal-400" />
-            <span className="text-sm font-bold text-white uppercase tracking-wider">OKF Knowledge Mindmap</span>
+            <span className="text-sm font-bold text-white uppercase tracking-wider"><ModeLabel simple="Notes & Docs Map" dev="OKF Knowledge Mindmap" /></span>
           </div>
 
           {/* Tier tabs */}

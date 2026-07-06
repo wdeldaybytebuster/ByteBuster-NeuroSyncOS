@@ -141,6 +141,21 @@ export async function executeRun(
 
       scoutEmitter.emit('update', { type: 'TASK_STATUS', runId, taskId: node.id, status: 'claimed' });
 
+      const parkTask = (errorMsg: string) => {
+        const redactedErrorMsg = SensitiveDataRedactor.redact(errorMsg, DataTier.INTERNAL);
+        const updateTask = db.prepare("UPDATE tasks SET status = 'parked', output_data = ? WHERE id = ?");
+        updateTask.run(JSON.stringify({ error: redactedErrorMsg }), node.id);
+
+        const todoId = crypto.randomUUID();
+        const insertTodo = db.prepare("INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        // Hard failure (thrown, or a worker-internal error envelope such as a
+        // permission-gate block) — not an AI confidence judgment. Always below
+        // the 0.70 threshold, always needs a human look.
+        insertTodo.run(todoId, node.id, 'HIGH', errorMsg, 'LLM_RETRY_OR_FIX', 'open', Date.now(), 0.0);
+
+        scoutEmitter.emit('update', { type: 'TASK_STATUS', runId, taskId: node.id, status: 'parked', error: errorMsg });
+      };
+
       try {
         // §2.1 — classify the prompt on the MAIN THREAD so we can decide where it
         // runs before touching the worker pool.
@@ -185,24 +200,28 @@ export async function executeRun(
             prompt,
             directive,
           }) as WorkerOutput;
+
+          // worker.ts catches its own internal failures (sandbox errors, scrape
+          // errors, permission-gate blocks) and returns a { status: 'error' }
+          // envelope rather than throwing — so a resolved promise here does NOT
+          // mean success. Treat a returned error envelope exactly like a thrown
+          // one: park the task and escalate, instead of silently recording it
+          // as 'completed' with the error buried in output_data. (The
+          // isLLMGeneric branch above doesn't need this check: it either
+          // throws — caught below — or builds a status:'success' object itself.)
+          if (result && typeof result === 'object' && result.status === 'error') {
+            const reason = result.error ?? result.reason ?? 'Worker returned an error envelope';
+            parkTask(reason);
+            return;
+          }
         }
+
         const redactedResult = SensitiveDataRedactor.redactObject(result, DataTier.INTERNAL);
         const updateTask = db.prepare("UPDATE tasks SET status = 'completed', output_data = ? WHERE id = ?");
         updateTask.run(JSON.stringify(redactedResult), node.id);
         scoutEmitter.emit('update', { type: 'TASK_STATUS', runId, taskId: node.id, status: 'completed', output: redactedResult });
       } catch (error) {
-        const errorMsg = String(error);
-        const redactedErrorMsg = SensitiveDataRedactor.redact(errorMsg, DataTier.INTERNAL);
-        const updateTask = db.prepare("UPDATE tasks SET status = 'parked', output_data = ? WHERE id = ?");
-        updateTask.run(JSON.stringify({ error: redactedErrorMsg }), node.id);
-        
-        const todoId = crypto.randomUUID();
-        const insertTodo = db.prepare("INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        // Worker threw during execution — a hard failure, not an AI confidence
-        // judgment. Always below the 0.70 threshold, always needs a human look.
-        insertTodo.run(todoId, node.id, 'HIGH', errorMsg, 'LLM_RETRY_OR_FIX', 'open', Date.now(), 0.0);
-
-        scoutEmitter.emit('update', { type: 'TASK_STATUS', runId, taskId: node.id, status: 'parked', error: errorMsg });
+        parkTask(String(error));
       }
     });
 
