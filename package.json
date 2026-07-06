@@ -1,6 +1,6 @@
 {
   "name": "neurosyncmega",
-  "version": "1.0.0",
+  "version": "1.0.0-alpha.1",
   "description": "NeuroSync Sovereign OS -- a local-first, privacy-first AI project orchestrator: schedules background agents, routes requests across local and free-tier LLM providers, and keeps all state in a local SQLite database.",
   "main": "index.js",
   "directories": {
