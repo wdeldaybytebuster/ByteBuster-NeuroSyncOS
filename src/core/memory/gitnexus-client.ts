@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process';
+import { db } from '../basevault/db';
 
 /**
  * GitNexusClient — optional, best-effort bridge to a locally-installed GitNexus
@@ -17,13 +18,15 @@ import { spawn, ChildProcess } from 'child_process';
  *   rendering a person sees), not structured JSON. That is exactly what we want:
  *   we prepend the verbatim text to the LLM prompt, same pattern as
  *   OKFGraphQuery.formatContextForPrompt(). We deliberately do NOT parse it.
- * - Repo disambiguation (v1 limitation): a machine can have several repos
- *   indexed. There is no reliable way from inside NeuroSync to know which one is
- *   "this" project. v1 policy: if NEUROSYNC_GITNEXUS_REPO is set, use it; else if
- *   exactly ONE repo is indexed, use it automatically; else give up on this
- *   modality (shut the server down, mark unavailable). We intentionally do NOT
- *   try to auto-detect by matching cwd against `gitnexus list` — that is
- *   over-engineering for an optional best-effort feature.
+ * - Repo disambiguation: a machine can have several repos indexed. Resolution
+ *   order per query: (1) NEUROSYNC_GITNEXUS_REPO env override, if set; (2) the
+ *   calling project's configured `projects.gitnexus_repo_name`, if it matches
+ *   one of the eval-server's indexed repos; (3) if exactly ONE repo is indexed
+ *   overall, use it automatically. Otherwise this call yields no context (the
+ *   modality itself stays up — a later call with a resolvable hint still
+ *   works). We intentionally do NOT try to auto-detect by matching cwd against
+ *   `gitnexus list` — that is over-engineering for an optional best-effort
+ *   feature.
  * - Invocation resolution mirrors `.gitnexus/run.cjs` conceptually: try a global
  *   `gitnexus` binary first (fast path), fall back to `npx gitnexus@latest` on
  *   ENOENT so machines where gitnexus is only reachable via npx still work.
@@ -40,7 +43,7 @@ interface RunningServer {
   host: string;
   port: number;
   shutdownToken: string | null;
-  repo: string; // resolved repo name to pass as the `repo` param
+  repos: string[]; // repos indexed on the eval-server, resolved per-query against this list
 }
 
 let state: ClientState = 'idle';
@@ -120,25 +123,42 @@ function spawnEvalServer(port: number): Promise<{ child: ChildProcess; host: str
   });
 }
 
+/** Fetch the list of repos the eval-server currently has indexed. */
+async function fetchIndexedRepos(host: string, port: number): Promise<string[]> {
+  const res = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
+  if (!res.ok) return [];
+  const body = (await res.json()) as { repos?: string[] };
+  return body.repos ?? [];
+}
+
+/** Look up the project's configured repo name, if any. Never throws. */
+function getProjectRepoHint(projectId?: string): string | undefined {
+  if (!projectId) return undefined;
+  try {
+    const row = db.prepare('SELECT gitnexus_repo_name FROM projects WHERE id = ?').get(projectId) as
+      | { gitnexus_repo_name: string | null }
+      | undefined;
+    return row?.gitnexus_repo_name || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Resolve which indexed repo to query. Returns null if it cannot be
- * unambiguously determined (caller should then skip the modality).
+ * Resolve which indexed repo to query for this call. Returns null if it cannot
+ * be unambiguously determined (caller should then skip the modality for this
+ * call, without disabling it for calls that carry a resolvable hint).
  */
-async function resolveRepo(host: string, port: number): Promise<string | null> {
+function resolveRepoForCall(repos: string[], projectId?: string): string | null {
   const override = process.env.NEUROSYNC_GITNEXUS_REPO;
   if (override) return override;
 
-  try {
-    const res = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { repos?: string[] };
-    const repos = body.repos ?? [];
-    if (repos.length === 1) return repos[0]!;
-    // 0 repos → nothing to query; >1 → cannot disambiguate (v1 limitation).
-    return null;
-  } catch {
-    return null;
-  }
+  const hint = getProjectRepoHint(projectId);
+  if (hint && repos.includes(hint)) return hint;
+
+  if (repos.length === 1) return repos[0]!;
+  // 0 repos → nothing to query; >1 with no matching hint → cannot disambiguate.
+  return null;
 }
 
 async function ensureServer(): Promise<RunningServer | null> {
@@ -151,16 +171,16 @@ async function ensureServer(): Promise<RunningServer | null> {
   startPromise = (async () => {
     try {
       const { child, host, port, token } = await spawnEvalServer(DEFAULT_PORT);
-      const repo = await resolveRepo(host, port);
-      if (!repo) {
-        debug('no unambiguous indexed repo (set NEUROSYNC_GITNEXUS_REPO to force) — disabling modality');
-        await gracefulKill({ child, host, port, shutdownToken: token, repo: '' });
+      const repos = await fetchIndexedRepos(host, port).catch(() => []);
+      if (repos.length === 0) {
+        debug('no repos indexed — disabling modality');
+        await gracefulKill({ child, host, port, shutdownToken: token, repos: [] });
         state = 'unavailable';
         return null;
       }
-      server = { child, host, port, shutdownToken: token, repo };
+      server = { child, host, port, shutdownToken: token, repos };
       state = 'ready';
-      debug(`eval-server ready on ${host}:${port}, repo="${repo}"`);
+      debug(`eval-server ready on ${host}:${port}, indexed repos=[${repos.join(', ')}]`);
       // Clean up the child if the app exits.
       const onExit = () => { void shutdownGitNexus(); };
       process.once('exit', onExit);
@@ -193,19 +213,24 @@ async function gracefulKill(s: RunningServer): Promise<void> {
 }
 
 /**
- * Query GitNexus for code-structure context relevant to `query`.
+ * Query GitNexus for code-structure context relevant to `query`, optionally
+ * scoped to a project (used to disambiguate which indexed repo to query when
+ * more than one is present — see resolveRepoForCall).
  * Returns the raw human-readable text block, or null if unavailable / no result.
  * NEVER throws.
  */
-export async function queryCodeStructure(query: string): Promise<string | null> {
+export async function queryCodeStructure(query: string, projectId?: string): Promise<string | null> {
   try {
     const s = await ensureServer();
     if (!s) return null;
 
+    const repo = resolveRepoForCall(s.repos, projectId);
+    if (!repo) return null;
+
     const res = await fetch(`http://${s.host}:${s.port}/tool/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ search_query: query, repo: s.repo, limit: 2 }),
+      body: JSON.stringify({ search_query: query, repo, limit: 2 }),
       signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
     });
 

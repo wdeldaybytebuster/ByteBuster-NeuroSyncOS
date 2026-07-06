@@ -92,10 +92,13 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_tasks_run_id_status ON tasks(run_id, status);
 
     -- Cerebro Memory Tables
+    -- project_id NULL = GLOBAL/USER-tier memory (visible everywhere); set = PROJECT-tier
+    -- (visible only to that project), mirroring the tier convention on okf_nodes.
     CREATE TABLE IF NOT EXISTS cerebro_memories_meta (
       id TEXT PRIMARY KEY,
       content TEXT NOT NULL,
       type TEXT NOT NULL,
+      project_id TEXT,
       last_accessed_at INTEGER NOT NULL,
       access_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
@@ -226,6 +229,7 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_okf_edges_source ON okf_edges(source_node_id);
     CREATE INDEX IF NOT EXISTS idx_okf_edges_target ON okf_edges(target_node_id);
     CREATE INDEX IF NOT EXISTS idx_scout_okf_status ON scout_okf_nodes(status);
+    CREATE INDEX IF NOT EXISTS idx_cerebro_memories_project ON cerebro_memories_meta(project_id);
   `);
 
   try {
@@ -290,6 +294,25 @@ export function initDB() {
   } catch (e: any) {
     if (!e.message.includes('duplicate column name')) {
       console.error('Error adding is_paid_tier column to llm_providers:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE cerebro_memories_meta ADD COLUMN project_id TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding project_id column to cerebro_memories_meta:', e);
+    }
+  }
+
+  try {
+    // Explicit per-project repo mapping for the GitNexus code-structure modality —
+    // lets resolveRepoForCall() disambiguate when more than one repo is indexed
+    // on the machine, instead of giving up on the whole modality (gitnexus-client.ts).
+    db.exec(`ALTER TABLE projects ADD COLUMN gitnexus_repo_name TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding gitnexus_repo_name column to projects:', e);
     }
   }
 

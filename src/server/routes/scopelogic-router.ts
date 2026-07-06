@@ -98,7 +98,7 @@ scopelogicRouter.post('/prompt', async (c) => {
     if (!message) return c.json({ error: 'Message is required' }, 400);
 
     const session = getOrCreateSession(projectId);
-    const result = await session.processUserInputAsync(message);
+    const result = await session.processUserInputAsync(message, projectId ?? undefined);
     return c.json(result);
   } catch (err: any) {
     return c.json({ error: err.message }, 400);

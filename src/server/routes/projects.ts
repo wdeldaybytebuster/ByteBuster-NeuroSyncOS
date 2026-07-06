@@ -138,6 +138,15 @@ projectsRouter.put('/:id', async (c) => {
       }
     }
 
+    // Update gitnexus_repo_name if provided (explicit repo mapping for the
+    // code-structure modality when multiple repos are indexed on the machine)
+    if (body.gitnexusRepoName !== undefined || body.gitnexus_repo_name !== undefined) {
+      const raw = body.gitnexusRepoName ?? body.gitnexus_repo_name;
+      const trimmed = raw === null ? null : String(raw).trim() || null;
+      updates.push('gitnexus_repo_name = ?');
+      params.push(trimmed);
+    }
+
     if (updates.length === 0) {
       return c.json({ success: false, error: 'No valid fields to update' }, 400);
     }
