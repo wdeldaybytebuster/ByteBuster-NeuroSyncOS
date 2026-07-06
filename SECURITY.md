@@ -30,5 +30,12 @@ for the project's current security design and assumptions.
 
 ## Supported versions
 
-This project has not yet cut a tagged release; security fixes are applied to
-the `main` branch.
+This project is in **Alpha**. Only the latest tagged release and the `main`
+branch are supported — security fixes land on `main` first and are included in
+the next Alpha tag, not backported to older tags.
+
+| Version | Supported |
+|---|---|
+| `main` | ✅ |
+| `1.0.0-alpha.1` (latest) | ✅ |
+| Older alpha tags | ❌ |
