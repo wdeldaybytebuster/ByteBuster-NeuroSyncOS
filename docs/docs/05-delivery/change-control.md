@@ -11,7 +11,7 @@ source_of_truth: true
 
 ## Change Management
 
-- **Agent Handoff Constraints:** AI coding agents must remain in scoped directories (e.g. `/src/coreexec/`) and cannot rename core modules or introduce paid/cloud library dependencies.
+- **Agent Handoff Constraints:** AI coding agents must remain in scoped directories (e.g. `src/core/coreexec/`) and cannot rename core modules or introduce paid/cloud library dependencies without flagging the user first.
 - **System Prompt Updates:** Prompt updates require specific validation checks depending on scope:
   - Typos: require Category C validation checks.
   - Constraint additions: require AI Architect and Security approval.
