@@ -1,7 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { RouteSwitchEngine } from './engine';
 import { LLMProvider } from './providers';
 import { ConsensusSynthesizer } from './council';
+import { db, initDB } from '../basevault/db';
+
+// Ensure basevault schema (including council_decisions) exists; vitest runs
+// files in isolation against a private :memory: DB (see db.ts).
+beforeAll(() => {
+  initDB();
+});
 
 class DummyProvider implements LLMProvider {
   constructor(public id: string, private response: string) {}
@@ -20,11 +27,42 @@ describe('Council Mode Triage & Consensus', () => {
     engine.setCouncilProviders([c1, c2]);
 
     const result = await engine.execute({ prompt: 'Please delete the database', estimatedTokens: 10 });
-    
+
     expect(result.isCouncilMode).toBe(true);
     expect(result.provider).toBe('Council Consensus');
     // It should pick the longest response based on our current simple heuristic
     expect(result.content).toBe('{"nodes": [{"id":"1","prompt":"drop table very safely"}]}');
+  });
+
+  it('persists a council_decisions row when Council Mode triggers', async () => {
+    const mainProv = new DummyProvider('main', '{"nodes": [{"id":"1","prompt":"drop table"}]}');
+    const c1 = new DummyProvider('c1', '{"nodes": [{"id":"1","prompt":"drop table safely"}]}');
+    const c2 = new DummyProvider('c2', '{"nodes": [{"id":"1","prompt":"drop table very safely"}]}');
+
+    const engine = new RouteSwitchEngine(undefined, mainProv);
+    engine.setCouncilProviders([c1, c2]);
+
+    const before = (db.prepare('SELECT COUNT(*) AS n FROM council_decisions').get() as any).n;
+
+    const result = await engine.execute({
+      prompt: 'Please delete the database',
+      estimatedTokens: 10,
+      scope: 'cerebro',
+      scopeId: 'test-scope-id',
+    });
+
+    expect(result.isCouncilMode).toBe(true);
+
+    const after = (db.prepare('SELECT COUNT(*) AS n FROM council_decisions').get() as any).n;
+    expect(after).toBe(before + 1);
+
+    const row = db.prepare('SELECT * FROM council_decisions ORDER BY created_at DESC LIMIT 1').get() as any;
+    expect(row.scope).toBe('cerebro');
+    expect(row.scope_id).toBe('test-scope-id');
+    expect(row.provider_count).toBe(3); // main + c1 + c2
+    expect(row.confidence).toBeCloseTo(result.confidence!, 5);
+    expect(typeof row.disagreement_score).toBe('number');
+    expect(row.chosen_response_length).toBe(result.content.length);
   });
 
   it('should not trigger council mode on low-risk prompts', async () => {

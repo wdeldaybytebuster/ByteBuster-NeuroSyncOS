@@ -128,6 +128,23 @@ export function initDB() {
       count INTEGER NOT NULL
     );
 
+    -- Council Mode (RouteSwitch high-risk arbitration) computes a real
+    -- confidence/disagreement signal from parallel provider calls, but every
+    -- caller of RouteSwitchEngine.execute() previously discarded it — only
+    -- result.content was ever read. This table is what makes that signal
+    -- queryable/visible (persisted + logged + surfaced in the dashboard)
+    -- instead of vanishing silently after being computed at real cost.
+    CREATE TABLE IF NOT EXISTS council_decisions (
+      id TEXT PRIMARY KEY,
+      scope TEXT,
+      scope_id TEXT,
+      provider_count INTEGER NOT NULL,
+      confidence REAL NOT NULL,
+      disagreement_score REAL NOT NULL,
+      chosen_response_length INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS system_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL

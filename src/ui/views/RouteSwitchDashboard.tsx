@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
-import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plug, ListOrdered } from 'lucide-react';
+import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plug, ListOrdered, Gavel } from 'lucide-react';
 import { PathBrowser } from '../components/PathBrowser';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
@@ -19,8 +19,31 @@ interface UsageData {
   requests?: number;
 }
 
+// Compact relative-time formatter for the Council Mode decision log.
+function formatRelativeTime(ts: number): string {
+  const diffMs = Date.now() - ts;
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
+}
+
 // ─── Dashboard View ─────────────────────────────────────────────────────────
 interface FleetProvider { id: string; name: string; type: string; isEnabled: boolean; }
+interface CouncilDecision {
+  id: string;
+  scope: string | null;
+  scopeId: string | null;
+  providerCount: number;
+  confidence: number;
+  disagreementScore: number;
+  chosenResponseLength: number;
+  createdAt: number;
+}
 
 function DashboardView() {
   const { activeProjectId } = useNavigation();
@@ -28,6 +51,7 @@ function DashboardView() {
   const [config, setConfig] = useState<any>(null);
   const [alerts, setAlerts] = useState<string[]>([]);
   const [fleetProviders, setFleetProviders] = useState<FleetProvider[]>([]);
+  const [councilDecisions, setCouncilDecisions] = useState<CouncilDecision[]>([]);
 
   // Poll usage every 5s
   useEffect(() => {
@@ -52,6 +76,11 @@ function DashboardView() {
     fetchProviders();
     const iv = setInterval(fetchProviders, 10000);
     return () => clearInterval(iv);
+  }, []);
+
+  // Fetch recent Council Mode (high-risk arbitration) decisions
+  useEffect(() => {
+    fetch(`${API}/api/llm/council-log?limit=10`).then(r => r.json()).then(d => { if (d.success) setCouncilDecisions(d.decisions); }).catch(() => {});
   }, []);
 
   const currentMode = config?.config?.provider === 'mock' ? 'Offline Mode' : config?.config?.provider === 'openai-compatible' ? 'Free-Cloud Mode' : 'Local Mode';
@@ -172,6 +201,37 @@ function DashboardView() {
           <button onClick={() => { fetch(`${API}/api/routeswitch/provider`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'mock' }) }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Switch to Local Mock</button>
           <button onClick={() => { fetch(`${API}/api/llm/clear-error`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Clear Last Provider Error</button>
         </div>
+      </section>
+
+      {/* Widget D: Council Mode Decisions — high-risk arbitration observability */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Gavel size={16} style={{ color: ACCENT }} /> <ModeLabel simple="High-Risk Arbitration Log" dev="Council Mode Decisions" /> <HelpTip text="High-risk prompts get routed through multiple AI providers at once so the app can compare their answers. This log shows how confident the app was in the answer it picked, each time that happened." />
+        </h2>
+
+        {councilDecisions.length === 0 ? (
+          <div className="text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">
+            No council-mode decisions yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {councilDecisions.map(d => {
+              const confColor = d.confidence > 0.9 ? '#00FF41' : d.confidence > 0.7 ? '#fbbf24' : '#ef4444';
+              return (
+                <div key={d.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-[10px] font-mono text-gray-500 shrink-0">{formatRelativeTime(d.createdAt)}</span>
+                    <span className="text-[10px] font-mono text-gray-600 shrink-0">{d.providerCount} providers</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[10px] font-mono text-gray-500">Disagreement: <span className="text-gray-300">{d.disagreementScore.toFixed(2)}</span></span>
+                    <span className="text-xs font-bold font-mono" style={{ color: confColor }}>{(d.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { FreeModeGovernor } from './governor';
 import { LLMProvider, MockProvider } from './providers';
 import { TriageClassifier } from './triage';
@@ -242,6 +243,31 @@ export class RouteSwitchEngine {
       confidence = consensus.confidence;
       finalProvider = 'Council Consensus';
       this.governor.recordUsage(request.estimatedTokens * allProviders.length, 'council');
+
+      // Council Decision Logging: the confidence/disagreement signal Council Mode
+      // computes (at real cost — parallel provider calls) was previously discarded
+      // by every caller of execute(). Persist + log it so it's observable, without
+      // gating or altering the response path. Best-effort — a DB hiccup here must
+      // never break the actual response being returned to the caller.
+      try {
+        db.prepare(`
+          INSERT INTO council_decisions (id, scope, scope_id, provider_count, confidence, disagreement_score, chosen_response_length, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          crypto.randomUUID(),
+          request.scope ?? null,
+          request.scopeId ?? null,
+          allProviders.length,
+          consensus.confidence,
+          consensus.disagreementScore,
+          consensus.content.length,
+          Date.now()
+        );
+      } catch (err) {
+        log.warn('[RouteSwitch] Failed to persist council decision (non-fatal):', err);
+      }
+
+      log.info(`[RouteSwitch] Council Mode decision: confidence=${(consensus.confidence * 100).toFixed(1)}%, disagreement=${consensus.disagreementScore.toFixed(3)}, providers=${allProviders.length}`);
     } else {
       // Fallback loop: try each provider in the chain until one succeeds
       let lastError: Error | null = null;
