@@ -251,11 +251,138 @@ MVP of the concept, not full agentic-drift detection — the debate-based and
 persona-drift sub-concepts above remain genuinely unaddressed, correctly, since
 nothing in this system's architecture produces the signals they'd need.
 
-## Chunk 5 — Safety, Reliability & Operations: NOT STARTED
+## Chunk 5 — Safety, Reliability & Operations: DONE, PR pending
 
-Expected to be the lightest-touch chunk — HITL/Deference, idempotent execution, and
-sandboxing are all already substantially real per project ground rules. Confirmation
-pass, not a rebuild.
+Audited all 23 `safety-reliability/` seed nodes — the largest category, and, as
+predicted, mostly confirmation rather than a rebuild.
+
+**Already implemented, confirmed correct:**
+- `intent-driven-database-access-sql-injection-defense` — parameterized queries
+  throughout; the model only ever produces structured JSON, never raw SQL.
+- `glass-sandbox-language-level-isolation-failure` — avoided by design: isolation
+  is OS-level (`bwrap` namespaces via `CommandSandbox`), not language-level AST
+  rewriting, exactly the failure mode this concept warns against.
+
+**Partially implemented, confirmed correct, no action needed:**
+`lethal-trifecta-agentic-code-execution` (allowlisted path closes network; the
+interactive terminal deliberately doesn't, a documented one-off ground-rule
+exception, not an oversight), `three-layer-runaway-agent-rate-limiting` and
+`resiliency-fallback-hedging-circuit-breaking` (real per-provider health
+tracking and sequential fallback; no circuit breaker or hedged requests — bigger
+patterns with no evidence of current need), `idempotency-key-three-layer-
+architecture` and `checkpointing-vs-durable-execution` (real claim-lease
+double-execution prevention and task-state-driven crash resume via
+`resumeInProgressRuns()`; no event-sourced replay log — a bigger pattern than
+this system's SQLite-task-state model needs), `tiered-action-classification-
+for-agent-autonomy` (real HITL `os_todos` queue; single-tier, not a three-way
+auto/notify/prohibited taxonomy), `schema-aligned-parsing-vs-constrained-
+decoding` (post-hoc Zod validation, consistent with the Chunk-3 finding),
+`multi-tier-runtime-guardrails-against-agent-threats` (`SensitiveDataRedactor`
+covers data-leak prevention for real; the other five guardrail categories —
+jailbreak detection, toxicity, policy violations, hallucination, schema
+enforcement — have no dedicated middleware, correctly noted as a real but
+broad gap with no single obvious next step).
+
+**Not implemented, genuinely out of scope:** `microvm-infrastructure-isolation`
+(replacing `bwrap` with Firecracker/gVisor is a fundamental infra change —
+hypervisor tooling, VM images — wrong shape entirely for a locally-installed
+desktop tool), `pre-request-reservation-post-response-settlement` and
+`saga-outbox-compensating-transactions` (distributed-systems patterns solving
+problems this single-server, single-tenant system doesn't have), `lexicographical-
+utility-gating-for-corrigibility` and `constrained-decoding-dynamic-logit-masking`
+(both require training/fine-tuning or token-level control over models this
+system only calls as external black boxes — architecturally impossible),
+`memory-poisoning-checkpoint-integrity` (cryptographic integrity-checking a
+local SQLite file the operator already has full filesystem access to — the
+threat model doesn't apply to a local-first single-tenant tool), `mid-stream-
+failover-request-migration` and `stateful-trajectory-manipulation-attacks`
+(both assume long-running streaming/multi-turn-conversation threat models that
+don't match this system's single-shot per-task generation pattern),
+`split-compute-egress-proxy-credential-brokering` (building an egress proxy to
+"fix" the interactive terminal's open network access would be solving a
+problem the ground rules already explicitly, deliberately accepted as a
+one-off tradeoff — not a gap to close), `uncertainty-quantification-function-
+calling` (see the real finding below — the caller-supplied-vs-model-computed
+distinction this node raises is exactly what led to the actual fix this
+chunk).
+
+**Checked specifically, found no real gap:** `seccomp-syscall-sanitization-
+resource-limits` — no seccomp/eBPF filter beyond the command-name allowlist and
+a flat 30s timeout. `bwrap` does support a native `--seccomp` flag, making this
+a plausible enhancement in principle, but there's no evidence any of the ~20
+allowlisted commands (`ls`, `cat`, `grep`, `python`, etc.) need syscall-level
+restriction beyond what the existing network/filesystem namespace isolation and
+command allowlist already provide — flagged as a real, bounded, *possible*
+future hardening item, not something to build speculatively now.
+`child-workflow-fault-isolation` — checked directly rather than assumed:
+`GET /api/basevault/run/:runId`'s own comment confirms it returns "DAG layout +
+per-task output_data" regardless of the overall run's status, so a human
+reviewing a failed run can already inspect what every completed task produced.
+CoreExec failing the whole run loudly on any task failure (see Chunk 4's
+`multi-agent-trap-compounding-error-propagation` finding) doesn't hide partial
+work — it just doesn't offer a three-way "partially completed" status label.
+Not worth adding for unclear payoff given the underlying data is already fully
+visible.
+
+**Real fix shipped this chunk:** `uncertainty-quantification-function-calling`
+prompted a direct check of `POST /api/todos/resolve-bulk`
+(`src/server/routes/todos.ts`), which is documented in its own code comment as
+"Deference UI bulk-approve — resolves a batch of high-confidence (>=0.70)
+todos." It didn't actually check the `confidence` column at all — the 0.70
+threshold was enforced only in the frontend (`PortGridDashboard.tsx` partitions
+items into `highItems`/`lowItems` before ever calling this endpoint), with the
+backend fully trusting whatever `todoIds` array arrived. Verified this is
+currently a *theoretical*, defense-in-depth gap rather than an active exploit —
+all three current `os_todos.confidence` insertion sites already hardcode safe
+values (`0.0` for hard failures in `engine.ts`/`validateDAG.ts`, or default
+`0.5` when `/promote` isn't given a real value) — but the endpoint's own name
+and documentation claim server-side enforcement it didn't have, and any future
+insertion path supplying a real high-confidence value, or any direct API caller
+bypassing the UI, would have been silently auto-approved with zero check. Fixed
+by re-validating `confidence >= 0.70` server-side, per-item, before resolving —
+matching the same pattern as Chunk 1's reflection.ts fix and Chunk 2's Council
+Mode fix: a safety-relevant value that was named/documented as if it mattered,
+but wasn't actually enforced where it counted.
+
+---
+
+## Base-Knowledge Integration Plan: complete (all 5 chunks)
+
+All 5 chunks from the original plan are done and merged into `oss-readiness`.
+Summary of what actually shipped, for anyone picking this up fresh:
+
+- **87 distilled research concepts** seeded into the real Global OKF tier,
+  queryable by Cerebro and browsable in the dashboard (PR #12).
+- **Three real bugs found and fixed**, each the same shape — a safety/quality
+  -relevant value computed or named as if it mattered, but not actually
+  enforced or observed where it counted: Reflexion contradiction-detection
+  silently discarding genuine fact updates (PR #13), Council Mode's
+  confidence/disagreement signal computed at real cost then discarded by every
+  caller (PR #15), and the Deference UI's 0.70 threshold enforced client-side
+  only (this chunk).
+  One orphaned-setting bug fixed (habituation decay-rate slider, PR #13).
+- **One new capability**: `scripts/audit-ground-rules.ts`, a narrow, honestly-
+  scoped slice of agentic-drift detection catching future accidental ground-
+  rule violations (PR #17).
+- **Several explicit "don't build this" recommendations**, each with reasoning
+  tied to this system's actual architecture and constraints rather than
+  silently skipped — Tree/Graph-of-Thoughts and self-consistency-voting (cost
+  governance conflict), online-RL/hidden-state concepts (architecturally
+  impossible against black-box providers), saga/compensating-transactions and
+  distributed-quota patterns (solving problems this single-server system
+  doesn't have), microVM isolation (wrong deployment shape).
+- **Two corrections to the base-knowledge seed content's own claims**,
+  surfaced by verifying rather than trusting: the MCP topology node undersold
+  a real reachability-probing feature, and the self-consistency-decoding node
+  didn't check `council.ts` at all.
+
+**What's deliberately NOT done, and should stay that way absent new evidence:**
+the "Active-Boost Multiplier" decay slider (Chunk 1), Council Mode's synthesis
+algorithm itself (Chunk 2 and re-affirmed in Chunk 4), full multi-round
+debate/circuit-breaker/saga patterns (Chunks 4-5), and full agentic drift
+detection beyond the ground-rule script (Chunk 4). Each was a deliberate
+scope boundary, not a missed deadline — re-open only if a concrete failure
+mode is observed in practice.
 
 ## Chunk 6 (conditional) — General de-fake cleanup: NOT SCHEDULED
 

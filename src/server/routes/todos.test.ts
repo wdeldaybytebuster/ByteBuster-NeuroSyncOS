@@ -80,6 +80,69 @@ describe('todosRouter /reject', () => {
   });
 });
 
+describe('todosRouter /resolve-bulk', () => {
+  it('resolves a todo with confidence >= 0.70 and requeues its task', async () => {
+    const todoId = seedTodo(0.85);
+    const todoRow = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
+
+    const res = await post('/resolve-bulk', { todoIds: [todoId] });
+    expect(res.status).toBe(200);
+    expect(res.data.resolved).toEqual([todoId]);
+    expect(res.data.failed).toEqual([]);
+
+    const row = db.prepare('SELECT status FROM os_todos WHERE id = ?').get(todoId) as any;
+    expect(row.status).toBe('resolved');
+
+    const task = db.prepare('SELECT status FROM tasks WHERE id = ?').get(todoRow.dag_node_id) as any;
+    expect(task.status).toBe('unclaimed');
+  });
+
+  it('rejects a todo with confidence < 0.70 into failed and leaves it untouched', async () => {
+    const todoId = seedTodo(0.4);
+    const todoRow = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
+
+    const res = await post('/resolve-bulk', { todoIds: [todoId] });
+    expect(res.status).toBe(200);
+    expect(res.data.resolved).toEqual([]);
+    expect(res.data.failed).toHaveLength(1);
+    expect(res.data.failed[0].id).toBe(todoId);
+
+    const row = db.prepare('SELECT status FROM os_todos WHERE id = ?').get(todoId) as any;
+    expect(row.status).toBe('open');
+
+    const task = db.prepare('SELECT status FROM tasks WHERE id = ?').get(todoRow.dag_node_id) as any;
+    expect(task.status).toBe('blocked');
+  });
+
+  it('resolves a todo with confidence exactly 0.70 (inclusive boundary)', async () => {
+    const todoId = seedTodo(0.70);
+
+    const res = await post('/resolve-bulk', { todoIds: [todoId] });
+    expect(res.data.resolved).toEqual([todoId]);
+    expect(res.data.failed).toEqual([]);
+
+    const row = db.prepare('SELECT status FROM os_todos WHERE id = ?').get(todoId) as any;
+    expect(row.status).toBe('resolved');
+  });
+
+  it('partitions a mixed batch: high-confidence resolved, low-confidence and missing failed, independently', async () => {
+    const highId = seedTodo(0.9);
+    const lowId = seedTodo(0.2);
+    const missingId = crypto.randomUUID();
+
+    const res = await post('/resolve-bulk', { todoIds: [highId, lowId, missingId] });
+    expect(res.status).toBe(200);
+    expect(res.data.resolved).toEqual([highId]);
+    expect(res.data.failed.map((f: any) => f.id).sort()).toEqual([lowId, missingId].sort());
+
+    const highRow = db.prepare('SELECT status FROM os_todos WHERE id = ?').get(highId) as any;
+    expect(highRow.status).toBe('resolved');
+
+    const lowRow = db.prepare('SELECT status FROM os_todos WHERE id = ?').get(lowId) as any;
+    expect(lowRow.status).toBe('open');
+  });
+});
+
 describe('todosRouter /reject-bulk', () => {
   it('rejects a batch of todos in one call, reporting resolved/failed separately', async () => {
     const id1 = seedTodo();
