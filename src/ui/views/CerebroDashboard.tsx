@@ -15,7 +15,7 @@ const ACCENT_GOLD = '#D4AF37';
 const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(45,212,191,0.08)] hover:shadow-[0_0_30px_rgba(45,212,191,0.2)] hover:border-[rgba(45,212,191,0.25)]`;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-interface LearningApproval { id: string; fact: string; confidence: number; status: string; source_run_id: string | null; created_at: number; }
+interface LearningApproval { id: string; fact: string; confidence: number; status: string; source_run_id: string | null; created_at: number; conflictWithId?: string | null; conflictReasoning?: string | null; }
 interface MemoryNode { id: string; content: string; type: string; last_accessed_at: number; access_count: number; created_at: number; }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────
@@ -39,7 +39,15 @@ function DashboardView() {
   // Fetch approvals queue
   useEffect(() => {
     fetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
-      if (d.success && d.queue) setApprovals(d.queue);
+      if (d.success && d.queue) {
+        // API/DB rows use snake_case (conflict_with_id / conflict_reasoning);
+        // normalize to the camelCase fields the LearningApproval interface expects.
+        setApprovals(d.queue.map((a: any) => ({
+          ...a,
+          conflictWithId: a.conflict_with_id ?? null,
+          conflictReasoning: a.conflict_reasoning ?? null,
+        })));
+      }
     }).catch(() => {});
   }, [activeProjectId]);
 
@@ -144,6 +152,12 @@ function DashboardView() {
                       <span className="text-[9px] font-mono text-gray-500">Confidence: <span style={{ color: a.confidence > 0.9 ? '#00FF41' : a.confidence > 0.7 ? '#fbbf24' : '#ef4444' }}>{(a.confidence * 100).toFixed(0)}%</span></span>
                       {a.source_run_id && <span className="text-[9px] font-mono text-gray-600">Source: {a.source_run_id.substring(0, 8)}...</span>}
                     </div>
+                    {a.conflictReasoning && (
+                      <div className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded bg-amber-500/5 border border-amber-500/20">
+                        <AlertTriangle size={10} className="text-amber-400 shrink-0" />
+                        <span className="text-[9px] text-amber-400/90 leading-relaxed">{a.conflictReasoning}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     <button onClick={() => handleApproval(a.id, 'approve')} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all" title="Promote to Substantiated Graph">✓</button>
