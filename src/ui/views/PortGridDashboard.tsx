@@ -7,6 +7,8 @@ import { OKFMindmap } from '../components/OKFMindmap';
 import { DeferenceUI } from '../components/DeferenceUI';
 import { EmbeddedTerminal } from '../components/EmbeddedTerminal';
 import { buildApprovalItems, partitionByConfidence, partitionByKind, type ApprovalItem } from '../lib/approvalQueue';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
 import { ReactFlow, Controls, Background, BackgroundVariant, Handle, Position, useNodesState, useEdgesState } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 
@@ -214,17 +216,22 @@ function DashboardView() {
     }).catch(() => {});
   }, [activeProjectId]);
 
-  // Confidence badges
-  const badges = [
-    { label: 'Local Only', active: true, color: '#00FFCC' },
-    { label: 'Redacted', active: true, color: '#00FFCC' },
-    { label: 'Human Approved', active: true, color: '#00FFCC' },
-    { label: 'Source Linked', active: false, color: '#6b7280' },
-    { label: 'Low Confidence', active: false, color: '#6b7280' },
-    { label: 'Quota Protected', active: true, color: '#00FF41' },
-    { label: 'Project Scoped', active: true, color: '#00FFCC' },
-    { label: 'Sandbox Enforced', active: true, color: '#00FFCC' },
-  ];
+  // Confidence badges — computed server-side from real signals (llm_providers,
+  // SensitiveDataRedactor, os_todos, the live governor, bwrap availability).
+  // "Quota Protected" keeps its distinct green when active; all other badges
+  // keep the original cyan-active / gray-inactive color logic.
+  const [rawBadges, setRawBadges] = useState<{ label: string; active: boolean }[]>([]);
+  useEffect(() => {
+    fetch(`${API}/api/system/proof-badges?projectId=${activeProjectId || ''}`).then(r => r.json()).then(d => {
+      if (d.success) setRawBadges(d.badges);
+    }).catch(() => {});
+  }, [activeProjectId, approvalQueue]);
+
+  const BADGE_ACTIVE_COLOR: Record<string, string> = { 'Quota Protected': '#00FF41' };
+  const badges = rawBadges.map(b => ({
+    ...b,
+    color: b.active ? (BADGE_ACTIVE_COLOR[b.label] || '#00FFCC') : '#6b7280',
+  }));
 
   const handleApprove = async (todoId: string) => {
     try {
@@ -293,7 +300,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Grid3X3 size={16} style={{ color: ACCENT }} /> {pendingProposal ? 'Workflow Proposal Review' : 'Interactive DAG Canvas'}
+            <Grid3X3 size={16} style={{ color: ACCENT }} /> {pendingProposal ? 'Workflow Proposal Review' : <ModeLabel simple="Workflow Map" dev="Interactive DAG Canvas" />}
           </h2>
           {pendingProposal ? (
             <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400">Pending Approval</span>
@@ -393,9 +400,9 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Shield size={16} className="text-amber-400" /> Attention Required — HITL Approval Queue
+            <Shield size={16} className="text-amber-400" /> <ModeLabel simple="Needs Your Approval" dev="Attention Required — HITL Approval Queue" />
           </h2>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400">Zero-Trust Gate</span>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400"><ModeLabel simple="Nothing Runs Without You" dev="Zero-Trust Gate" /></span>
         </div>
 
         {lowItems.length === 0 ? (
@@ -442,7 +449,7 @@ function DashboardView() {
       {/* Widget C: Verifiable Confidence & Local Proof Badges */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Award size={16} style={{ color: ACCENT }} /> Verifiable Confidence Badges
+          <Award size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Trust & Safety Badges" dev="Verifiable Confidence Badges" />
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {badges.map((b, i) => (
@@ -462,7 +469,7 @@ function DashboardView() {
       {/* Widget D: Active Tool Telemetry */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Eye size={16} style={{ color: ACCENT }} /> Active Tool Telemetry
+          <Eye size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Recent Tool Activity" dev="Active Tool Telemetry" />
         </h2>
         <div className="bg-black/30 border border-white/5 rounded-lg p-3 space-y-1.5 max-h-[150px] overflow-y-auto font-mono text-[10px]">
           {toolCalls.map((tc, i) => (
@@ -520,7 +527,7 @@ function DashboardView() {
       <div className="space-y-3">
         <div className="flex justify-end">
           <button onClick={() => setShowMindmap(true)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-all">
-            Open Knowledge Mindmap
+            <ModeLabel simple="Open Notes & Docs Map" dev="Open Knowledge Mindmap" />
           </button>
         </div>
         <OKFWorkspaceWidget projectId={activeProjectId} accentColor={ACCENT} />
@@ -565,9 +572,9 @@ function SetupView() {
       {/* Control A: Capability Broker (Tool Registry) */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Wrench size={16} style={{ color: ACCENT }} /> Capability Broker (Tool Registry)
+          <Wrench size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Available Tools" dev="Capability Broker (Tool Registry)" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Registered tools available across the OS. Read-only capabilities are separated from destructive write capabilities.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="The tools the AI can use. Tools that only read things are kept separate from tools that can change things." dev="Registered tools available across the OS. Read-only capabilities are separated from destructive write capabilities." /></p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {tools.map((tool, i) => (
@@ -591,9 +598,9 @@ function SetupView() {
       {/* Control B: Agent-Tool Permissions */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Users size={16} style={{ color: ACCENT }} /> Agent-Tool Permissions Matrix
+          <Users size={16} style={{ color: ACCENT }} /> <ModeLabel simple="What The AI Is Allowed To Do" dev="Agent-Tool Permissions Matrix" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Principle of least privilege. Bind specific tools to specific agent archetypes.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Each AI role gets only the abilities it needs — nothing more." dev="Principle of least privilege. Bind specific tools to specific agent archetypes." /></p>
 
         <div className="bg-black/30 border border-white/5 rounded-lg overflow-hidden">
           <div className="grid grid-cols-[1fr_60px_60px_60px_60px] gap-0 text-[10px] font-mono">
@@ -603,19 +610,19 @@ function SetupView() {
             <div className="p-2 border-b border-white/5 text-center text-gray-500">exec</div>
             <div className="p-2 border-b border-white/5 text-center text-gray-500">git</div>
 
-            <div className="p-2 border-b border-white/5 text-white font-bold">code_execute</div>
+            <div className="p-2 border-b border-white/5 text-white font-bold"><ModeLabel simple="Can Run Commands" dev="code_execute" /></div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
             <div className="p-2 border-b border-white/5 text-center text-amber-400">⚠</div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
 
-            <div className="p-2 border-b border-white/5 text-white font-bold">research_only</div>
+            <div className="p-2 border-b border-white/5 text-white font-bold"><ModeLabel simple="Read-Only Researcher" dev="research_only" /></div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
             <div className="p-2 border-b border-white/5 text-center text-red-400">✗</div>
             <div className="p-2 border-b border-white/5 text-center text-red-400">✗</div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
 
-            <div className="p-2 text-white font-bold">admin_operator</div>
+            <div className="p-2 text-white font-bold"><ModeLabel simple="Full Access" dev="admin_operator" /></div>
             <div className="p-2 text-center text-green-400">✓</div>
             <div className="p-2 text-center text-green-400">✓</div>
             <div className="p-2 text-center text-green-400">✓</div>
@@ -627,14 +634,14 @@ function SetupView() {
       {/* Control C: P0 Command Sandbox */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Lock size={16} className="text-red-400" /> P0 Command Sandbox Configuration
+          <Lock size={16} className="text-red-400" /> <ModeLabel simple="Safe Command Zone" dev="P0 Command Sandbox Configuration" /> <HelpTip text="Any command the AI runs is locked inside a protected area — it can't see your passwords, leave this project's folder, or touch the rest of your computer." />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Four-layer quarantine for the run_command shell tool. Critical safety boundary.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Four layers of protection around every command the AI runs. This is the most important safety boundary in the app." dev="Four-layer quarantine for the run_command shell tool. Critical safety boundary." /></p>
 
         <div className="space-y-3">
           {/* Allowlist */}
           <div className="bg-black/30 border border-white/5 rounded-lg p-3">
-            <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2">Layer 1: Command Allowlist ({allowlist.length} commands)</div>
+            <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2"><ModeLabel simple={`Layer 1: Allowed Commands (only these ${allowlist.length} can run)`} dev={`Layer 1: Command Allowlist (${allowlist.length} commands)`} /></div>
             <div className="flex flex-wrap gap-1.5">
               {allowlist.map((cmd, i) => (
                 <span key={i} className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-green-500/10 text-green-400 border border-green-500/20">{cmd}</span>
@@ -644,15 +651,15 @@ function SetupView() {
 
           {/* Toggles */}
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Layer 2: Environment Stripping</span><span className="text-[10px] text-gray-500">Strip all API keys via buildSandboxEnv before execution</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Layer 2: Hide Your Secrets" dev="Layer 2: Environment Stripping" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Commands can never see your API keys or passwords" dev="Strip all API keys via buildSandboxEnv before execution" /></span></div>
             <input type="checkbox" checked={envStripping} onChange={e => setEnvStripping(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Layer 3: Directory Lock</span><span className="text-[10px] text-gray-500">Restrict execution to project root via resolveCwd</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Layer 3: Stay In The Project Folder" dev="Layer 3: Directory Lock" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Commands can only work inside this project's folder" dev="Restrict execution to project root via resolveCwd" /></span></div>
             <input type="checkbox" checked={directoryLock} onChange={e => setDirectoryLock(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Layer 4: File-Argument Validation</span><span className="text-[10px] text-gray-500">Block path traversal in arguments (../../etc/passwd)</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Layer 4: Block Sneaky File Paths" dev="Layer 4: File-Argument Validation" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Stops tricks that try to reach files outside the project" dev="Block path traversal in arguments (../../etc/passwd)" /></span></div>
             <input type="checkbox" checked={fileArgValidation} onChange={e => setFileArgValidation(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
         </div>
@@ -661,7 +668,7 @@ function SetupView() {
       {/* Control D: Accessibility & SmartTips */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Accessibility size={16} style={{ color: ACCENT }} /> Accessibility & SmartTips Governance
+          <Accessibility size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Accessibility & Helpful Tips" dev="Accessibility & SmartTips Governance" />
         </h2>
 
         <div className="space-y-3">
