@@ -200,12 +200,56 @@ system doesn't have — N/A by construction), `format-tax-cognitive-degradation`
 (NeuroSync's GBNF use cases are structured-extraction tasks, not open-ended
 reasoning, where this concern is less applicable).
 
-## Chunk 4 — Multi-Agent & Orchestration: NOT STARTED
+## Chunk 4 — Multi-Agent & Orchestration: DONE, PR pending
 
-Council/consensus mode (`src/core/routeswitch/{triage,council}.ts`) and Context Drift
-Detection (likely the biggest real gap — nothing compares live system state against
-Master-Spec/OKF decisions over time). The seeded `multi-agent-orchestration/` nodes
-already have grounded applicability notes for several of these concepts.
+Audited all 13 `multi-agent-orchestration/` seed nodes.
+
+**Partially implemented — all Council-Mode-adjacent, already reasoned about in
+Chunk 2, not re-litigated here:** `dynamic-task-graph-ready-set-scheduling`
+(engine.ts's ready-set scheduler, already confirmed via `dag-workflow-
+orchestration` in Chunk 2), `structural-state-management-against-drift` (task
+state externalization real, HITL partial-coverage via `os_todos`, no dynamic tool
+loading — correctly N/A given current architecture), `multi-agent-topology-
+taxonomy` and `ensemble-orchestration-parallel-voting` (both describe Council
+Mode's real parallel-execution half and weak length-heuristic synthesis half —
+same "separate, bigger, cost-sensitive design question" already deliberately
+deferred in Chunk 2's Council Mode fix; not re-opened here).
+
+**Not implemented, genuinely out of scope:** `hierarchical-supervisor-worker-
+orchestration` (no multi-specialist-agent hierarchy exists; the single-planner +
+HITL-gated-executor model doesn't need one), `causal-hierarchical-failure-
+attribution-chief` (sophisticated root-cause analysis, no evidence of current
+need), `mathematical-convergence-and-scalable-oversight-in-debate` and
+`systemic-failure-modes-in-multi-agent-debate` and `debate-bias-and-collusion-
+mitigation-controls` (all require multi-round cross-agent debate, which Council
+Mode doesn't do — single parallel round only, so classic debate failure modes
+literally cannot occur, at the cost of also getting no debate-driven error
+correction — a real tradeoff, not free), `activation-probing-and-persona-drift-
+detection` and `mathematical-drift-metrics` (both require hidden-state access to
+models or ongoing per-agent context tracking — architecturally impossible against
+external black-box providers called via `src/core/routeswitch/providers.ts`).
+
+**Good finding, not a gap:** `multi-agent-trap-compounding-error-propagation` —
+`CoreExec`'s DAG runner already fails a run outright the moment any task reaches
+`failed` status rather than silently propagating a corrupted result forward. This
+sidesteps the exact "silent compounding" failure mode the concept describes, by
+existing design, not by accident.
+
+**The one real, buildable slice of `taxonomy-of-agentic-drift`:** full "compare
+live behavior against a spec over time" drift detection is a large, speculative
+feature with no current evidence of need — correctly not attempted. But a narrow,
+concrete, valuable slice of the same idea *is* buildable and was shipped this
+chunk: `scripts/audit-ground-rules.ts` (`npm run audit:ground-rules`), a static
+check that a *future* session hasn't silently violated one of this project's
+explicit ground rules (`docs/implementation-plan-and-progress-tracker.md` §0) —
+PortGrid/CoreExec dashboard separation, no shell-exec surface outside the
+approved `CommandSandbox`/terminal-session/gitnexus-client/MCP-probe allowlist,
+tests still routing through the `:memory:` DB branch, no external-DB dependency
+creep — plus, consolidated into the same tool, the Chunk-1-deferred check that
+the Global OKF seed mechanism is actually wired up. This is explicitly a narrow
+MVP of the concept, not full agentic-drift detection — the debate-based and
+persona-drift sub-concepts above remain genuinely unaddressed, correctly, since
+nothing in this system's architecture produces the signals they'd need.
 
 ## Chunk 5 — Safety, Reliability & Operations: NOT STARTED
 

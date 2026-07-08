@@ -11,7 +11,8 @@
     "dev:ui": "vite",
     "dev:server": "cross-env NODE_OPTIONS=\"--max-old-space-size=1024\" UV_THREADPOOL_SIZE=3 tsx watch src/server/index.ts",
     "build": "vite build",
-    "start": "cross-env NODE_OPTIONS=\"--max-old-space-size=1024\" UV_THREADPOOL_SIZE=3 tsx src/server/index.ts"
+    "start": "cross-env NODE_OPTIONS=\"--max-old-space-size=1024\" UV_THREADPOOL_SIZE=3 tsx src/server/index.ts",
+    "audit:ground-rules": "tsx scripts/audit-ground-rules.ts"
   },
   "keywords": [
     "local-first",
