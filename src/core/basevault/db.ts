@@ -316,6 +316,27 @@ export function initDB() {
   }
 
   try {
+    // Reflexion contradiction-detection: when a newly-extracted fact is highly
+    // similar (>0.85) to an existing memory but is classified as a genuine
+    // update/contradiction (not a reworded duplicate), it is queued here for
+    // human approval instead of being silently discarded or inserted alongside
+    // a possibly-conflicting memory. NULL for ordinary (non-conflicting) approvals.
+    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN conflict_with_id TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding conflict_with_id column to cerebro_learning_approvals:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN conflict_reasoning TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding conflict_reasoning column to cerebro_learning_approvals:', e);
+    }
+  }
+
+  try {
     // Explicit per-project repo mapping for the GitNexus code-structure modality —
     // lets resolveRepoForCall() disambiguate when more than one repo is indexed
     // on the machine, instead of giving up on the whole modality (gitnexus-client.ts).

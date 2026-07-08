@@ -3,6 +3,31 @@ import { db } from '../../core/basevault/db';
 import { CerebroVectorStore } from '../../core/memory/cerebro/vector';
 import { ReflectionExecutor } from '../../core/memory/cerebro/reflection';
 import { log } from '../../core/observability/logger';
+import { computeDecayFactor, DEFAULT_DECAY_RATE, DEFAULT_ACCESS_BOOST } from '../../core/memory/cerebro/habituation';
+
+// Reads the user-configurable decay-rate / access-boost multipliers from
+// system_settings (CerebroDashboard's "Habituation Scoring Algorithms"
+// sliders — cerebro_decay_multiplier / cerebro_access_boost). These were
+// previously saved but never consumed anywhere; this helper is the single
+// place that reads them back out, falling back to the same defaults
+// HabituationScorer uses when unset or not a valid number.
+function getDecaySettings(): { decayRate: number; accessBoost: number } {
+  const rows = db
+    .prepare(`SELECT key, value FROM system_settings WHERE key IN ('cerebro_decay_multiplier', 'cerebro_access_boost')`)
+    .all() as { key: string; value: string }[];
+
+  let decayRate = DEFAULT_DECAY_RATE;
+  let accessBoost = DEFAULT_ACCESS_BOOST;
+
+  for (const row of rows) {
+    const n = Number(row.value);
+    if (!Number.isFinite(n)) continue;
+    if (row.key === 'cerebro_decay_multiplier') decayRate = n;
+    if (row.key === 'cerebro_access_boost') accessBoost = n;
+  }
+
+  return { decayRate, accessBoost };
+}
 
 export const cerebroRouter = new Hono();
 
@@ -87,7 +112,7 @@ cerebroRouter.post('/vector-search', async (c) => {
 cerebroRouter.get('/learning-approvals', (c) => {
   try {
     const queue = db.prepare(`
-      SELECT id, fact, confidence, status, source_run_id, created_at
+      SELECT id, fact, confidence, status, source_run_id, created_at, conflict_with_id, conflict_reasoning
       FROM cerebro_learning_approvals
       WHERE status = 'pending'
       ORDER BY created_at ASC
@@ -103,18 +128,30 @@ cerebroRouter.post('/learning-approvals/:id/approve', async (c) => {
   try {
     const id = c.req.param('id');
     const approval = db.prepare('SELECT * FROM cerebro_learning_approvals WHERE id = ?').get(id) as any;
-    
-    if (!approval) return c.json({ success: false, error: 'Not found' }, 404);
-    
-    // Insert into cerebro_memories_meta
-    const memId = crypto.randomUUID();
-    db.prepare(`
-      INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(memId, approval.fact, 'fact', Date.now(), 0, Date.now());
 
-    // Mark as approved
-    db.prepare(`UPDATE cerebro_learning_approvals SET status = 'approved' WHERE id = ?`).run(id);
+    if (!approval) return c.json({ success: false, error: 'Not found' }, 404);
+
+    // If this approval was flagged as conflicting with (updating/contradicting)
+    // an existing memory, the new fact SUPERSEDES the old one: delete the old
+    // row from both cerebro_memories_meta and cerebro_memories_vec (mirrors the
+    // two-table delete pattern used by prune-confirm above) before inserting
+    // the new fact, rather than leaving both sitting side-by-side.
+    const memId = crypto.randomUUID();
+    const approve = db.transaction(() => {
+      if (approval.conflict_with_id) {
+        db.prepare('DELETE FROM cerebro_memories_meta WHERE id = ?').run(approval.conflict_with_id);
+        db.prepare('DELETE FROM cerebro_memories_vec WHERE id = ?').run(approval.conflict_with_id);
+      }
+
+      db.prepare(`
+        INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(memId, approval.fact, 'fact', Date.now(), 0, Date.now());
+
+      // Mark as approved
+      db.prepare(`UPDATE cerebro_learning_approvals SET status = 'approved' WHERE id = ?`).run(id);
+    });
+    approve();
 
     return c.json({ success: true, message: 'Fact approved and stored in memory.' });
   } catch (err: any) {
@@ -145,11 +182,12 @@ cerebroRouter.get('/decay-stats', (c) => {
     const NEARING_DECAY_THRESHOLD = 0.1;
     const rows = db.prepare('SELECT last_accessed_at FROM cerebro_memories_meta').all() as { last_accessed_at: number }[];
     const now = Date.now();
+    const { decayRate } = getDecaySettings();
 
     let nearingDecay = 0;
     for (const row of rows) {
       const daysSinceAccess = Math.max(0, (now - row.last_accessed_at) / (1000 * 60 * 60 * 24));
-      const decayFactor = Math.exp(-(daysSinceAccess * 0.3));
+      const decayFactor = computeDecayFactor(daysSinceAccess, decayRate);
       if (decayFactor < NEARING_DECAY_THRESHOLD) nearingDecay++;
     }
 
@@ -178,6 +216,7 @@ function selectPruneCandidates(threshold: number) {
     .prepare('SELECT id, content, last_accessed_at FROM cerebro_memories_meta')
     .all() as { id: string; content: string; last_accessed_at: number }[];
   const now = Date.now();
+  const { decayRate } = getDecaySettings();
 
   const candidates: {
     id: string;
@@ -188,7 +227,7 @@ function selectPruneCandidates(threshold: number) {
 
   for (const row of rows) {
     const daysSinceAccess = Math.max(0, (now - row.last_accessed_at) / (1000 * 60 * 60 * 24));
-    const decayFactor = Math.exp(-(daysSinceAccess * 0.3));
+    const decayFactor = computeDecayFactor(daysSinceAccess, decayRate);
     if (decayFactor < threshold) {
       candidates.push({
         id: row.id,
