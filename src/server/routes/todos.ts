@@ -50,6 +50,8 @@ todosRouter.post('/resolve', async (c) => {
 
 // Deference UI bulk-approve — resolves a batch of high-confidence (>=0.70)
 // todos in one transaction, mirroring /resolve's per-item logic for each id.
+const DEFERENCE_THRESHOLD = 0.70;
+
 todosRouter.post('/resolve-bulk', async (c) => {
   const body = await c.req.json();
   const { todoIds } = body;
@@ -65,6 +67,27 @@ todosRouter.post('/resolve-bulk', async (c) => {
     db.transaction(() => {
       for (const todoId of todoIds) {
         try {
+          const todo = db
+            .prepare('SELECT dag_node_id, status, confidence FROM os_todos WHERE id = ?')
+            .get(todoId) as any;
+
+          if (!todo) {
+            failed.push({ id: todoId, error: 'To-Do not found' });
+            continue;
+          }
+          if (todo.status !== 'open') {
+            failed.push({ id: todoId, error: `todo is not open (status: ${todo.status})` });
+            continue;
+          }
+          const confidenceValue = todo.confidence;
+          if (typeof confidenceValue !== 'number' || Number.isNaN(confidenceValue) || confidenceValue < DEFERENCE_THRESHOLD) {
+            failed.push({
+              id: todoId,
+              error: `confidence ${confidenceValue} is below the ${DEFERENCE_THRESHOLD} auto-approve threshold — resolve individually via /resolve instead`,
+            });
+            continue;
+          }
+
           const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved' WHERE id = ?");
           const info = updateTodo.run(todoId);
           if (info.changes === 0) {
@@ -72,16 +95,13 @@ todosRouter.post('/resolve-bulk', async (c) => {
             continue;
           }
 
-          const todo = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
-          if (todo) {
-            const redactedResolution = SensitiveDataRedactor.redactObject('approved', DataTier.INTERNAL);
-            const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
-            updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
+          const redactedResolution = SensitiveDataRedactor.redactObject('approved', DataTier.INTERNAL);
+          const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
+          updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
 
-            const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
-            if (task) {
-              db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
-            }
+          const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
+          if (task) {
+            db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
           }
           resolved.push(todoId);
         } catch (err: any) {
