@@ -5,6 +5,7 @@ import { NotificationCenter } from '../components/NotificationCenter';
 import { CronSummary } from '../components/CronSummary';
 import { Activity, Brain, Zap, Clock, Trash2, Sun, Moon, Monitor, MessageSquare, Gauge, FileText } from 'lucide-react';
 import { useTheme } from '../components/ThemeContext';
+import { ModeLabel } from '../components/ModeLabel';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#D4AF37';
@@ -55,7 +56,7 @@ function DashboardView() {
       {/* Widget A: OS KPI Strip */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Activity size={16} style={{ color: ACCENT }} /> System KPI Strip (Live)
+          <Activity size={16} style={{ color: ACCENT }} /> <ModeLabel simple="System At A Glance (Live)" dev="System KPI Strip (Live)" />
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
@@ -87,7 +88,7 @@ function DashboardView() {
         {/* Widget B: Action Center */}
         <section className={GLOW_BOX}>
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-            <Zap size={16} className="text-red-400" /> Action Center & Escalations
+            <Zap size={16} className="text-red-400" /> <ModeLabel simple="Needs Your Attention" dev="Action Center & Escalations" />
           </h2>
           <NotificationCenter />
         </section>
@@ -95,7 +96,7 @@ function DashboardView() {
         {/* Widget C: Cerebro Health */}
         <section className={GLOW_BOX}>
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-            <Brain size={16} className="text-teal-400" /> Cerebro Health & Habituation
+            <Brain size={16} className="text-teal-400" /> <ModeLabel simple="AI Memory Health" dev="Cerebro Health & Habituation" />
           </h2>
 
           <div className="grid grid-cols-3 gap-3 mb-4">
@@ -114,7 +115,7 @@ function DashboardView() {
           </div>
 
           <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }); }} className="w-full px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-xs font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2">
-            <Trash2 size={12} /> Trigger Memory Consolidation Sweep
+            <Trash2 size={12} /> <ModeLabel simple="Refresh Memory Scores" dev="Trigger Memory Consolidation Sweep" />
           </button>
         </section>
 
@@ -171,9 +172,9 @@ function SetupView() {
       {/* Control A: Global Polling & Concurrency */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Gauge size={16} style={{ color: ACCENT }} /> Global Polling & Concurrency Limits
+          <Gauge size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Refresh Rate & Task Limits" dev="Global Polling & Concurrency Limits" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Controls the heartbeat rhythm and traffic flow of the local server. Affects all modules.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="How often the screens refresh and how many tasks can run at once. Applies everywhere in the app." dev="Controls the heartbeat rhythm and traffic flow of the local server. Affects all modules." /></p>
 
         <div className="space-y-4">
           <div>
@@ -207,7 +208,7 @@ function SetupView() {
       {/* Control B: System Observability & Logging */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <FileText size={16} style={{ color: ACCENT }} /> System Observability & Logging
+          <FileText size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Activity Logging" dev="System Observability & Logging" />
         </h2>
         <p className="text-xs text-gray-400 mb-4">Saved as a preference, but not yet enforced anywhere in the backend — server-side logs are not currently filtered by this setting.</p>
 
@@ -249,8 +250,8 @@ function SetupView() {
           {/* SmartTips & Accessibility */}
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div>
-              <span className="text-xs font-bold text-white block">SmartTips System (Global Kill-Switch)</span>
-              <span className="text-[10px] text-gray-500">Disable 45+ educational tooltips system-wide for experienced operators</span>
+              <span className="text-xs font-bold text-white block"><ModeLabel simple="Show Helpful Tips" dev="SmartTips System (Global Kill-Switch)" /></span>
+              <span className="text-[10px] text-gray-500"><ModeLabel simple="Little explanations next to technical terms throughout the app" dev="Disable 45+ educational tooltips system-wide for experienced operators" /></span>
             </div>
             <input type="checkbox" checked={smartTips} onChange={e => setSmartTips(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
