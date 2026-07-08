@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { db } from '../../basevault/db';
 import { CerebroVectorStore } from './vector';
 import { OKFGenerator } from '../../okf/generator';
@@ -68,19 +69,33 @@ export class ReflectionExecutor {
       // Pre-Consolidation Validation: Check for semantic drift/contradictions
       // Search memory for existing facts similar to the new one
       const existing = CerebroVectorStore.search(fact, 'preference', undefined, 1);
-      
-      let isContradiction = false;
+
+      let skip = false;
       if (existing.length > 0 && existing[0]!.similarity! > 0.85) {
-        // High similarity means we already know this or something very close to it.
-        // We could implement contradiction logic here. For now, we skip duplicates to prevent bloat.
-        isContradiction = true;
+        // High similarity could mean this is a reworded duplicate (safe to skip),
+        // a genuine update/contradiction (must not be silently dropped), or a
+        // false-positive match (safe to insert normally). Classify before acting.
+        const classification = await this._classifyAgainstExisting(fact, existing[0]!.content);
+
+        if (classification === 'duplicate') {
+          skip = true;
+          log.info(`Cerebro: Ignored duplicate/contradictory fact: "${fact}"`);
+        } else if (classification === 'update') {
+          skip = true;
+          const conflictId = existing[0]!.id;
+          const conflictReasoning = `Possibly contradicts or updates an existing memory: "${existing[0]!.content}"`;
+          db.prepare(`
+            INSERT INTO cerebro_learning_approvals (id, fact, confidence, status, source_run_id, created_at, conflict_with_id, conflict_reasoning)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(crypto.randomUUID(), fact, 0.6, 'pending', null, Date.now(), conflictId, conflictReasoning);
+          log.info(`Cerebro: Queued potential contradiction/update for approval: "${fact}" (conflicts with ${conflictId})`);
+        }
+        // classification === 'unrelated' → falls through, inserted below as normal.
       }
 
-      if (!isContradiction) {
+      if (!skip) {
         CerebroVectorStore.insert(fact, 'preference');
         log.info(`Cerebro: Consolidated new preference: "${fact}"`);
-      } else {
-        log.info(`Cerebro: Ignored duplicate/contradictory fact: "${fact}"`);
       }
     }
 
@@ -137,5 +152,58 @@ export class ReflectionExecutor {
       facts.push('User prefers dark mode UI elements.');
     }
     return facts;
+  }
+
+  /**
+   * Classifies a newly-extracted fact against an existing high-similarity
+   * memory: is it a reworded duplicate (safe to skip), a genuine
+   * update/contradiction (must be routed to human approval, not silently
+   * dropped or silently inserted), or actually unrelated (a false-positive
+   * similarity match, safe to insert normally)?
+   *
+   * Routes through the live LLM when `injectLLMGenerator` has been called;
+   * falls back to a deterministic offline heuristic for tests, offline runs,
+   * and MockProvider sessions so the method never throws.
+   */
+  private static async _classifyAgainstExisting(
+    newFact: string,
+    existingContent: string
+  ): Promise<'duplicate' | 'update' | 'unrelated'> {
+    if (_generateFn) {
+      try {
+        const prompt = [
+          'You are comparing two statements from a long-term memory store.',
+          'Existing memory: "' + existingContent + '"',
+          'New candidate fact: "' + newFact + '"',
+          '',
+          'Classify the relationship as exactly ONE of the following words (respond with',
+          'only that single word, nothing else):',
+          '  duplicate  - the new fact is essentially the same statement as the existing',
+          '               memory, just reworded.',
+          '  update     - the new fact is a genuine update or contradiction of the',
+          '               existing memory (e.g. the user changed their mind).',
+          '  unrelated  - the two statements are not actually about the same thing; the',
+          '               similarity match was a false positive.',
+        ].join('\n');
+        const raw = await _generateFn(prompt);
+        const normalized = raw.trim().toLowerCase();
+        if (normalized.includes('duplicate')) return 'duplicate';
+        if (normalized.includes('update')) return 'update';
+        if (normalized.includes('unrelated')) return 'unrelated';
+        // Response didn't cleanly match any of the three options — fall back
+        // to the offline heuristic rather than throwing or guessing.
+        log.warn(`[Cerebro] Classification response did not match expected options: "${raw}"`);
+      } catch (err) {
+        log.warn('[Cerebro] LLM classification failed; falling back to offline heuristic:', err);
+      }
+    }
+
+    // Offline heuristic: we can't reliably distinguish "reworded duplicate"
+    // from "genuine contradiction" without an LLM, so the safe default is to
+    // never silently discard non-identical text. Only exact (trimmed,
+    // lowercased) matches are treated as duplicates.
+    const a = newFact.trim().toLowerCase();
+    const b = existingContent.trim().toLowerCase();
+    return a === b ? 'duplicate' : 'update';
   }
 }
