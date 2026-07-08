@@ -11,6 +11,7 @@ beforeAll(() => {
 beforeEach(() => {
   db.prepare('DELETE FROM llm_routing_rules').run();
   db.prepare('DELETE FROM llm_providers').run();
+  db.prepare('DELETE FROM council_decisions').run();
 });
 
 async function post(path: string, body: any): Promise<{ status: number; data: any }> {
@@ -92,5 +93,76 @@ describe('PUT /providers/:id — isPaidTier update', () => {
     await put(`/providers/${id}`, { name: 'Keep Paid Renamed' });
     const row = db.prepare('SELECT is_paid_tier FROM llm_providers WHERE id = ?').get(id) as any;
     expect(row.is_paid_tier).toBe(1);
+  });
+});
+
+describe('GET /council-log', () => {
+  function seedDecision(overrides: Partial<{ id: string; scope: string | null; scopeId: string | null; providerCount: number; confidence: number; disagreementScore: number; chosenResponseLength: number; createdAt: number }> = {}) {
+    const row = {
+      id: overrides.id ?? `dec_${Math.random().toString(36).slice(2)}`,
+      scope: overrides.scope ?? 'cerebro',
+      scopeId: overrides.scopeId ?? null,
+      providerCount: overrides.providerCount ?? 3,
+      confidence: overrides.confidence ?? 0.8,
+      disagreementScore: overrides.disagreementScore ?? 0.2,
+      chosenResponseLength: overrides.chosenResponseLength ?? 42,
+      createdAt: overrides.createdAt ?? Date.now(),
+    };
+    db.prepare(`
+      INSERT INTO council_decisions (id, scope, scope_id, provider_count, confidence, disagreement_score, chosen_response_length, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(row.id, row.scope, row.scopeId, row.providerCount, row.confidence, row.disagreementScore, row.chosenResponseLength, row.createdAt);
+    return row;
+  }
+
+  it('returns an empty list when there are no decisions', async () => {
+    const res = await get('/council-log');
+    expect(res.status).toBe(200);
+    expect(res.data.success).toBe(true);
+    expect(res.data.decisions).toEqual([]);
+  });
+
+  it('returns inserted rows ordered by created_at DESC', async () => {
+    const now = Date.now();
+    const oldest = seedDecision({ id: 'dec-oldest', createdAt: now - 3000, confidence: 0.5 });
+    const middle = seedDecision({ id: 'dec-middle', createdAt: now - 2000, confidence: 0.6 });
+    const newest = seedDecision({ id: 'dec-newest', createdAt: now - 1000, confidence: 0.7 });
+
+    const res = await get('/council-log');
+    expect(res.status).toBe(200);
+    expect(res.data.success).toBe(true);
+    expect(res.data.decisions.map((d: any) => d.id)).toEqual([newest.id, middle.id, oldest.id]);
+
+    const top = res.data.decisions[0];
+    expect(top.providerCount).toBe(newest.providerCount);
+    expect(top.confidence).toBe(newest.confidence);
+    expect(top.disagreementScore).toBe(newest.disagreementScore);
+    expect(top.scope).toBe(newest.scope);
+  });
+
+  it('respects the ?limit= query param and caps it at 100', async () => {
+    for (let i = 0; i < 5; i++) {
+      seedDecision({ id: `dec-limit-${i}`, createdAt: Date.now() - i * 10 });
+    }
+
+    const limited = await get('/council-log?limit=2');
+    expect(limited.status).toBe(200);
+    expect(limited.data.decisions.length).toBe(2);
+
+    // Requesting more than the cap should never exceed 100 rows returned
+    // (we only seeded 5 here, so this also confirms no error / clamping crash).
+    const overCap = await get('/council-log?limit=500');
+    expect(overCap.status).toBe(200);
+    expect(overCap.data.decisions.length).toBeLessThanOrEqual(100);
+  });
+
+  it('defaults to 20 when ?limit= is omitted', async () => {
+    for (let i = 0; i < 25; i++) {
+      seedDecision({ id: `dec-default-${i}`, createdAt: Date.now() - i * 10 });
+    }
+
+    const res = await get('/council-log');
+    expect(res.status).toBe(200);
+    expect(res.data.decisions.length).toBe(20);
   });
 });
