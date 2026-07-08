@@ -22,5 +22,8 @@ source_of_truth: true
 
 - Multi-tenant cloud hosting.
 - Distributed service mesh configurations.
-- Unsupervised autonomous background schedulers (ScoutDaemon deferred).
-- Heavy semantic vector databases (default to local keyword searches).
+- Unsupervised autonomous execution — ScoutDaemon does real idle-time
+  background research, but any resulting workflow proposal still requires
+  human approval before it can run (see `docs/docs/04-security/security-privacy-model.md`).
+- Heavy external vector databases — uses `sqlite-vec` for local semantic
+  search instead.

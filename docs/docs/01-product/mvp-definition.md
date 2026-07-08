@@ -30,5 +30,8 @@ A beginner hobbyist can: `successfully execute a 3-node DAG workflow locally, en
 
 | Capability | Reason Deferred | Revisit Trigger |
 | --- | --- | --- |
-| ScoutDaemon Schedulers | Reduces background CPU/battery drain | Phase 7 hardening |
 | OAuth Integrations | Paid model licensing complication | User request |
+
+Note: ScoutDaemon idle-time scheduling (real idle detector + OKF scanning) has
+since shipped and is not deferred — see `docs/docs/00-foundation/project-charter.md`
+§3.

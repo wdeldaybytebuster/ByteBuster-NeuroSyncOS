@@ -1,4 +1,6 @@
-# RESEARCH IMPORTANT The State-Aware Frontier: Emerging Competitor UX Patterns in Navigational AI and Conversational Chatbots
+> Background research — not a status document.
+
+# The State-Aware Frontier: Emerging Competitor UX Patterns
 
 The State-Aware Frontier: Emerging Competitor UX Patterns in Navigational AI and Conversational Chatbots
 

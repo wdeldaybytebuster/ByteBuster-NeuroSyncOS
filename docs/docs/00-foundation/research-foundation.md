@@ -1,47 +1,51 @@
 ---
 owner: ByteBuster Core Team
 review_cadence: Quarterly
+last_updated: "2026-07-08"
+source_of_truth: true
 ---
 
-# **Research Foundation**
+# Research Foundation
 
-**Inference Score:** 0.92
+The architectural choices behind each module trace back to specific problems
+with conventional agent-orchestration designs:
 
-## **1\. Primary Architectural Research**
+## 1. Transactional execution (CoreExec & BaseVault)
 
-### **1.1 The Shift to Transactional Execution (CoreExec & BaseVault)**
+Analytical/columnar engines (e.g. DuckDB) introduce friction for
+row-level task orchestration. NeuroSync uses `better-sqlite3` in WAL mode:
+B-tree indexes and `BEGIN IMMEDIATE` transaction semantics give atomic
+task-claiming and durable state updates for single-process local execution,
+and `resumeInProgressRuns()` replays interrupted `workflow_runs` on boot
+without duplicating completed task effects.
 
-* **Finding:** Analytical columnar scans (e.g., DuckDB) introduce operational friction for task orchestration.  
-* **Application:** NeuroSync transitioned from DuckDB to SQLite (with better-sqlite3). SQLite's B-tree indexes and BEGIN IMMEDIATE transaction semantics perfectly align with atomic task-claiming and row-level state updates required for single-process local execution.  
-* **Source:** *Technical Report: Hierarchical Scoped Memory and Project Workspaces Architecture*
+## 2. Draft-only synthesis (ScopeLogic)
 
-### **1.2 Verifiable Neural Synthesis (ScopeLogic)**
+Autonomous agents suffer context drift and hallucination amplification when
+untested assumptions get written to long-term memory. ScopeLogic's interview
+loop is bounded and produces structurally-validated DAG proposals that have no
+authority to execute without human approval — the numeric-confidence
+"Deference UI" (>=0.70 auto-approve pill row vs <0.70 manual review) makes
+that confidence explicit rather than hiding it behind a vague label.
 
-* **Finding:** Autonomous agents suffer from "context drift" and "hallucination amplification" when saving untested assumptions to long-term memory.  
-* **Application:** NeuroSync employs multi-model consensus and constrained decoding. ScopeLogic operates as a bounded "interview loop" (max 8 rounds). It acts strictly as a *draft-only* facility; AI-generated workflow proposals are structurally validated but completely lack the authority to execute without human approval.  
-* **Source:** *RCH Verifiable Neural Synthesis: Architectures for Multi-Model Consensus*
+## 3. Idle-time background work (ScoutDaemon)
 
-### **1.3 Hardware-Adaptive Processing & Predictive Termination (ScoutDaemon)**
+Background AI polling drains battery and causes thermal throttling on
+consumer hardware. ScoutDaemon uses a real idle detector
+(`src/core/scoutdaemon/idle.ts`) to gate research/OKF-scanning work to actual
+idle windows rather than running continuously.
 
-* **Finding:** Background AI polling drains laptop batteries and causes thermal throttling. Unchecked "doomed" AI loops waste massive compute resources.  
-* **Application:** NeuroSync adopts principles from the "AgentStop" architecture. Utilizing token-level log probabilities (logprobs), the system implements predictive early termination. If an AI trajectory shows mathematical improbability of success, it is instantly terminated ("kill-before-compute"). Background processes are throttled to off-peak/idle windows.  
-* **Source:** *ScoutDaemon Architectural Specification: Hardware-Adaptive Resource Governance*
+## 4. Provider routing under free-tier constraints (RouteSwitch)
 
-### **1.4 Context Compaction & Routing (RouteSwitch)**
+Free-tier models (e.g. OpenRouter's free tier) have severe rate limits.
+RouteSwitch implements a fallback cascade across providers and a Free Mode
+Governor that intercepts and blocks paid-provider calls unless explicitly
+unlocked, falling back gracefully on 429/402 errors.
 
-* **Finding:** Free models (e.g., OpenRouter free tier) have severe rate limits (e.g., 20 req/min, 50 req/day). Relying on them for complex workflows causes crashes.  
-* **Application:** Implementation of a three-level fallback cascade and the "Free Mode Governor." The system actively monitors quota ledgers and falls back gracefully on 429/402 errors.  
-* **Source:** *Full-Planning Evaluation* & *Technical Report: RouteSwitch Architecture*
+## 5. Open questions
 
-## **2\. Competitive Landscape & Market Convergence**
-
-Based on recent YouTube / Market analyses (June 2026), the AI operating system market is rapidly converging on:
-
-1. **Durable Agent Execution:** Moving away from open-ended chat loops toward auditable execution lineage (validation for CoreExec).  
-2. **Siloed / Scoped Memory:** Transitioning from "stuffing the prompt" to structured, extract/consolidate pipelines (validation for BaseVault).  
-3. **MCP (Model Context Protocol):** Standardization of tool discovery and usage, deprecating brittle point-to-point SDKs (validation for RouteSwitch/PortGrid).
-
-## **3\. Assumptions & Placeholders**
-
-* **\[PLACEHOLDER \- NO DATA AVAILABLE\]:** Precise performance benchmarks for local embeddings using sqlite-vec on legacy (6-year-old) hardware, pending Phase 3 empirical testing.  
-* **\[PLACEHOLDER \- NO DATA AVAILABLE\]:** Exact latency metrics for the multi-model consensus fallback cascade under simulated offline conditions.
+Genuinely unresolved items live in
+`docs/docs/09-governance/open-questions.md` and
+`docs/llm-provider-testing-plan-2026-07-01.md` — do not duplicate them here.
+This file documents *why* the architecture is shaped the way it is, not
+current task status.

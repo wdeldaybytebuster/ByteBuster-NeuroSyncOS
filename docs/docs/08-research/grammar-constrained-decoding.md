@@ -1,4 +1,7 @@
-# RESEARCH IMPORTANT Architectures and Optimization Strategies for Grammar-Constrained Decoding on Legacy and Heterogeneous Compute Environments
+> Background research — not a status document. Relevant to
+> `docs/grammar/dag.gbnf`, the real GBNF grammar used at runtime.
+
+# Architectures and Optimization Strategies for Grammar-Constrained Decoding
 
 Architectures and Optimization Strategies for Grammar-Constrained Decoding on Legacy and Heterogeneous Compute Environments
 

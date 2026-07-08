@@ -1,4 +1,7 @@
-# RESEARCH IMPORTANT SQLite 5-Tier Architecture Design.docx
+> Background research feeding the BaseVault design — not a status document.
+> Cross-check specifics against `docs/docs/02-architecture/data-architecture.md`.
+
+# SQLite 5-Tier Architecture Design (Research)
 
 Architectural Specification: Native Relational Implementation of a 5-Tier Hierarchical Rule Management Architecture in SQLite
 

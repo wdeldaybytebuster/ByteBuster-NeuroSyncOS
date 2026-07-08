@@ -1,4 +1,8 @@
-# RESEARCH IMPORTANTTechnical Methodologies for Optimizing Local SQLite Vector Retrieval in Edge-Oriented AI Tooling
+> Background research feeding the Cerebro/memory vector-search design — not a
+> status document. Cross-check specifics against
+> `docs/docs/02-architecture/data-architecture.md`.
+
+# Technical Methodologies for Optimizing Local SQLite Vector Retrieval in Edge-Oriented AI Tooling
 
 Technical Methodologies for Optimizing Local SQLite Vector Retrieval in Edge-Oriented AI Tooling
 

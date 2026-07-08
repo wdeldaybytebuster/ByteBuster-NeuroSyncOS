@@ -1,54 +1,81 @@
 ---
 owner: ByteBuster Core Team
 review_cadence: Quarterly
+last_updated: "2026-07-08"
+source_of_truth: true
 ---
 
-# **Project Charter: NeuroSync Sovereign OS**
+# Project Charter: NeuroSync Sovereign OS
 
-**Inference Score:** 0.95
+## 1. Executive Summary
 
-## **1\. Executive Summary**
+NeuroSync Sovereign OS is a local-first, single-user, multi-project AI workflow
+orchestrator. One Node.js server (Hono + `better-sqlite3` in WAL mode) and one
+React/Vite dashboard run entirely on the operator's machine, scheduling
+background agents and routing requests across local and free-tier LLM
+providers with no third-party cloud dependency, no external databases, and no
+paid libraries in the dependency tree.
 
-NeuroSync Sovereign OS is a local-first, single-user, multi-project AI workflow cockpit designed to execute transactional AI workloads without cloud dependencies. Evolving from the ByteBuster Agent v1.0 Beta architecture, it enforces absolute data sovereignty, programmatic determinism, and a rigid "Human-in-the-Loop" approval boundary.
+Every AI interaction is a transactional, human-gated unit of work — AI output
+stays draft-only until an explicit human click confirms it (see
+`docs/docs/04-security/security-privacy-model.md`).
 
-The system treats every AI interaction as a transactional unit of work, providing a secure, minimal-footprint alternative to heavy, cloud-native orchestration platforms.
+## 2. Mission and Core Values
 
-## **2\. Mission and Core Values**
+- **Absolute sovereignty:** no user data, keys, or outputs leave the host
+  machine without explicit human override.
+- **Human-in-the-loop by construction:** AI-generated proposals (DAGs, code
+  edits, workflow changes) cannot self-persist or self-execute; a human must
+  approve them via the PortGrid/CoreExec approval queue.
+- **Lean local-first computing:** SQLite over heavy vector databases,
+  single-process Node.js over microservices, free/local model routing by
+  default over paid API calls.
 
-* **Absolute Sovereignty:** No user data, keys, or outputs leave the host machine without explicit human override.  
-* **Verifiable Confidence:** Every single decision, synthesis, and workflow node has concrete, auditable validation paths.  
-* **Adaptive Autonomy:** Automation occurs strictly inside user-approved bounds, relying on draft-only recommendations until human validation is provided.  
-* Rejecting unnecessary machine syntax, bloated cloud architectures, and heavy vector databases in favor of lean, local-first computing (e.g., SQLite, Node.js).
+## 3. The Six Modules
 
-## **3\. Project Objectives**
+Each module is a dashboard + backend pair:
 
-* Deploy a beta-stable, local-only workflow engine capable of running multi-node Directed Acyclic Graphs (DAGs) end-to-end.  
-* Enforce a "Free Mode Governor" that intercepts, logs, and blocks outbound requests to paid LLM providers unless explicitly unlocked.  
-* Achieve robust crash recovery via synchronous SQLite tracking, ensuring interrupted runs resume without duplicating completed task effects.
+- **PortGrid** — capability/tool governance, Zero-Trust HITL approval queue,
+  and a real embedded terminal (hardened `bwrap` sandbox) for external coding
+  agents.
+- **ScopeLogic** — guided interview engine turning a request into a draft DAG
+  proposal.
+- **RouteSwitch** — LLM provider registry, fallback chains, council/consensus
+  mode, model selector, and the Free Mode Governor (blocks paid-provider calls
+  unless explicitly unlocked).
+- **BaseVault** — SQLite data layer, backups, redaction/data-tier settings.
+- **CoreExec** — DAG workflow engine, `node-cron` scheduler, autonomy dials,
+  crash-recovery (resumes in-progress `workflow_runs` on boot).
+- **ScoutDaemon** — idle-time background research and OKF (concept graph)
+  scanning, triggered by a real idle detector, not deferred/manual-only.
 
-## **4\. Scope Boundaries**
+Plus two dashboards outside that list: CerebroDashboard (chat assistant, tri-modal
+memory: OKF semantic graph + GitNexus AST + a knowledge graph, routed by a
+Context Router) and UnifiedMasterDashboard (global view).
 
-**In-Scope (MVP Phase 1-7):**
+**PortGrid and CoreExec are permanently separate dashboards** even though an
+earlier version shared one backend directory — this was fixed by splitting
+into `src/core/portgrid/` + `src/core/coreexec/`, not by merging the UI, and
+must stay that way.
 
-* Single-user, multi-project isolation.  
-* Transactional DAG execution (CoreExec) and local SQLite persistence (BaseVault).  
-* AI proposal generation via "interview loops" that output draft-only DAGs (ScopeLogic).  
-* Mock/Free-tier model routing and fallback cascades (RouteSwitch).  
-* Cockpit UI with qualitative "Local Proof Badges" and approval flows (PortGrid).  
-* Manual execution of file/URL source checks (Manual Scout).
+## 4. Scope Boundaries
 
-**Out-of-Scope (Non-Goals for MVP):**
+**In scope:** single-user multi-project isolation, transactional DAG execution
+and SQLite persistence, draft-only AI proposal generation, free-tier/local
+model routing with paid-provider gating, the PortGrid approval cockpit and
+embedded terminal, ScoutDaemon idle-time research.
 
-* Hardened multi-tenant cloud hosting.  
-* Distributed service mesh / microservices split.  
-* Autonomous background tracking/daemonization (ScoutDaemon recurring schedules deferred).  
-* Guaranteed external model availability.  
-* Heavy semantic vector databases (defaulting to local keyword search).
+**Out of scope (by design, not by gap):** multi-tenant cloud hosting,
+distributed service mesh/microservices, heavy external vector databases (uses
+`sqlite-vec` instead), any shell escape hatch outside the `CommandSandbox`
+allowlist pattern (except the deliberately-approved embedded terminal, which
+is sandboxed by directory+network containment instead).
 
-## **5\. Success Criteria & Quality Gates**
+## 5. Quality Gates
 
-* **Reliability:** 398+ backend tests passing before Beta-Stable declaration.  
-* **Security:** 40+ sandbox escape tests passed with zero successful exfiltrations.  
-* **Supply Chain:** 0 npm audit critical/high vulnerabilities (CycloneDX v1.6 compliant).  
-* **Structural Integrity:** Zero-tolerance linting (Vale, Markdownlint, Spectral) blocking deployments on error-level findings.  
-* **Operational Validation:** Ensure no AI-generated proposal can self-persist or self-execute without explicit human approval (POST /api/workflows).
+- Full test suite passing before any release declaration (`npm test`; see
+  `docs/docs/06-quality/test-strategy.md` for current counts and the one
+  known-flaky test).
+- No AI-generated proposal can self-persist or self-execute without an
+  explicit human approval action.
+- `npx tsc --noEmit` and `npm run build` clean before merging.

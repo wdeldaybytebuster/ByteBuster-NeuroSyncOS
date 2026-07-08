@@ -20,8 +20,12 @@ source_of_truth: true
 
 - **Free Mode Governor:** The `quota_ledger` tracks token consumption. It includes a **Token & Call Forecasting module**. Before CoreExec fires a DAG, it mathematically forecasts the worst-case scenario for the workflow (e.g., maximum possible nodes * retries). If the forecast breaches the remaining daily quota, the system strictly blocks execution before node 1 starts to prevent halfway-completed, corrupted workflows.
 - **Provider Error Normalizer:** Translates multi-provider codes (429 Rate Limit, 402 Insufficient Funds) into unified local exception classes (`NLMRateLimitError`, `NLMBillingError`).
-- **Intelligent Rotation & Usage-Based Routing Engine:** RouteSwitch is engineered to support a dynamic, expansive registry of free API providers. It automatically cycles through available free models based on real-time quota tracking, latency, and capability matching to ensure high availability as free-tier limits are quickly exhausted. Continuous discovery and registration of new free models will populate the RouteSwitch backlog.
+- **Intelligent Rotation & Usage-Based Routing Engine:** RouteSwitch supports a dynamic registry of free API providers (OpenRouter, OpenCode Zen, and generic OpenAI-compatible endpoints), plus local inference via `node-llama-cpp` for GGUF models. It cycles through available free models based on real-time quota tracking, latency, and capability matching.
 
-## Implementation Log Rollup (2026-06-26)
+## Status
 
-- [2026-06-25] Expanded LLM Integration Strategy: Documented local GGUF execution via `node-llama-cpp`, generic OpenAI-compatible custom endpoint support, OpenRouter/OpenCode Zen API gateways, and direct OAuth integrations for Gemini/Grok/Claude. Research document created at `docs/docs/08-research/llm-provider-integration-research_working.md` to feed NotebookLM.
+Provider adapters for OpenCode Zen and OpenRouter, and real `node-llama-cpp`
+inference (previously a stub), landed as part of the 2026-07-01 sprint. The
+live-test matrix validating each provider end-to-end with real API keys is
+still in progress — see `docs/llm-provider-testing-plan-2026-07-01.md` §4 and
+`docs/docs/09-governance/open-questions.md`.

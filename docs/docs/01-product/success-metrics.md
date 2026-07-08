@@ -11,10 +11,13 @@ source_of_truth: true
 
 ## Quality and Reliability Metrics
 
-- **N-001:** 398+ backend tests passing before release.
-- **N-002:** 40+ sandbox escape tests passed with zero exfiltration.
+- **N-001:** Full test suite (47 test files, ~315 test cases as of 2026-07-08 —
+  see `docs/docs/06-quality/test-strategy.md` for current counts) passing
+  before release.
+- **N-002:** PortGrid sandbox tests (`src/core/portgrid/sandbox.test.ts`)
+  passing with zero successful escapes.
 - **N-003:** 0 npm audit critical/high security vulnerabilities.
-- **N-004:** Zero-tolerance linting with zero error-level findings.
+- **N-004:** Clean `npx tsc --noEmit` and `npm run build` before merging.
 
 ## Performance and Cost Metrics
 
