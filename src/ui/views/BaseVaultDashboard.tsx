@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
 import { Database, Shield, Trash2, HardDrive, Upload, Download, ScanLine, Clock, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
 
 const API = 'http://localhost:3743';
@@ -18,7 +20,7 @@ function DashboardView() {
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
   const [redactionLog, setRedactionLog] = useState<string[]>([]);
-  const [dbStats, setDbStats] = useState({ size: '14.8 MB', walCheckpoints: 22, latency: '0.82' });
+  const [dbStats, setDbStats] = useState<{ size: string; walCheckpoints: number | string; latency: string }>({ size: '—', walCheckpoints: '—', latency: '—' });
   const [retentionStats, setRetentionStats] = useState({ staleFailedRuns: 0, orphanedLeases: 0, dbSizeMB: 0, walSizeMB: 0 });
   const [okfStats, setOkfStats] = useState({ nodes: 0, edges: 0 });
 
@@ -66,15 +68,22 @@ function DashboardView() {
       .finally(() => setLoadingRuns(false));
   }, [activeProjectId]);
 
-  // Live DB stats polling
+  // Live DB stats polling — real SELECT 1 round-trip latency + real WAL
+  // checkpoint count from /api/system/db-health (was Math.random() jitter).
   useEffect(() => {
-    const iv = setInterval(() => {
-      setDbStats(prev => ({
-        ...prev,
-        latency: (Math.random() * (1.2 - 0.45) + 0.45).toFixed(2),
-        walCheckpoints: Math.floor(Math.random() * (26 - 18) + 18),
-      }));
-    }, 3000);
+    const fetchDbHealth = () => {
+      fetch(`${API}/api/system/db-health`).then(r => r.json()).then(d => {
+        if (d.success) {
+          setDbStats(prev => ({
+            ...prev,
+            latency: d.latencyMs.toFixed(2),
+            walCheckpoints: d.walCheckpoints,
+          }));
+        }
+      }).catch(() => {});
+    };
+    fetchDbHealth();
+    const iv = setInterval(fetchDbHealth, 3000);
     return () => clearInterval(iv);
   }, []);
 
@@ -84,7 +93,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Database size={16} style={{ color: ACCENT }} /> SQLite Explorer
+            <Database size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Saved Workflow Records" dev="SQLite Explorer" /> <HelpTip text="Everything the app does is stored in a single database file (SQLite) on your own computer — nothing goes to the cloud." />
           </h2>
           <span className="text-[10px] font-mono text-gray-500">
             {activeProjectId ? 'Project-scoped queries' : 'All projects (Global)'}
@@ -117,15 +126,15 @@ function DashboardView() {
         {/* Quick DB Stats */}
         <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/5">
           <div className="text-center">
-            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">DB Size</div>
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1"><ModeLabel simple="Storage Used" dev="DB Size" /></div>
             <div className="text-sm font-bold font-mono" style={{ color: ACCENT }}>{dbStats.size}</div>
           </div>
           <div className="text-center">
-            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Query Latency</div>
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1"><ModeLabel simple="Response Speed" dev="Query Latency" /></div>
             <div className="text-sm font-bold font-mono" style={{ color: ACCENT }}>{dbStats.latency} ms</div>
           </div>
           <div className="text-center">
-            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">WAL Checkpoints</div>
+            <div className="text-[9px] text-gray-500 uppercase font-mono mb-1"><ModeLabel simple="Database Save Points" dev="WAL Checkpoints" /> <HelpTip text="A save point is when the database safely writes recent changes into its main file — regular save points mean your data is being saved properly." /></div>
             <div className="text-sm font-bold font-mono text-green-400">{dbStats.walCheckpoints}/min</div>
           </div>
           <div className="text-center">
@@ -138,9 +147,9 @@ function DashboardView() {
       {/* Widget B: Data Sanitization Monitor */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <ScanLine size={16} style={{ color: ACCENT }} /> Data Sanitization Monitor
+          <ScanLine size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Private Data Protection" dev="Data Sanitization Monitor" />
         </h2>
-        <p className="text-xs text-gray-400 mb-3">Real-time ledger of PII, API keys, and credentials intercepted by the SensitiveDataRedactor before persistence.</p>
+        <p className="text-xs text-gray-400 mb-3"><ModeLabel simple="A live list of personal info, passwords, and API keys that were automatically caught and hidden before being saved." dev="Real-time ledger of PII, API keys, and credentials intercepted by the SensitiveDataRedactor before persistence." /></p>
         <div className="bg-black/40 border border-white/5 rounded-lg p-3 max-h-[180px] overflow-y-auto font-mono text-[10px] space-y-1.5">
           {redactionLog.map((entry, i) => (
             <div key={i} className="flex items-start gap-2">
@@ -154,9 +163,9 @@ function DashboardView() {
       {/* Widget C: Retention & Pruning Ledger */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Trash2 size={16} className="text-red-400" /> Retention & Pruning Ledger
+          <Trash2 size={16} className="text-red-400" /> <ModeLabel simple="Automatic Cleanup" dev="Retention & Pruning Ledger" />
         </h2>
-        <p className="text-xs text-gray-400 mb-3">Records automatically pruned by garbage collection to protect disk space.</p>
+        <p className="text-xs text-gray-400 mb-3"><ModeLabel simple="Old records the app cleaned up automatically to save disk space." dev="Records automatically pruned by garbage collection to protect disk space." /></p>
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Stale Failed Runs</div>
@@ -251,9 +260,9 @@ function SetupView() {
       {/* Control A: Sovereign Portability (Backup & Restore) */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <HardDrive size={16} style={{ color: ACCENT }} /> Sovereign Portability (Backup & Restore)
+          <HardDrive size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Backup & Restore" dev="Sovereign Portability (Backup & Restore)" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Execute live backups via native better-sqlite3 .backup() with SSE progress streaming. Restore by uploading a .db file to overwrite the vault.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Make a backup copy of all your data while the app keeps running, or restore everything from a backup file you saved earlier." dev="Execute live backups via native better-sqlite3 .backup() with SSE progress streaming. Restore by uploading a .db file to overwrite the vault." /></p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Backup */}
@@ -290,9 +299,9 @@ function SetupView() {
       {/* Control B: Zero-Trust Redaction Engine */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Shield size={16} style={{ color: ACCENT }} /> Zero-Trust Redaction Engine
+          <Shield size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Sensitive Data Filter" dev="Zero-Trust Redaction Engine" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Set the global aggressiveness of the SensitiveDataRedactor across all subsystems.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="How strictly the app hides personal info, passwords, and keys before anything is saved or shared." dev="Set the global aggressiveness of the SensitiveDataRedactor across all subsystems." /></p>
 
         <div className="flex gap-2">
           {(['public', 'internal', 'confidential'] as const).map(level => (
@@ -318,7 +327,7 @@ function SetupView() {
       {/* Control C: Database Health, Migrations, & Retention */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <FileText size={16} className="text-green-400" /> Database Health & Retention
+          <FileText size={16} className="text-green-400" /> <ModeLabel simple="Storage Health & Cleanup" dev="Database Health & Retention" />
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

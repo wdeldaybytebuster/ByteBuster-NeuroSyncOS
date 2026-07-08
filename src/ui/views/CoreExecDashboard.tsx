@@ -6,6 +6,8 @@ import { CronSummary } from '../components/CronSummary';
 import { AutonomyDials } from '../components/AutonomyDials';
 import { AgentKPIStrip } from '../components/AgentKPIStrip';
 import { GovernorUI } from '../components/GovernorUI';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
 import { Play, AlertTriangle, Clock, CheckCircle, Cpu, RefreshCw, Shield, Power, BarChart2, Activity } from 'lucide-react';
 
 const API = 'http://localhost:3743';
@@ -43,6 +45,7 @@ function DashboardView() {
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loadingRuns, setLoadingRuns] = useState(true);
+  // No hardcoded seed lines — only real SSE/task-status appends below populate this.
   const [logs, setLogs] = useState<string[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -193,29 +196,37 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <BarChart2 size={16} style={{ color: ACCENT }} /> Orchestration Metrics
+            <BarChart2 size={16} style={{ color: ACCENT }} /> <ModeLabel simple="How Well Is It Running?" dev="Orchestration Metrics" />
           </h2>
           <span className="text-[9px] font-mono text-gray-500 font-bold">Live Polling</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center text-xs">
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
-            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Success Rate</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">
+              <ModeLabel simple="Success Rate" dev="Success Rate" />
+            </span>
             <span className={`text-sm font-black font-mono ${metrics?.successRate !== null && metrics?.successRate !== undefined && metrics.successRate >= 90 ? 'text-green-500' : 'text-white'}`}>
               {metrics?.successRate !== null && metrics?.successRate !== undefined ? `${metrics.successRate.toFixed(0)}%` : '—'}
             </span>
           </div>
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
-            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Active Runs</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">
+              <ModeLabel simple="Runs In Progress" dev="Active Runs" />
+            </span>
             <span className="text-sm font-black font-mono" style={{ color: ACCENT }}>{metrics?.activeRuns ?? '—'}</span>
           </div>
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
-            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Retry Rate</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">
+              <ModeLabel simple="Retry Rate" dev="Retry Rate" />
+            </span>
             <span className="text-sm font-black text-white font-mono">
               {metrics?.retryRate !== null && metrics?.retryRate !== undefined ? `${metrics.retryRate.toFixed(1)}%` : '—'}
             </span>
           </div>
           <div className="bg-black/40 p-3 rounded-xl border border-white/5">
-            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">Avg Latency</span>
+            <span className="text-[9px] text-gray-500 font-bold uppercase block mb-1">
+              <ModeLabel simple="Avg Time Per Task" dev="Avg Latency" />
+            </span>
             <span className="text-sm font-black text-white font-mono">
               {metrics?.avgLatencyMs !== null && metrics?.avgLatencyMs !== undefined
                 ? metrics.avgLatencyMs >= 1000 ? `${(metrics.avgLatencyMs / 1000).toFixed(1)}s` : `${Math.round(metrics.avgLatencyMs)}ms`
@@ -229,7 +240,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Activity size={16} style={{ color: ACCENT }} /> CoreExec Activity Log
+            <Activity size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Activity Log" dev="Pino Transaction Log" />
           </h2>
           <button onClick={() => setLogs([])} className="text-[10px] font-bold hover:underline" style={{ color: ACCENT }}>Clear</button>
         </div>
@@ -246,7 +257,7 @@ function DashboardView() {
       {/* Widget D: Escalation & Alerts */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <AlertTriangle size={16} className="text-amber-400" /> Escalation & Alerts Ledger
+          <AlertTriangle size={16} className="text-amber-400" /> <ModeLabel simple="Alerts & Things To Review" dev="Escalation & Alerts Ledger" />
         </h2>
         <NotificationCenter />
       </section>
@@ -262,7 +273,7 @@ function DashboardView() {
       {/* Widget F: Agent/Worker Pool KPI Strip */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Activity size={16} style={{ color: ACCENT }} /> Worker Pool Telemetry
+          <Activity size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Worker Activity" dev="Worker Pool Telemetry" />
         </h2>
         <AgentKPIStrip />
       </section>
@@ -323,9 +334,9 @@ function SetupView() {
       {/* Control A: Engine Tuning & Dynamic Threading */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Cpu size={16} style={{ color: ACCENT }} /> Engine Tuning & Dynamic Threading
+          <Cpu size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Speed & Parallel Tasks" dev="Engine Tuning & Dynamic Threading" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Controls the worker thread pool size. Hardware limits are enforced — exceeding physical core count triggers a thermal warning.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="How many tasks can run at the same time. Limits are enforced automatically so your computer doesn't overheat." dev="Controls the worker thread pool size. Hardware limits are enforced — exceeding physical core count triggers a thermal warning." /></p>
         <AutonomyDials />
       </section>
 
@@ -335,9 +346,9 @@ function SetupView() {
       {/* Control B: DAG Safety & Iteration Ceilings */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Shield size={16} className="text-amber-400" /> DAG Safety & Iteration Ceilings
+          <Shield size={16} className="text-amber-400" /> <ModeLabel simple="Retry Limits" dev="DAG Safety & Iteration Ceilings" /> <HelpTip text="A workflow is a chain of steps. This sets how many times a failing step is retried before the app stops and asks you what to do." />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Maximum retry attempts before CoreExec escalates a failing node to the Alerts Ledger.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="How many times a failing step is retried before it shows up in your alerts." dev="Maximum retry attempts before CoreExec escalates a failing node to the Alerts Ledger." /></p>
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-gray-300 font-semibold">Max Iterations per Node</span>
           <span className="text-sm font-mono font-bold" style={{ color: ACCENT }}>{maxIterations}</span>
@@ -356,21 +367,21 @@ function SetupView() {
       {/* Control C: Recovery & Persistence Rules */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Power size={16} className="text-green-400" /> Recovery & Persistence Rules
+          <Power size={16} className="text-green-400" /> <ModeLabel simple="Crash Recovery" dev="Recovery & Persistence Rules" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Dictates how CoreExec handles mid-flight crashes and server reboots.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="What happens to in-progress work if the app crashes or your computer restarts." dev="Dictates how CoreExec handles mid-flight crashes and server reboots." /></p>
         <div className="space-y-3">
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div>
-              <span className="text-xs font-bold text-white block">Auto-Requeue Stale Leases</span>
-              <span className="text-[10px] text-gray-500">On restart, automatically requeue unclaimed tasks from the tasks table</span>
+              <span className="text-xs font-bold text-white block"><ModeLabel simple="Restart Interrupted Tasks" dev="Auto-Requeue Stale Leases" /></span>
+              <span className="text-[10px] text-gray-500"><ModeLabel simple="After a crash or restart, put interrupted tasks back in line automatically" dev="On restart, automatically requeue unclaimed tasks from the tasks table" /></span>
             </div>
             <input type="checkbox" checked={autoRequeue} onChange={e => setAutoRequeue(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div>
-              <span className="text-xs font-bold text-white block">Snapshot Before Crash Recovery</span>
-              <span className="text-[10px] text-gray-500">Force a WAL checkpoint snapshot before attempting to resume interrupted workflows</span>
+              <span className="text-xs font-bold text-white block"><ModeLabel simple="Save A Safety Copy Before Recovering" dev="Snapshot Before Crash Recovery" /></span>
+              <span className="text-[10px] text-gray-500"><ModeLabel simple="Make sure everything is safely written to disk before resuming interrupted work" dev="Force a WAL checkpoint snapshot before attempting to resume interrupted workflows" /></span>
             </div>
             <input type="checkbox" checked={snapshotOnCrash} onChange={e => setSnapshotOnCrash(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
@@ -380,9 +391,9 @@ function SetupView() {
       {/* Control Panel D: Workflow Cron Scheduler */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Clock size={16} style={{ color: ACCENT }} /> Workflow Cron Scheduler
+          <Clock size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Recurring Schedules" dev="Workflow Cron Scheduler" /> <HelpTip text="Run a workflow automatically on a schedule — like every morning at 9am. The schedule format is called 'cron'; the examples below show how it works." />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Schedule recurring DAG workflows. Uses standard 5-field cron syntax (minute hour day month weekday).</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Run workflows automatically on a repeating schedule. Use the examples below to write the schedule." dev="Schedule recurring DAG workflows. Uses standard 5-field cron syntax (minute hour day month weekday)." /></p>
 
         {/* Add new schedule */}
         <div className="bg-black/30 border border-white/5 rounded-lg p-4 space-y-3 mb-4">
