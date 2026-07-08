@@ -15,6 +15,7 @@ import fs from 'fs';
 
 import { readiness } from '../core/basevault/readiness';
 import { log } from '../core/observability/logger';
+import { bootstrapGlobalOKFSeed } from '../core/okf/global-seed';
 
 const app = new Hono();
 
@@ -67,6 +68,10 @@ app.use('/*', async (c, next) => {
 
 // Initialize Database
 initDB();
+
+// Seed the GLOBAL OKF knowledge tier from the repo-shipped base-knowledge
+// content on first run (no-ops once the tier has any content).
+bootstrapGlobalOKFSeed();
 
 // Initialize Scheduler
 import { initScheduler } from '../core/coreexec/scheduler';
