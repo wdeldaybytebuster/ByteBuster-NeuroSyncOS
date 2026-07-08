@@ -134,13 +134,71 @@ persistence, no UI. Fixed the *observability* gap only (persist to a new
 itself, since improving it is a separate, bigger, cost-sensitive design question
 already flagged as unresolved in the code's own comments.
 
-## Chunk 3 — Tooling & Integration: NOT STARTED
+## Chunk 3 — Tooling & Integration: DONE (audit only, no code change), PR pending
 
-MCP/function-calling/structured-output-validation, against GitNexus MCP integration
-and LLM provider adapters. Re-verify the GBNF grammar-constrained-decoding gap the
-stale audit flagged — the `tooling-integration/grammar-constrained-decoding.md` seed
-node already found this "Already implemented" via `generator.ts`/`gbnf-grammar.ts` —
-confirm that's still accurate before assuming a gap exists.
+Audited all 12 `tooling-integration/` seed nodes against the actual code. Unlike
+Chunks 1-2, this pass did **not** turn up an equivalent "computed then silently
+discarded" bug after specifically checking the highest-risk candidates — that's a
+legitimate outcome, not a shallower pass; see what was actually checked below.
+
+**Already implemented, confirmed correct:**
+- `grammar-constrained-decoding` — confirmed *more* solid than the seed node's own
+  claim, which only checked the local llama.cpp path. Verified all three provider
+  types: `src/core/routeswitch/adapters/llama-cpp.ts` does real GBNF token-level
+  constraint via `node-llama-cpp`'s `createGrammar()`;
+  `adapters/openai-compatible.ts` sends a real `response_format: {type:
+  'json_schema', strict: true}` request (the correct cloud-API equivalent of GBNF —
+  you can't do token-level logit masking on a remote API), with a live-tested
+  fallback for backends that 400 on that parameter (observed on OpenCode Zen's
+  `big-pickle` model) and a lowered temperature for schema requests as a second
+  mitigation; `adapters/mock-provider.ts` correctly branches on array-vs-object
+  schema shape (a past bug, per its own code comment, already fixed). The original
+  stale `CODE-AUDIT-REPORT.md`'s claim that "MockProvider ignores it" is no longer
+  accurate.
+- `rule-based-vs-embedding-routing-latency` — already covered via Chunks 1-2's
+  `context-router.ts`/`classifier.ts` audits.
+
+**Partially implemented, confirmed correct:**
+- `local-tool-execution-sandboxing-guardrails`, `schema-aligned-parsing`,
+  `deterministic-security-gates-before-statistical-routing` — all confirmed real
+  per the seed nodes' own citations (`CommandSandbox`, the two `_parseLLMProposal`/
+  `_extractConcepts` tolerant-parsing implementations, `TriageClassifier.isHighRisk`).
+- `mcp-three-tier-architecture-integration-topology` — **correction to the seed
+  node's verdict**: it's more accurately "partially implemented," not "not
+  implemented." `src/server/routes/system.ts` (~L353-431) does a *real*
+  reachability probe per MCP connection (HTTP fetch with timeout, or a `which`
+  check for local-binary-style connections) — this is genuine, not theater, and
+  the code's own comment already honestly discloses the boundary: "does NOT
+  implement the MCP JSON-RPC protocol, tool listing, or tool invocation (there is
+  no MCP client anywhere in this codebase)." Both the 179c178 commit message's
+  "real reachability check" claim and the seed node's "no protocol-level
+  implementation" claim are true simultaneously — they're not in tension, the
+  code is just narrower in scope than full MCP client support, and says so.
+
+**Checked specifically for a hidden gap, found none — verified, not assumed:**
+- `TriageClassifier.isHighRisk` (`src/core/routeswitch/triage.ts`): a
+  straightforward case-insensitive substring match against a fixed keyword list.
+  Inherently bypassable by synonyms/rephrasing (a known, acknowledged limitation
+  of any keyword blocklist, not a bug) — but the failure direction is
+  over-triggering (costs extra Council Mode calls on borderline text), not
+  under-triggering silently, so this isn't the kind of "computed then discarded"
+  bug found in Chunks 1-2. Not touched.
+- Confirmed no equivalent of Chunk 2's "confidence computed then discarded"
+  pattern exists in this area's structured-output/routing code paths.
+
+**Not implemented — genuinely out of scope, not oversights:**
+`constrained-decoding-attack` (NeuroSync's grammars are hardcoded/developer-
+authored, not accepting runtime schema injection — narrows this attack surface by
+construction per the seed node itself), `adaptive-vlm-routing-difficulty-
+estimation` (no vision-language/visual-agent layer exists at all — PortGrid is
+terminal/text-only), `llm-cascade-routing-with-calibrated-uncertainty` (a more
+sophisticated routing algorithm than currently exists; interesting but
+speculative, no evidence of current routing being a real problem),
+`mcp-confused-deputy-token-passthrough-risk` and `mcp-stateless-protocol-2026-
+handshake-redesign` (both require an actual MCP protocol implementation this
+system doesn't have — N/A by construction), `format-tax-cognitive-degradation`
+(NeuroSync's GBNF use cases are structured-extraction tasks, not open-ended
+reasoning, where this concern is less applicable).
 
 ## Chunk 4 — Multi-Agent & Orchestration: NOT STARTED
 
