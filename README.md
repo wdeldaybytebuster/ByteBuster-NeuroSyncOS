@@ -46,12 +46,18 @@ npm run build          # production build
 
 ## Documentation
 
-Further documentation lives under [`docs/`](./docs), including:
+Everything under [`docs/`](./docs) is organized as follows — read `docs/docs/00-09` for
+the current state of the project; the rest are dated logs, in-flight work, or historical
+record.
 
-- [User manual](./docs/user-manual.md)
-- [Security & privacy model](./docs/docs/04-security/security-privacy-model.md), [threat model](./docs/docs/04-security/threat-model.md)
-- [Architecture blueprint](./docs/docs/02-architecture/architecture-blueprint.md)
-- [Contributor templates](./docs/templates) (ADRs, RFCs, review checklists)
+| Where | What it is |
+|---|---|
+| [`docs/docs/00-09`](./docs/docs) | **Living source of truth.** Charter, product scope, architecture (incl. C4 diagrams and the [UI/confidence model](./docs/docs/02-architecture/ui-conventions-and-confidence-model.md)), security, delivery status, quality, operations, background research, and governance (decisions/risks/open questions). |
+| [`docs/implementation-plan-and-progress-tracker.md`](./docs/implementation-plan-and-progress-tracker.md) | Dated, actively-updated progress log — the place to check "is X actually done." |
+| [`docs/llm-provider-testing-plan-2026-07-01.md`](./docs/llm-provider-testing-plan-2026-07-01.md) | In-flight: the LLM-provider live-test matrix, not yet complete. |
+| [`docs/user-manual.md`](./docs/user-manual.md) | End-user how-to guide. |
+| [`docs/archive/`](./docs/archive) | Historical audits and superseded planning docs, kept in full for the record — see its `README.md` for what's there and why. |
+| [`docs/templates/`](./docs/templates) | Contributor templates (ADRs, RFCs, review checklists). |
 
 See [SECURITY.md](./SECURITY.md) for how to report a vulnerability, and
 [CONTRIBUTING.md](./CONTRIBUTING.md) for how to set up a dev environment and

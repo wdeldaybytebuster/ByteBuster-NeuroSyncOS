@@ -1,10 +1,14 @@
-# RESEARCH IMPORTANT AI OS Architectural Research Brief.docx
+> Background research — not a status document. "Next.js" mentions were
+> corrected to "Vite + React" 2026-07-08 to match the actual shipped
+> frontend; cross-check specifics against `docs/docs/02-architecture/`.
+
+# AI OS Architectural Research Brief
 
 Technical Architecture Report: ByteBuster NeuroSync Sovereign OS
 
 Executive Summary
 
-The ByteBuster NeuroSync Sovereign OS represents a specialized architectural paradigm optimized for local-first execution on resource-constrained consumer hardware. Tasked with delivering a multi-project artificial intelligence workflow cockpit for legacy machines—specifically targeting processors, memory profiles, and thermal limits typical of six-year-old laptops—the system architecture must navigate severe operational constraints. The project mandate dictates a monolithic, single-process application running Node.js 22 LTS, utilizing a Hono HTTP server, a Next.js front-end, and relying exclusively on SQLite for all persistence mechanisms. External message brokers, distributed vector databases, and cloud-hosted queues are strictly prohibited. Furthermore, the reliance on zero-budget, free-tier Large Language Model (LLM) APIs necessitates draconian resource governance to prevent rate limit exhaustion and battery depletion.
+The ByteBuster NeuroSync Sovereign OS represents a specialized architectural paradigm optimized for local-first execution on resource-constrained consumer hardware. Tasked with delivering a multi-project artificial intelligence workflow cockpit for legacy machines—specifically targeting processors, memory profiles, and thermal limits typical of six-year-old laptops—the system architecture must navigate severe operational constraints. The project mandate dictates a monolithic, single-process application running Node.js 22 LTS, utilizing a Hono HTTP server, a Vite + React front-end, and relying exclusively on SQLite for all persistence mechanisms. External message brokers, distributed vector databases, and cloud-hosted queues are strictly prohibited. Furthermore, the reliance on zero-budget, free-tier Large Language Model (LLM) APIs necessitates draconian resource governance to prevent rate limit exhaustion and battery depletion.
 
 This comprehensive report conducts an exhaustive, empirical investigation into four critical domains of the NeuroSync architecture: BaseVault and Retrieval-Augmented Generation (RAG) memory mechanisms, PortGrid Skills Hub tool sandboxing, CoreExec Directed Acyclic Graph (DAG) orchestration, and ScoutDaemon hardware-adaptive governance. Through deep technical analysis of operating system primitives, database concurrency models, and network transport mechanics, the findings present deterministic, mathematically grounded, and strictly bounded solutions to operationalize this highly constrained environment.
 
@@ -150,7 +154,7 @@ AI agent execution relies on an iterative cognitive cycle, widely categorized in
 
 In the context of the NeuroSync architecture, the required "Human-in-the-Loop" gate fundamentally alters this autonomous cycle by introducing a strict pause state between the "Plan" phase and the "Act" phase.34 When the LLM proposes an action payload, the CoreExec orchestrator intercepts the output and inserts the proposal into the SQLite database with a state enum of PENDING_APPROVAL. The Node.js event loop suspends the specific DAG evaluation sequence, effectively putting the agent to sleep and freeing CPU cycles.
 
-Upon human validation via the Next.js UI, the state enum mutates to APPROVED, and the DAG resumes, transitioning the execution directly into the child_process sandbox. This structured workflow eliminates the chaotic failure modes associated with pure autonomous agents, forcing the LLM's inherently non-deterministic, probabilistic outputs through a rigid, human-auditable state machine. If an action fails, the system utilizes explicit failure memory to prevent the agent from re-planning from scratch and falling into redundant loops.37
+Upon human validation via the Vite + React UI, the state enum mutates to APPROVED, and the DAG resumes, transitioning the execution directly into the child_process sandbox. This structured workflow eliminates the chaotic failure modes associated with pure autonomous agents, forcing the LLM's inherently non-deterministic, probabilistic outputs through a rigid, human-auditable state machine. If an action fails, the system utilizes explicit failure memory to prevent the agent from re-planning from scratch and falling into redundant loops.37
 
 3.4 Mathematical Token and Call Forecasting
 
@@ -184,7 +188,7 @@ Monitoring local metrics—such as battery drain, token velocity, and agent hall
 
 4.1 Passive Data Ingestion: Server-Sent Events (SSE) vs. WebSockets
 
-To push real-time DAG execution states and LLM token streams from the Hono HTTP backend to the Next.js frontend, an appropriate transport layer must be selected. Traditionally, WebSockets are the industry standard for real-time bidirectional communication. However, on legacy laptops with aged lithium-ion batteries and limited compute capacity, WebSockets exhibit severe performance penalties.43
+To push real-time DAG execution states and LLM token streams from the Hono HTTP backend to the Vite + React frontend, an appropriate transport layer must be selected. Traditionally, WebSockets are the industry standard for real-time bidirectional communication. However, on legacy laptops with aged lithium-ion batteries and limited compute capacity, WebSockets exhibit severe performance penalties.43
 
 WebSockets require a protocol upgrade handshake and maintain a persistent, bidirectional binary frame state.44 To ensure the connection remains alive through network address translation (NAT) firewalls, WebSockets transmit frequent ping/pong keep-alive frames—typically every 25 to 30 seconds.43 This constant chatter prevents the mobile network interface controller (NIC) and the CPU from entering deep sleep modes, resulting in a 2x to 3x increase in battery drain compared to unidirectional HTTP streaming.43 Furthermore, managing WebSocket frame buffers, masking states, and maintaining the socket layer incurs a memory overhead of approximately 50 KiB or more per connection.43
 
