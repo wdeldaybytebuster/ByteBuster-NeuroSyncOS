@@ -241,6 +241,7 @@ function SetupView() {
   const [decayMultiplier, setDecayMultiplier] = useState(0.3);
   const [accessBoost, setAccessBoost] = useState(1.5);
   const [saving, setSaving] = useState(false);
+  const [globalNodes, setGlobalNodes] = useState<{ id: string; title: string | null; type: string }[]>([]);
 
   useEffect(() => {
     fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
@@ -249,6 +250,13 @@ function SetupView() {
         if (d.settings.cerebro_decay_multiplier) setDecayMultiplier(Number(d.settings.cerebro_decay_multiplier));
         if (d.settings.cerebro_access_boost) setAccessBoost(Number(d.settings.cerebro_access_boost));
       }
+    }).catch(() => {});
+  }, []);
+
+  // Fetch real GLOBAL-tier OKF nodes (was hardcoded to 3 literal filenames)
+  useEffect(() => {
+    fetch(`${API}/api/okf/nodes?tier=GLOBAL&limit=100`).then(r => r.json()).then(d => {
+      if (d.success && d.nodes) setGlobalNodes(d.nodes);
     }).catch(() => {});
   }, []);
 
@@ -340,18 +348,22 @@ function SetupView() {
 
         <div className="bg-black/30 border border-white/5 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300 font-bold">Loaded Global Documents</span>
-            <span className="text-[10px] font-mono" style={{ color: ACCENT }}>3 files</span>
+            <span className="text-xs text-gray-300 font-bold">Loaded Global Concepts</span>
+            <span className="text-[10px] font-mono" style={{ color: ACCENT }}>{globalNodes.length} concept{globalNodes.length === 1 ? '' : 's'}</span>
           </div>
-          <div className="space-y-1.5">
-            {['system-constraints.md', 'onboarding-guide.md', 'api-reference.md'].map((doc, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded bg-white/[0.03] border border-white/5">
-                <FileText size={12} style={{ color: ACCENT }} />
-                <span className="text-[10px] font-mono text-gray-300 flex-1">{doc}</span>
-                <span className="text-[9px] text-gray-600">GLOBAL</span>
-              </div>
-            ))}
-          </div>
+          {globalNodes.length === 0 ? (
+            <div className="text-[10px] text-gray-500 px-1 py-2">No global knowledge indexed yet. Restart the server to seed the base-knowledge library, or add Markdown files to <code className="text-gray-400">~/.neurosync/global_okf/</code>.</div>
+          ) : (
+            <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+              {globalNodes.map((node) => (
+                <div key={node.id} className="flex items-center gap-2 px-3 py-1.5 rounded bg-white/[0.03] border border-white/5">
+                  <FileText size={12} style={{ color: ACCENT }} />
+                  <span className="text-[10px] font-mono text-gray-300 flex-1 truncate">{node.title || node.id}</span>
+                  <span className="text-[9px] text-gray-600">GLOBAL</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
