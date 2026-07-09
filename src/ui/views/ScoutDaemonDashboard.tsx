@@ -218,6 +218,10 @@ function SetupView() {
   const [loadCeiling, setLoadCeiling] = useState(0.8);
   const [killSwitchActive, setKillSwitchActive] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Honest AgentStop capability of the currently-active LLM provider:
+  // 'preemptive' = real per-token confidence (llama-cpp), 'heuristic' = post-hoc
+  // fallback (HTTP/synthetic providers). Backed by /api/llm/config, not hardcoded.
+  const [agentStopMode, setAgentStopMode] = useState<{ mode: 'preemptive' | 'heuristic'; activeProviderId: string } | null>(null);
 
   // Load settings
   useEffect(() => {
@@ -228,6 +232,11 @@ function SetupView() {
         if (d.settings.scout_temp_ceiling) setTempCeiling(Number(d.settings.scout_temp_ceiling));
         if (d.settings.scout_load_ceiling) setLoadCeiling(Number(d.settings.scout_load_ceiling));
       }
+    }).catch(() => {});
+    // Whether AgentStop can actually run preemptively depends on the active
+    // provider — surface it honestly rather than implying it always works.
+    fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
+      if (d.success && d.agentStop) setAgentStopMode({ mode: d.agentStop.mode, activeProviderId: d.agentStop.activeProviderId });
     }).catch(() => {});
   }, []);
 
@@ -248,6 +257,25 @@ function SetupView() {
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
           <Zap size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Stop Runaway AI Early" dev="Predictive Early Termination (AgentStop)" /> <HelpTip text="If a background AI task starts producing nonsense, it gets stopped automatically before it wastes your time and battery." />
+          {agentStopMode && (
+            agentStopMode.mode === 'preemptive' ? (
+              <span
+                className="ml-auto text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border"
+                style={{ color: '#34d399', borderColor: 'rgba(52,211,153,0.4)', background: 'rgba(52,211,153,0.08)' }}
+                title={`Active provider "${agentStopMode.activeProviderId}" streams real per-token confidence — generation is genuinely aborted mid-stream when confidence drops.`}
+              >
+                Preemptive (live)
+              </span>
+            ) : (
+              <span
+                className="ml-auto text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border"
+                style={{ color: '#fbbf24', borderColor: 'rgba(251,191,36,0.4)', background: 'rgba(251,191,36,0.08)' }}
+                title={`Active provider "${agentStopMode.activeProviderId}" does not expose real per-token confidence. AgentStop runs a post-hoc heuristic estimate only — it does not cut generation short. Real preemptive termination requires the local llama-cpp provider.`}
+              >
+                Heuristic fallback
+              </span>
+            )
+          )}
         </h2>
         <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="A safety cutoff for background AI work — if the AI starts rambling or making things up, the task is stopped early." dev="Algorithmic circuit breaker. Monitors token-level entropy during background inference. If hallucination detected, executes kill-before-compute abort." /></p>
 

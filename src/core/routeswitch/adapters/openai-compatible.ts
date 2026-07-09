@@ -1,4 +1,4 @@
-import { LLMProvider } from '../providers';
+import { GenerationStreamHooks, LLMProvider } from '../providers';
 import { db } from '../../basevault/db';
 import { decrypt } from '../../basevault/crypto';
 
@@ -27,7 +27,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
     return this.config;
   }
 
-  async generate(prompt: string, estimatedTokens: number, schema?: any): Promise<string> {
+  /**
+   * HEURISTIC FALLBACK, not real per-token confidence: this HTTP path does not
+   * (yet) request streaming logprobs, so `streamHooks` is intentionally ignored.
+   * The OpenAI Chat Completions API *does* define `"stream": true` + `"logprobs":
+   * true` returning `choices[].logprobs.content[].logprob` per SSE chunk, but
+   * whether a given self-hosted / free-tier endpoint behind `baseUrl` actually
+   * honours it cannot be verified here without a live key, so we do not claim it
+   * works. RouteSwitchEngine falls back to its post-hoc heuristic for this
+   * provider (see engine.ts). `supportsStreamingConfidence` is left unset (false).
+   */
+  async generate(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    _streamHooks?: GenerationStreamHooks,
+  ): Promise<string> {
     const effectiveConfig = await this._resolveEffectiveConfig();
     return this._generateWithConfig(prompt, estimatedTokens, schema, effectiveConfig);
   }
