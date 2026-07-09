@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { FreeModeGovernor } from './governor';
-import { LLMProvider, MockProvider } from './providers';
+import { GenerationStreamHooks, LLMProvider, MockProvider } from './providers';
 import { TriageClassifier } from './triage';
 import { ConsensusSynthesizer } from './council';
 import { AgentStopSupervisor } from './agent-stop';
@@ -172,27 +172,79 @@ export class RouteSwitchEngine {
   }
 
   /**
-   * Execute a single provider call with AgentStop post-evaluation.
+   * Whether the active provider drives the AgentStop supervisor with REAL
+   * per-token confidence (preemptive early termination) or only the post-hoc
+   * heuristic fallback. Surfaced to the UI so the AgentStop widget can tell the
+   * truth about the currently-active provider instead of hardcoding a claim.
+   */
+  public getAgentStopMode(): { mode: 'preemptive' | 'heuristic'; activeProviderId: string; supportsStreamingConfidence: boolean } {
+    const supports = this.provider.supportsStreamingConfidence === true;
+    return {
+      mode: supports ? 'preemptive' : 'heuristic',
+      activeProviderId: this.provider.id,
+      supportsStreamingConfidence: supports,
+    };
+  }
+
+  /**
+   * Execute a single provider call, streaming real per-token confidence into the
+   * AgentStop supervisor when the provider exposes it.
+   *
+   * For providers with real streaming confidence (llama-cpp), each generated
+   * token's logprob is fed to `agentStop.evaluateToken()` AS IT STREAMS, so the
+   * already-correct 3-consecutive-low-tokens abort logic is finally reachable and
+   * an abort genuinely cuts local inference short (via `streamHooks.signal`),
+   * saving real compute rather than discarding an already-complete response.
+   *
+   * For providers without it, we fall back to a clearly-labelled post-hoc
+   * heuristic that only estimates confidence — it is NOT preemptive and NOT a
+   * real logprob.
+   *
    * Returns the response content or throws on error.
    */
   private async _executeWithProvider(provider: LLMProvider, request: RouteRequest): Promise<{ content: string; confidence: number }> {
     const abortController = new AbortController();
     this.agentStop.reset();
 
-    const responseContent = await provider.generate(request.prompt, request.estimatedTokens, request.responseSchema);
+    // Real per-token confidence path: providers that support it call
+    // onTokenConfidence per streamed token; the supervisor may abort mid-stream.
+    let streamedTokenCount = 0;
+    const streamHooks: GenerationStreamHooks = {
+      signal: abortController.signal,
+      onTokenConfidence: (logprob: number) => {
+        streamedTokenCount++;
+        this.agentStop.evaluateToken(logprob, abortController);
+      },
+    };
 
-    // Post-generation quality evaluation
-    const responseTokens = responseContent.split(/\s+/).length;
-    const qualityScore = responseTokens < 3 ? -2.0 : responseTokens < 10 ? -0.8 : 0.0;
-    this.agentStop.evaluateToken(qualityScore, abortController);
+    const responseContent = await provider.generate(
+      request.prompt,
+      request.estimatedTokens,
+      request.responseSchema,
+      streamHooks,
+    );
 
-    // Continuous confidence score, 0.0-1.0. Starts at 1.0 and is penalized for
-    // low-quality generation and/or AgentStop-triggered termination.
+    const usedRealConfidence = streamedTokenCount > 0;
+
+    // Continuous confidence score, 0.0-1.0.
     let confidence = 1.0;
-    if (qualityScore < 0.0) confidence -= 0.3;
-    if (abortController.signal.aborted) {
-      log.warn('[RouteSwitch] AgentStop terminated response — low confidence detected.');
-      confidence -= 0.6;
+    if (usedRealConfidence) {
+      // Preemptive path. If AgentStop fired, real model confidence dropped below
+      // threshold for enough consecutive tokens and we terminated the generation
+      // early — reflect that as a genuinely low-confidence result.
+      if (abortController.signal.aborted) {
+        log.warn('[RouteSwitch] AgentStop preemptively terminated generation (real per-token confidence dropped below threshold H).');
+        confidence = 0.2;
+      }
+    } else {
+      // HEURISTIC FALLBACK (non-llama-cpp providers): no real per-token
+      // confidence is available from HTTP/synthetic providers, so we keep the
+      // original post-hoc word-count quality estimate ONLY as a rough confidence
+      // signal. This is explicitly NOT preemptive (the full response already
+      // exists) and NOT equivalent to real logprobs — see provider adapters.
+      const responseTokens = responseContent.split(/\s+/).length;
+      const qualityScore = responseTokens < 3 ? -2.0 : responseTokens < 10 ? -0.8 : 0.0;
+      if (qualityScore < 0.0) confidence -= 0.3;
     }
     confidence = Math.max(0, Math.min(1, confidence));
 

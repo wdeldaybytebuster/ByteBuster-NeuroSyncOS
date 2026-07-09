@@ -32,7 +32,11 @@ llmRouter.get('/config', (c) => {
   return c.json({
     success: true,
     config: currentConfig,
-    telemetry: activeGovernor ? activeGovernor.getStatus() : null
+    telemetry: activeGovernor ? activeGovernor.getStatus() : null,
+    // Honest AgentStop capability of the *currently-active* provider: real
+    // preemptive early-termination (llama-cpp streams real per-token confidence)
+    // vs. heuristic fallback (HTTP/synthetic providers). Backs the UI badge.
+    agentStop: activeEngine ? activeEngine.getAgentStopMode() : null,
   });
 });
 
