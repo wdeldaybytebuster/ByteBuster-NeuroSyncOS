@@ -122,3 +122,69 @@ export function scanProjectForDocs(projectId: string): ScanProjectResult {
     okfNodesExisting: existingOKFFiles.size,
   };
 }
+
+/**
+ * Compute a cheap change-detection fingerprint of a project's documentation
+ * files, WITHOUT the full `scanProjectForDocs()` cost (no DB reads of the
+ * processed-set, no OKF-directory listing, no per-doc `DiscoveredDoc` objects).
+ *
+ * Used by the terminal auto-scan cooldown to decide whether anything actually
+ * changed since the last scan. The old cooldown was purely time-based, so two
+ * terminal sessions for the same project closing inside the 60s window meant the
+ * second close was skipped even if a coding agent had just written new files in
+ * between — its real changes were silently missed. Comparing this signal lets a
+ * changed project force a re-scan even inside the cooldown window.
+ *
+ * The signal folds together three things across every discovered doc file:
+ *   • count       — moves whenever a doc file is added or deleted,
+ *   • newest mtime — moves whenever any doc file is edited in place,
+ *   • total bytes  — moves on most in-place edits too (belt-and-suspenders,
+ *                    catches size changes even on filesystems with coarse mtime).
+ * It uses the exact same SKIP_DIRS / DOC_EXTENSIONS walk rules as the real scan
+ * so "changed" here means the same set of files the scan would actually report.
+ *
+ * Returns null when the project has no configured root path (nothing to
+ * fingerprint) — callers treat null as "can't tell, don't rely on it to skip".
+ */
+export function computeProjectDocSignal(projectId: string): string | null {
+  const project = db.prepare('SELECT project_root_path FROM projects WHERE id = ?').get(projectId) as
+    | { project_root_path: string | null }
+    | undefined;
+  if (!project?.project_root_path) return null;
+
+  const rootPath = project.project_root_path;
+  let count = 0;
+  let newestMtimeMs = 0;
+  let totalBytes = 0;
+
+  const walk = (dir: string) => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return; // unreadable dir, skip (mirrors scanProjectForDocs)
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') && entry.name !== '.env.example') continue; // skip dotfiles
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (!DOC_EXTENSIONS.has(ext)) continue;
+        try {
+          const stat = fs.statSync(fullPath);
+          count += 1;
+          totalBytes += stat.size;
+          if (stat.mtimeMs > newestMtimeMs) newestMtimeMs = stat.mtimeMs;
+        } catch {
+          /* unreadable file, skip */
+        }
+      }
+    }
+  };
+
+  walk(rootPath);
+  return `${count}:${newestMtimeMs}:${totalBytes}`;
+}
