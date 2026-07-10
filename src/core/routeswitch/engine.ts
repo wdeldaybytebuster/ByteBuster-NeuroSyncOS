@@ -306,15 +306,26 @@ export class RouteSwitchEngine {
     // sequential chain already treats a locked paid provider (like an exhausted
     // one) rather than inventing a new refuse/error path, and it keeps the
     // request served by a free provider whenever one exists.
-    const councilFilteredOut = TriageClassifier.isHighRisk(request.prompt)
-      && this.councilProviders.length >= 2
-      && eligibleCouncilProviders.length < 2;
+    // Whether Council Mode is even configured for this prompt at all — this
+    // must stay based on `this.councilProviders.length` (the ORIGINAL trigger
+    // basis, unrelated to eligibility) rather than `eligibleCouncilProviders`,
+    // otherwise the paid-provider filter would silently change WHEN Council
+    // Mode triggers (e.g. a single configured council teammate + the primary
+    // would newly satisfy an eligible-count-based check, when previously
+    // Council Mode required >= 2 *dedicated* council providers regardless of
+    // the primary). The filter should only ever narrow the provider pool used
+    // once triggered, or cause a fall-back when configured-but-filtered-out —
+    // never expand which configurations trigger Council Mode in the first
+    // place.
+    const councilConfigured = TriageClassifier.isHighRisk(request.prompt) && this.councilProviders.length >= 2;
+
+    const councilFilteredOut = councilConfigured && eligibleCouncilProviders.length < 2;
     if (councilFilteredOut) {
       log.info(`[RouteSwitch] High-risk prompt, but Free Mode lock left only ${eligibleCouncilProviders.length} eligible council provider(s) (need >= 2). Falling back to the sequential single-provider chain.`);
     }
 
     // Check if Council Mode should be triggered
-    const isCouncilTriggered = TriageClassifier.isHighRisk(request.prompt) && eligibleCouncilProviders.length >= 2;
+    const isCouncilTriggered = councilConfigured && !councilFilteredOut;
 
     let responseContent: string;
     let finalProvider = primaryProvider.id;
