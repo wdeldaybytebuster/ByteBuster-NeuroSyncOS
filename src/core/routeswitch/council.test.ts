@@ -85,6 +85,29 @@ describe('Council Mode Triage & Consensus', () => {
     expect(result.isCouncilMode).toBe(false);
     expect(result.provider).toBe('main');
   });
+
+  it('does not trigger with only 1 configured council provider, even though primary+1 would be 2 eligible providers', async () => {
+    // Regression test: the trigger condition must stay based on the number of
+    // *configured* council providers (this.councilProviders.length >= 2), not
+    // on the post-paid-filter eligible count (which also includes the primary
+    // provider). Before this fix, restructuring the code to compute
+    // eligibleCouncilProviders as [primary, ...councilProviders] and basing
+    // the trigger on eligibleCouncilProviders.length >= 2 would have silently
+    // started triggering Council Mode with just 1 configured council teammate
+    // (primary + 1 = 2 "eligible"), which is a real behavior change nothing
+    // asked for and nothing tested.
+    const mainProv = new DummyProvider('main', '{"nodes": [{"id":"1","prompt":"drop table"}]}');
+    const c1 = new DummyProvider('c1', '{"nodes": [{"id":"1","prompt":"drop table safely"}]}');
+
+    const engine = new RouteSwitchEngine(undefined, mainProv);
+    engine.setCouncilProviders([c1]); // only 1 configured council provider
+
+    const result = await engine.execute({ prompt: 'Please delete the database', estimatedTokens: 10 });
+
+    expect(result.isCouncilMode).toBe(false);
+    expect(result.provider).toBe('main');
+    expect(c1.calls).toBe(0); // council provider never invoked — sequential chain only used the primary
+  });
 });
 
 describe('ConsensusSynthesizer.executeCouncilMode — semantic agreement scoring', () => {
