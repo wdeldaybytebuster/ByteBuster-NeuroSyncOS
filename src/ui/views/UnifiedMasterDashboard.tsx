@@ -5,6 +5,7 @@ import { NotificationCenter } from '../components/NotificationCenter';
 import { CronSummary } from '../components/CronSummary';
 import { Activity, Brain, Zap, Clock, Trash2, Sun, Moon, Monitor, MessageSquare, Gauge, FileText } from 'lucide-react';
 import { useTheme } from '../components/ThemeContext';
+import { usePreferences } from '../components/PreferencesContext';
 import { ModeLabel } from '../components/ModeLabel';
 
 const API = 'http://localhost:3743';
@@ -134,12 +135,17 @@ function DashboardView() {
 // ─── Set-up View ────────────────────────────────────────────────────────────
 function SetupView() {
   const { theme, setTheme } = useTheme();
+  // SmartTips + Reduced Motion now live in PreferencesContext (applies
+  // instantly and persists on every change, same pattern as useTheme()
+  // above) rather than batched local state — HelpTip and index.css's global
+  // `.ns-reduced-motion` override both read the SAME live context value, so
+  // there's exactly one source of truth instead of this screen's local copy
+  // silently drifting from what's actually gating behavior elsewhere.
+  const { smartTipsEnabled, setSmartTipsEnabled, reducedMotion, setReducedMotion } = usePreferences();
   const [pollingInterval, setPollingInterval] = useState(5000);
   const [maxConcurrent, setMaxConcurrent] = useState(3);
   const [claimBatch, setClaimBatch] = useState(5);
   const [logLevel, setLogLevel] = useState('info');
-  const [smartTips, setSmartTips] = useState(true);
-  const [reducedMotion, setReducedMotion] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Load settings
@@ -150,8 +156,6 @@ function SetupView() {
         if (d.settings.max_concurrent) setMaxConcurrent(Number(d.settings.max_concurrent));
         if (d.settings.claim_batch_size) setClaimBatch(Number(d.settings.claim_batch_size));
         if (d.settings.log_level) setLogLevel(d.settings.log_level);
-        if (d.settings.smart_tips !== undefined) setSmartTips(d.settings.smart_tips === 'true' || d.settings.smart_tips === true);
-        if (d.settings.reduced_motion !== undefined) setReducedMotion(d.settings.reduced_motion === 'true' || d.settings.reduced_motion === true);
       }
     }).catch(() => {});
   }, []);
@@ -161,7 +165,7 @@ function SetupView() {
     try {
       await fetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ polling_interval: pollingInterval, max_concurrent: maxConcurrent, claim_batch_size: claimBatch, log_level: logLevel, smart_tips: smartTips, reduced_motion: reducedMotion })
+        body: JSON.stringify({ polling_interval: pollingInterval, max_concurrent: maxConcurrent, claim_batch_size: claimBatch, log_level: logLevel })
       });
     } catch {}
     setSaving(false);
@@ -210,7 +214,7 @@ function SetupView() {
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
           <FileText size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Activity Logging" dev="System Observability & Logging" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Saved as a preference, but not yet enforced anywhere in the backend — server-side logs are not currently filtered by this setting.</p>
+        <p className="text-xs text-gray-400 mb-4">Filters server-side log output at this threshold (src/core/observability/logger.ts reads this setting on every log call).</p>
 
         <div>
           <label className="text-xs font-bold text-gray-300 block mb-2">Log Level</label>
@@ -253,7 +257,7 @@ function SetupView() {
               <span className="text-xs font-bold text-white block"><ModeLabel simple="Show Helpful Tips" dev="SmartTips System (Global Kill-Switch)" /></span>
               <span className="text-[10px] text-gray-500"><ModeLabel simple="Little explanations next to technical terms throughout the app" dev="Disable 45+ educational tooltips system-wide for experienced operators" /></span>
             </div>
-            <input type="checkbox" checked={smartTips} onChange={e => setSmartTips(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            <input type="checkbox" checked={smartTipsEnabled} onChange={e => setSmartTipsEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div>

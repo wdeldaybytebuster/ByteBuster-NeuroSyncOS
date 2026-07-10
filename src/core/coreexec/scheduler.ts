@@ -4,24 +4,25 @@ import { sweepOrphanedWorkspaces } from './memory-sweep';
 import crypto from 'crypto';
 import { executeRun } from './engine';
 import { validateDAGTemplate, escalateBlockedDAGToOsTodos } from './validateDAG';
+import { getPollingIntervalMs } from './settings';
 import { log } from '../observability/logger';
 
 const activeJobs = new Map<string, ScheduledTask>();
 
 // Module-level handles
-let refreshInterval: NodeJS.Timeout | null = null;
+let refreshTimeout: NodeJS.Timeout | null = null;
 let reflectionInterval: NodeJS.Timeout | null = null;
 let reflectionWorker: import('worker_threads').Worker | null = null;
 
 /**
- * Test-only helper: clears the periodic refresh interval and stops every
- * active cron job. Production code does NOT need to call this — the process
- * lifecycle owns the interval until SIGINT.
+ * Test-only helper: clears the periodic refresh loop and stops every active
+ * cron job. Production code does NOT need to call this — the process
+ * lifecycle owns the loop until SIGINT.
  */
 export function _stopSchedulerLoopForTests(): void {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-    refreshInterval = null;
+  if (refreshTimeout) {
+    clearTimeout(refreshTimeout);
+    refreshTimeout = null;
   }
   if (reflectionInterval) {
     clearInterval(reflectionInterval);
@@ -37,13 +38,26 @@ export function _stopSchedulerLoopForTests(): void {
   activeJobs.clear();
 }
 
+/**
+ * Self-rescheduling cron-refresh loop (replaces a single long-lived
+ * `setInterval(refreshJobs, 60000)`). Re-reads `getPollingIntervalMs()`
+ * (system_settings.polling_interval, from UnifiedMasterDashboard's Set-up
+ * view) on EVERY tick, so a saved change to the setting takes effect on the
+ * very next tick — no server restart needed, unlike a fixed setInterval
+ * whose period can't change after creation. Exported for direct unit testing.
+ */
+export function _scheduleRefreshLoop(): void {
+  refreshJobs();
+  refreshTimeout = setTimeout(_scheduleRefreshLoop, getPollingIntervalMs());
+}
+
 export function initScheduler() {
   log.info('[CoreExec] Initializing Cron Scheduler...');
   sweepOrphanedWorkspaces();
-  refreshJobs();
 
-  // Periodically refresh jobs from DB to catch new/updated schedules.
-  refreshInterval = setInterval(refreshJobs, 60000);
+  // Also runs an immediate refreshJobs() (see _scheduleRefreshLoop), then
+  // re-arms itself at the current polling_interval setting on every tick.
+  _scheduleRefreshLoop();
 
   // Initialize background reflection worker
   try {

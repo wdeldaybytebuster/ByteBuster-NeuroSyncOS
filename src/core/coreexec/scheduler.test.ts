@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { db, initDB } from '../basevault/db';
 import crypto from 'crypto';
-import { refreshJobs } from './scheduler';
+import { refreshJobs, _scheduleRefreshLoop, _stopSchedulerLoopForTests } from './scheduler';
 import { scoutEmitter } from '../scoutdaemon/sse';
 
 beforeAll(() => {
@@ -162,5 +162,47 @@ describe('refreshJobs() — §3.4 DB-bypass validator gate', () => {
     } finally {
       cleanupWorkflow(id);
     }
+  });
+});
+
+// Proves UnifiedMasterDashboard's "Frontend Polling Interval" setting
+// (system_settings.polling_interval) genuinely changes the cron-refresh
+// cadence, replacing the old hardcoded `setInterval(refreshJobs, 60000)`.
+describe('_scheduleRefreshLoop() — polling_interval setting genuinely changes the tick cadence', () => {
+  afterEach(() => {
+    _stopSchedulerLoopForTests();
+    db.prepare("DELETE FROM system_settings WHERE key = 'polling_interval'").run();
+    vi.useRealTimers();
+  });
+
+  it('re-arms setTimeout at 60000ms (the pre-existing default) when polling_interval is unset', () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(global, 'setTimeout');
+    _scheduleRefreshLoop();
+    expect(spy).toHaveBeenCalledWith(expect.any(Function), 60000);
+  });
+
+  it('re-arms setTimeout at the saved polling_interval instead', () => {
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES ('polling_interval', '2000') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run();
+    vi.useFakeTimers();
+    const spy = vi.spyOn(global, 'setTimeout');
+    _scheduleRefreshLoop();
+    expect(spy).toHaveBeenCalledWith(expect.any(Function), 2000);
+  });
+
+  it('re-reads the setting on every tick, so a change mid-run takes effect on the next tick without a restart', () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(global, 'setTimeout');
+    _scheduleRefreshLoop(); // tick 1: default 60000ms
+    expect(spy).toHaveBeenLastCalledWith(expect.any(Function), 60000);
+
+    // Change the setting mid-run, then let tick 1's timer fire.
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES ('polling_interval', '3000') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run();
+    vi.advanceTimersByTime(60000); // fires tick 1's callback -> re-arms tick 2
+    expect(spy).toHaveBeenLastCalledWith(expect.any(Function), 3000);
   });
 });

@@ -10,7 +10,34 @@
 
 // Deference UI (Master Spec §4): items at/above this confidence skip the
 // per-item review row and go to the quiet bulk-approve pill bar instead.
+// This is the *default* threshold, used when the CoreExec "Autonomy &
+// Delegation" dial (`src/ui/components/AutonomyDials.tsx`) hasn't been moved
+// from its own default of 30% — see `autonomyToThreshold` below.
 export const DEFERENCE_THRESHOLD = 0.7;
+
+/**
+ * CoreExec "Autonomy & Delegation" dial → Deference UI auto-approve
+ * threshold.
+ *
+ * The slider persists an `autonomy` percentage (0-100, default 30) to
+ * `system_settings`, but until this wiring nothing read it back — both this
+ * module and the server-side confidence re-check in
+ * `src/server/routes/todos.ts` independently hardcoded 0.70. Higher autonomy
+ * means the user trusts the system to auto-approve more, i.e. a LOWER
+ * confidence bar: `threshold = 1 - autonomy/100`. The default autonomy of
+ * 30% maps to exactly 0.7, matching the pre-existing hardcoded constant, so
+ * a fresh install (autonomy setting absent, dial shows its default 30%)
+ * behaves identically to before this change.
+ *
+ * Kept here (not imported by the server) and mirrored by an equivalent
+ * formula in `src/server/routes/todos.ts` — the same duplication pattern
+ * already used for `DEFERENCE_THRESHOLD` itself, since the client bundle and
+ * the server process don't share a module graph in this project.
+ */
+export function autonomyToThreshold(autonomy: number): number {
+  const clamped = Math.min(100, Math.max(0, autonomy));
+  return 1 - clamped / 100;
+}
 
 export type ApprovalKind = 'todo' | 'proposal';
 

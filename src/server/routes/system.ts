@@ -13,13 +13,66 @@ import { SensitiveDataRedactor } from '../../core/basevault/redactor';
 import { log } from '../../core/observability/logger';
 import { activeGovernor } from './llm';
 import { isBwrapAvailable } from '../../core/portgrid/terminal-session';
+import { getConfiguredMaxConcurrent } from '../../core/coreexec/settings';
 
 export const systemRouter = new Hono();
 
-// In-memory config state
+const HARDWARE_SAFE_MAX_WORKERS = Math.max(1, os.cpus().length - 1);
+
+// In-memory config state. `maxWorkers` is CoreExec's real live concurrency
+// gate (engine.ts's dispatch loop reads it every tick). Initialized from
+// UnifiedMasterDashboard's persisted `max_concurrent` setting when present
+// (Set-up view, Control A) so a saved preference survives a restart instead
+// of always resetting to the hardware-safe default; falls back to that
+// default exactly as before when unset.
 export const systemConfig = {
-  maxWorkers: Math.max(1, os.cpus().length - 1),
+  maxWorkers: getConfiguredMaxConcurrent(HARDWARE_SAFE_MAX_WORKERS),
 };
+
+/**
+ * One-shot system telemetry snapshot — the exact payload shape the SSE loop
+ * below pushes on every tick, factored out so a plain-GET polling consumer
+ * (ScoutDaemonDashboard's "polling" Sensory Modality, and the snapshot route
+ * just below) can get the identical numbers without holding an EventSource
+ * open. Never throws — callers get `null` on a read failure so a transient
+ * `si.cpuTemperature()` hiccup can't 500 a poll request.
+ */
+export async function getMetricsSnapshot() {
+  const temp = await si.cpuTemperature();
+  // Calculate basic CPU utilization by diffing os.cpus() times
+  // A simple approximation: sum(idle) / sum(total)
+  const cpus = os.cpus();
+  let idle = 0;
+  let total = 0;
+
+  for (const core of cpus) {
+    for (const type in core.times) {
+      total += core.times[type as keyof typeof core.times];
+    }
+    idle += core.times.idle;
+  }
+
+  const utilization = 100 - Math.round((idle / total) * 100);
+
+  // systeminformation returns -1 (or null) when no thermal sensor is readable;
+  // treat that as "unavailable", not a real 0°C reading.
+  const temperature = typeof temp.main === 'number' && temp.main >= 0 ? temp.main : null;
+
+  return {
+    temperature,
+    utilization,
+    cores: cpus.length,
+    maxWorkersConfig: systemConfig.maxWorkers,
+    pool: {
+      minSize: workerPool.info.minSize,
+      maxSize: workerPool.info.maxSize,
+      workerNodes: workerPool.info.workerNodes,
+      idleWorkerNodes: workerPool.info.idleWorkerNodes,
+      busyWorkerNodes: workerPool.info.busyWorkerNodes,
+      queuedTasks: workerPool.info.queuedTasks
+    }
+  };
+}
 
 systemRouter.get('/metrics', async (c) => {
   return streamSSE(c, async (stream) => {
@@ -31,52 +84,36 @@ systemRouter.get('/metrics', async (c) => {
 
     while (active) {
       try {
-        const temp = await si.cpuTemperature();
-        // Calculate basic CPU utilization by diffing os.cpus() times
-        // A simple approximation: sum(idle) / sum(total)
-        const cpus = os.cpus();
-        let idle = 0;
-        let total = 0;
-        
-        for (const core of cpus) {
-          for (const type in core.times) {
-            total += core.times[type as keyof typeof core.times];
-          }
-          idle += core.times.idle;
-        }
-
-        const utilization = 100 - Math.round((idle / total) * 100);
-
-        // systeminformation returns -1 (or null) when no thermal sensor is readable;
-        // treat that as "unavailable", not a real 0°C reading.
-        const temperature = typeof temp.main === 'number' && temp.main >= 0 ? temp.main : null;
-
+        const snapshot = await getMetricsSnapshot();
         await stream.writeSSE({
-          data: JSON.stringify({
-            temperature,
-            utilization,
-            cores: cpus.length,
-            maxWorkersConfig: systemConfig.maxWorkers,
-            pool: {
-              minSize: workerPool.info.minSize,
-              maxSize: workerPool.info.maxSize,
-              workerNodes: workerPool.info.workerNodes,
-              idleWorkerNodes: workerPool.info.idleWorkerNodes,
-              busyWorkerNodes: workerPool.info.busyWorkerNodes,
-              queuedTasks: workerPool.info.queuedTasks
-            }
-          }),
+          data: JSON.stringify(snapshot),
           event: 'telemetry'
         });
 
       } catch (err) {
         log.error('Metrics stream error:', err);
       }
-      
+
       // Wait 3 seconds
       await stream.sleep(3000);
     }
   });
+});
+
+/**
+ * Plain-GET, single-shot counterpart to the SSE `/metrics` stream above —
+ * the polling-compatible endpoint ScoutDaemon's "polling" Sensory Modality
+ * needs (see ScoutDaemonDashboard.tsx / src/ui/views/scoutTelemetry.ts).
+ * Same payload shape as one SSE `telemetry` tick, wrapped in the
+ * `{ success, metrics }` envelope this codebase's other GET routes use.
+ */
+systemRouter.get('/metrics/snapshot', async (c) => {
+  try {
+    const metrics = await getMetricsSnapshot();
+    return c.json({ success: true, metrics });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
 });
 
 systemRouter.get('/settings', async (c) => {
@@ -120,6 +157,16 @@ systemRouter.post('/settings', async (c) => {
         stmt.run(k, valueToSave);
       }
     })();
+    // Live-apply max_concurrent immediately (mirrors POST /config's
+    // `maxWorkers` handling below) instead of only taking effect on next
+    // server restart — engine.ts's dispatch loop reads systemConfig.maxWorkers
+    // fresh every tick, so this is a genuine no-restart-needed setting.
+    if (body.max_concurrent !== undefined) {
+      const requested = parseInt(body.max_concurrent, 10);
+      if (!isNaN(requested) && requested > 0) {
+        systemConfig.maxWorkers = requested;
+      }
+    }
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -208,9 +255,13 @@ systemRouter.post('/daemon/kill', (c) => {
   return c.json({ success: true, message: 'Daemon killed. maxWorkers set to 0.', maxWorkers: 0 });
 });
 
-// Daemon restart — restores maxWorkers to hardware-safe limit
+// Daemon restart — restores maxWorkers to the user's configured
+// `max_concurrent` setting when one is saved, else the hardware-safe
+// default. Mirrors the real startup init above (systemConfig.maxWorkers)
+// so "restart" returns to the same configured state a real process boot
+// would, instead of always discarding a saved concurrency preference.
 systemRouter.post('/daemon/restart', (c) => {
-  systemConfig.maxWorkers = Math.max(1, os.cpus().length - 1);
+  systemConfig.maxWorkers = getConfiguredMaxConcurrent(HARDWARE_SAFE_MAX_WORKERS);
   return c.json({ success: true, message: 'Daemon restarted.', maxWorkers: systemConfig.maxWorkers });
 });
 

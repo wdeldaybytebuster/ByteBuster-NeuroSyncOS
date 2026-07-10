@@ -1,9 +1,16 @@
-import { LLMProvider } from '../providers';
+import { GenerationStreamHooks, LLMProvider } from '../providers';
 
 export class MockProvider implements LLMProvider {
   id = 'mock';
 
-  async generate(prompt: string, estimatedTokens: number, schema?: any): Promise<string> {
+  // Synthetic offline provider: no real inference, so no real per-token
+  // confidence. `streamHooks` is intentionally ignored (heuristic fallback).
+  async generate(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    _streamHooks?: GenerationStreamHooks,
+  ): Promise<string> {
     // Simulate realistic delay based on requested token size
     const delayMs = Math.min(Math.max(estimatedTokens * 0.5, 50), 2000);
     await new Promise(resolve => setTimeout(resolve, delayMs));

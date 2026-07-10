@@ -80,14 +80,35 @@ idleDetector.on('idle', () => {
       ]
     };
 
-    db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(
-      runId, 'system-maintenance', JSON.stringify(dagLayout), 'pending', Date.now()
-    );
+    // `workflow_runs.project_id` has `FOREIGN KEY(project_id) REFERENCES
+    // projects(id)` with `foreign_keys = ON` (src/core/basevault/db.ts). The
+    // literal 'system-maintenance' project id used below was never actually
+    // created anywhere in this codebase, so this insert failed with
+    // "FOREIGN KEY constraint failed" on every single idle trigger, not just
+    // some edge case (observed in server logs, tracker doc 2026-07-03).
+    // Fix: follow the same sentinel-row convention already established in
+    // `src/server/routes/todos.ts` (promote) and `src/core/coreexec/validateDAG.ts`
+    // (escalateBlockedDAGToOsTodos) — ensure the referenced parent row genuinely
+    // exists before inserting the child row that references it. Unlike those
+    // call sites (which mint a fresh UUID sentinel per call), this one reuses
+    // the same well-known 'system-maintenance' id across every idle trigger, so
+    // `INSERT OR IGNORE` is the correct one-time-creation form: the first idle
+    // trigger ever creates it, every subsequent trigger is a no-op against the
+    // now-existing row.
+    db.transaction(() => {
+      db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+        'system-maintenance', 'System Maintenance', Date.now()
+      );
 
-    const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
-    for (const node of dagLayout.nodes) {
-      insertTask.run(node.id, runId, 'unclaimed');
-    }
+      db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(
+        runId, 'system-maintenance', JSON.stringify(dagLayout), 'pending', Date.now()
+      );
+
+      const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
+      for (const node of dagLayout.nodes) {
+        insertTask.run(node.id, runId, 'unclaimed');
+      }
+    })();
 
     executeRun(runId).catch(err => log.error('[ScoutDaemon] Maintenance failed:', err));
   } catch (err) {

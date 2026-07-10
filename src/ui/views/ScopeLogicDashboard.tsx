@@ -242,17 +242,35 @@ function SetupView() {
       .catch(() => {});
   }, []);
 
-  // Safety assertions (locked vs toggleable)
+  // Safety assertions (locked vs toggleable). The locked SA-* rows are
+  // mandatory Category A boundaries hardcoded permanently-on in
+  // ValidatorLogic.validate() — they are never persisted as settings, the
+  // checkbox is disabled, and this local `enabled: true` is purely cosmetic.
+  // The SI-*/QR-01 rows ARE real settings: each maps to a
+  // `scopelogic_assertion_<code>_enabled` key that ValidatorLogic.validate()
+  // reads live on every call (validator.ts). Default `false` here matches the
+  // validator's own permissive default for a key that's never been saved —
+  // an unvisited Set-up screen must not silently claim a check is "on" when
+  // nothing has actually persisted that yet.
   const [assertions, setAssertions] = useState({
     'SA-01': { label: 'Explanations SQL Block', locked: true, enabled: true },
     'SA-02': { label: 'Executive Code Quarantine', locked: true, enabled: true },
     'SA-04': { label: 'Node Category Sanity (no shell/exec)', locked: true, enabled: true },
     'SA-06': { label: 'No Self-Modification', locked: true, enabled: true },
-    'SI-01': { label: 'Output shape validity (JSON)', locked: false, enabled: true },
-    'SI-03': { label: 'Explanation non-empty', locked: false, enabled: true },
-    'SI-05': { label: 'Confidence above minimum', locked: false, enabled: true },
-    'QR-01': { label: 'Reasoning key present', locked: false, enabled: true },
+    'SI-01': { label: 'Output shape validity (JSON)', locked: false, enabled: false },
+    'SI-03': { label: 'Explanation non-empty', locked: false, enabled: false },
+    'SI-05': { label: 'Confidence above minimum', locked: false, enabled: false },
+    'QR-01': { label: 'Reasoning key present', locked: false, enabled: false },
   });
+
+  // Maps a toggleable assertion's dashboard code to its system_settings key
+  // (must match validator.ts's SI_01_KEY/SI_03_KEY/SI_05_KEY/QR_01_KEY).
+  const ASSERTION_SETTING_KEY: Record<string, string> = {
+    'SI-01': 'scopelogic_assertion_si01_enabled',
+    'SI-03': 'scopelogic_assertion_si03_enabled',
+    'SI-05': 'scopelogic_assertion_si05_enabled',
+    'QR-01': 'scopelogic_assertion_qr01_enabled',
+  };
 
   // Load settings
   useEffect(() => {
@@ -261,6 +279,17 @@ function SetupView() {
         if (d.settings.grammar_constrained !== undefined) setGrammarEnabled(d.settings.grammar_constrained === 'true' || d.settings.grammar_constrained === true);
         if (d.settings.max_disagreement) setMaxDisagreement(Number(d.settings.max_disagreement));
         if (d.settings.high_stakes_threshold) setHighStakesThreshold(Number(d.settings.high_stakes_threshold));
+        setAssertions(prev => {
+          const next = { ...prev };
+          for (const code of Object.keys(ASSERTION_SETTING_KEY)) {
+            const key = ASSERTION_SETTING_KEY[code]!;
+            const raw = d.settings[key];
+            if (raw !== undefined) {
+              next[code as keyof typeof next] = { ...next[code as keyof typeof next], enabled: raw === 'true' || raw === true };
+            }
+          }
+          return next;
+        });
       }
     }).catch(() => {});
   }, []);
@@ -268,9 +297,13 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
+      const assertionPayload: Record<string, boolean> = {};
+      for (const code of Object.keys(ASSERTION_SETTING_KEY)) {
+        assertionPayload[ASSERTION_SETTING_KEY[code]!] = assertions[code as keyof typeof assertions].enabled;
+      }
       await fetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grammar_constrained: grammarEnabled, rationale_first: rationaleFirst, thinking_tokens: thinkingTokens, max_disagreement: maxDisagreement, high_stakes_threshold: highStakesThreshold })
+        body: JSON.stringify({ grammar_constrained: grammarEnabled, rationale_first: rationaleFirst, thinking_tokens: thinkingTokens, max_disagreement: maxDisagreement, high_stakes_threshold: highStakesThreshold, ...assertionPayload })
       });
     } catch {}
     setSaving(false);
