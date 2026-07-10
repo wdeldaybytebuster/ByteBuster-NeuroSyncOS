@@ -1,6 +1,8 @@
 import React from 'react';
 import { Info } from 'lucide-react';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { usePreferences } from './PreferencesContext';
+import { shouldShowHelpTip } from './preferencesLogic';
 
 interface HelpTipProps {
   /** Plain-English explanation of a technical term, shown on hover/focus. */
@@ -9,12 +11,16 @@ interface HelpTipProps {
 
 /**
  * Small inline info icon with a plain-English tooltip explaining a technical
- * term. Renders ONLY in Hobbyist Mode — Developer Mode users see nothing.
+ * term. Renders ONLY in Hobbyist Mode (Developer Mode users see nothing) AND
+ * only while UnifiedMasterDashboard's SmartTips setting is on — that setting
+ * used to be pure local UI state with no consumer anywhere; this is the
+ * actual "45+ educational tooltips" kill-switch its label promises.
  * Usage: <h2>Database Save Points <HelpTip text="A save point is..." /></h2>
  */
 export function HelpTip({ text }: HelpTipProps) {
   const { isDeveloperMode } = useDeveloperMode();
-  if (isDeveloperMode) return null;
+  const { smartTipsEnabled } = usePreferences();
+  if (!shouldShowHelpTip(isDeveloperMode, smartTipsEnabled)) return null;
 
   return (
     <span className="relative inline-flex group align-middle" tabIndex={0} aria-label={text} role="note">

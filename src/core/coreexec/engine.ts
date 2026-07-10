@@ -3,6 +3,7 @@ import { claimTask } from './queue';
 import { scoutEmitter } from '../scoutdaemon/sse';
 import { workerPool } from './worker-pool';
 import { systemConfig } from '../../server/routes/system';
+import { getClaimBatchSize } from './settings';
 import { SensitiveDataRedactor, DataTier } from '../basevault/redactor';
 import { WorktreeIsolation } from './worktree';
 import { classifyDirective } from './dispatch';
@@ -132,7 +133,14 @@ export async function executeRun(
       await new Promise(resolve => setTimeout(resolve, 50));
       continue;
     }
-    const tasksToDispatch = eligibleTasks.slice(0, availableSlots);
+    // §Task-3 — UnifiedMasterDashboard's "Claim Batch Size" setting: an
+    // additional, independent cap on how many eligible tasks get claimed per
+    // dispatch tick, separate from availableSlots (worker-pool headroom).
+    // Read fresh every tick (getClaimBatchSize()) so a saved change takes
+    // effect on the very next iteration. Defaults to unbounded, reproducing
+    // the pre-existing behavior of dispatching every available slot.
+    const batchLimit = getClaimBatchSize();
+    const tasksToDispatch = eligibleTasks.slice(0, Math.min(availableSlots, batchLimit));
 
     // Execute eligible tasks in parallel via worker pool
     const promises = tasksToDispatch.map(async (node) => {
