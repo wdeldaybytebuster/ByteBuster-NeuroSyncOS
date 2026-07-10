@@ -109,4 +109,23 @@ describe('ScopeLogic LLM-driven DAG proposal', () => {
     expect(templateReply.dagProposal).toBeUndefined();
     expect(templateReply.response).toMatch(/SA-07/);
   });
+
+  it('carries the LLM self-reported "reasoning" field through to the proposal', async () => {
+    const llmDag = {
+      reasoning: 'A single ingest-then-report pipeline covers the described workflow.',
+      nodes: [{ id: 'n1', dependencies: [], prompt: 'ingest and report daily sales' }],
+      confidence: 0.8,
+    };
+    const generateFn = async () => JSON.stringify(llmDag);
+    const session = new ScopeLogicSession(generateFn);
+    const reply = await session.processUserInputAsync('Build a sales pipeline. done');
+    expect(reply.dagProposal?.reasoning).toBe('A single ingest-then-report pipeline covers the described workflow.');
+  });
+
+  it('always populates a real (non-fabricated) reasoning on the template fallback path', () => {
+    const session = new ScopeLogicSession();
+    const reply = session.processUserInput("Build a pipeline. that's it");
+    expect(reply.dagProposal?.reasoning).toBeTruthy();
+    expect(reply.dagProposal?.reasoning).toMatch(/Deterministic template/);
+  });
 });
