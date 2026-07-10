@@ -13,12 +13,20 @@ import { SensitiveDataRedactor } from '../../core/basevault/redactor';
 import { log } from '../../core/observability/logger';
 import { activeGovernor } from './llm';
 import { isBwrapAvailable } from '../../core/portgrid/terminal-session';
+import { getConfiguredMaxConcurrent } from '../../core/coreexec/settings';
 
 export const systemRouter = new Hono();
 
-// In-memory config state
+const HARDWARE_SAFE_MAX_WORKERS = Math.max(1, os.cpus().length - 1);
+
+// In-memory config state. `maxWorkers` is CoreExec's real live concurrency
+// gate (engine.ts's dispatch loop reads it every tick). Initialized from
+// UnifiedMasterDashboard's persisted `max_concurrent` setting when present
+// (Set-up view, Control A) so a saved preference survives a restart instead
+// of always resetting to the hardware-safe default; falls back to that
+// default exactly as before when unset.
 export const systemConfig = {
-  maxWorkers: Math.max(1, os.cpus().length - 1),
+  maxWorkers: getConfiguredMaxConcurrent(HARDWARE_SAFE_MAX_WORKERS),
 };
 
 /**
@@ -149,6 +157,16 @@ systemRouter.post('/settings', async (c) => {
         stmt.run(k, valueToSave);
       }
     })();
+    // Live-apply max_concurrent immediately (mirrors POST /config's
+    // `maxWorkers` handling below) instead of only taking effect on next
+    // server restart — engine.ts's dispatch loop reads systemConfig.maxWorkers
+    // fresh every tick, so this is a genuine no-restart-needed setting.
+    if (body.max_concurrent !== undefined) {
+      const requested = parseInt(body.max_concurrent, 10);
+      if (!isNaN(requested) && requested > 0) {
+        systemConfig.maxWorkers = requested;
+      }
+    }
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -237,9 +255,13 @@ systemRouter.post('/daemon/kill', (c) => {
   return c.json({ success: true, message: 'Daemon killed. maxWorkers set to 0.', maxWorkers: 0 });
 });
 
-// Daemon restart — restores maxWorkers to hardware-safe limit
+// Daemon restart — restores maxWorkers to the user's configured
+// `max_concurrent` setting when one is saved, else the hardware-safe
+// default. Mirrors the real startup init above (systemConfig.maxWorkers)
+// so "restart" returns to the same configured state a real process boot
+// would, instead of always discarding a saved concurrency preference.
 systemRouter.post('/daemon/restart', (c) => {
-  systemConfig.maxWorkers = Math.max(1, os.cpus().length - 1);
+  systemConfig.maxWorkers = getConfiguredMaxConcurrent(HARDWARE_SAFE_MAX_WORKERS);
   return c.json({ success: true, message: 'Daemon restarted.', maxWorkers: systemConfig.maxWorkers });
 });
 

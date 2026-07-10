@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { db, initDB, dbPath } from '../basevault/db';
 import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from './engine';
 import { workerPool } from './worker-pool';
+import { systemConfig } from '../../server/routes/system';
 import fs from 'fs';
 import crypto from 'crypto';
 
@@ -270,5 +271,92 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     seedRunWithStatus('completed', ['completed']);
     seedRunWithStatus('failed', ['failed']);
     expect(resumeInProgressRuns()).toBe(0);
+  });
+
+  // Proves UnifiedMasterDashboard's "Claim Batch Size" setting genuinely caps
+  // how many eligible tasks get dispatched per tick, independent of
+  // availableSlots (systemConfig.maxWorkers headroom) — previously there was
+  // no such cap at all; every eligible task within availableSlots dispatched
+  // in the same Promise.all batch. Nested inside the outer describe (rather
+  // than a second top-level describe) so it shares the outer's beforeAll
+  // (initDB) and runs BEFORE the outer afterAll closes the shared `:memory:`
+  // db connection.
+  describe('claim_batch_size setting caps per-tick dispatch concurrency', () => {
+    let originalMaxWorkers: number;
+
+    beforeEach(() => {
+      db.prepare("DELETE FROM system_settings WHERE key = 'claim_batch_size'").run();
+      // Give plenty of worker headroom so availableSlots is never the
+      // bottleneck — isolates claim_batch_size as the only limiting factor.
+      originalMaxWorkers = systemConfig.maxWorkers;
+      systemConfig.maxWorkers = 10;
+    });
+
+    afterEach(() => {
+      systemConfig.maxWorkers = originalMaxWorkers;
+      db.prepare("DELETE FROM system_settings WHERE key = 'claim_batch_size'").run();
+    });
+
+    function seedThreeIndependentGenericTasks(): { runId: string; taskIds: string[] } {
+    const projectId = 'proj-batch';
+    db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+      projectId, 'Batch Project', Date.now(),
+    );
+    const runId = crypto.randomUUID();
+    const taskIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    const dagLayout = { nodes: taskIds.map((id) => ({ id, dependencies: [], prompt: `independent step ${id}` })) };
+    db.prepare(
+      `INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)`,
+    ).run(runId, projectId, JSON.stringify(dagLayout), 'pending', Date.now());
+    const insertTask = db.prepare(`INSERT INTO tasks (id, run_id, status) VALUES (?, ?, 'unclaimed')`);
+    for (const id of taskIds) insertTask.run(id, runId);
+    return { runId, taskIds };
+  }
+
+  it('dispatches all 3 independent eligible tasks concurrently when claim_batch_size is unset (default/unbounded)', async () => {
+    let concurrent = 0;
+    let maxConcurrentSeen = 0;
+    injectCoreExecGenerateFn(async () => {
+      concurrent++;
+      maxConcurrentSeen = Math.max(maxConcurrentSeen, concurrent);
+      await new Promise((r) => setTimeout(r, 30));
+      concurrent--;
+      return 'ok';
+    });
+
+    const { runId } = seedThreeIndependentGenericTasks();
+    await executeRun(runId);
+
+    // All 3 had no dependencies and ample worker headroom — with no batch
+    // cap, they all landed in the same dispatch tick's Promise.all.
+    expect(maxConcurrentSeen).toBe(3);
+  });
+
+  it('caps concurrent dispatch at 1 when claim_batch_size=1, serializing otherwise-parallel tasks', async () => {
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES ('claim_batch_size', '1') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run();
+
+    let concurrent = 0;
+    let maxConcurrentSeen = 0;
+    injectCoreExecGenerateFn(async () => {
+      concurrent++;
+      maxConcurrentSeen = Math.max(maxConcurrentSeen, concurrent);
+      await new Promise((r) => setTimeout(r, 30));
+      concurrent--;
+      return 'ok';
+    });
+
+    const { runId } = seedThreeIndependentGenericTasks();
+    const ok = await executeRun(runId);
+
+    expect(ok).toBe(true);
+    // Same 3 independent tasks, same worker headroom — but claim_batch_size=1
+    // means only 1 task is ever claimed+dispatched per tick.
+    expect(maxConcurrentSeen).toBe(1);
+
+    const tasks = db.prepare('SELECT status FROM tasks WHERE run_id = ?').all(runId) as any[];
+    expect(tasks.every((t) => t.status === 'completed')).toBe(true);
+  });
   });
 });
