@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
-import { Radar, Activity, Inbox, Cpu, Thermometer, Power, Zap, Rss, Clock, Shield, AlertTriangle, CheckCircle, Skull } from 'lucide-react';
+import { Radar, Activity, Inbox, Cpu, Thermometer, Power, Zap, Rss, Clock, Shield, AlertTriangle, CheckCircle, Skull, RefreshCw } from 'lucide-react';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
+import { SensoryMode, normalizeSensoryMode, startTelemetrySubscription } from './scoutTelemetry';
 
 const API = 'http://localhost:3743';
 const ACCENT = '#8E24AA';
@@ -22,26 +23,48 @@ function DashboardView() {
   const [discoveries, setDiscoveries] = useState<{id:string;title:string;type:string;created:string}[]>([]);
   const [todos, setTodos] = useState<any[]>([]);
   const [scoutDrafts, setScoutDrafts] = useState<{id:string;title:string|null;type:string;confidence:number;status:string;createdAt:number}[]>([]);
+  const [sensoryMode, setSensoryMode] = useState<SensoryMode | null>(null);
+  const refreshNowRef = useRef<(() => Promise<void>) | null>(null);
 
-  // SSE connection for system metrics
+  const applyTelemetry = (data: any) => {
+    if (!data) return;
+    if (data.utilization !== undefined) setUtilization(data.utilization);
+    if (data.temperature !== undefined && data.temperature !== null) setCpuTemp(Math.round(data.temperature));
+    // Derive daemon state from load
+    const load = data.utilization || 0;
+    if (load > 80) setDaemonState('sleeping');
+    else if (load > 50) setDaemonState('passive');
+    else setDaemonState('active');
+    setCpuLoad(load / 100);
+  };
+
+  // Resolve the real Sensory Modality (ScoutDaemon Set-up, Control B) once on
+  // mount, defaulting to 'sse' (today's only real behavior) until it resolves.
   useEffect(() => {
-    const es = new EventSource(`${API}/api/system/metrics`);
-    es.addEventListener('telemetry', (e: any) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.utilization !== undefined) setUtilization(data.utilization);
-        if (data.temperature !== undefined) setCpuTemp(Math.round(data.temperature));
-        // Derive daemon state from load
-        const load = data.utilization || 0;
-        if (load > 80) setDaemonState('sleeping');
-        else if (load > 50) setDaemonState('passive');
-        else setDaemonState('active');
-        setCpuLoad(load / 100);
-      } catch {}
-    });
-    es.onerror = () => {};
-    return () => es.close();
+    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+      setSensoryMode(normalizeSensoryMode(d?.success ? d.settings?.scout_sensory_mode : undefined));
+    }).catch(() => setSensoryMode('sse'));
   }, []);
+
+  // Telemetry subscription — genuinely gated on the resolved mode. 'sse' opens
+  // the EventSource exactly as before; 'polling' polls the plain-GET snapshot
+  // endpoint instead; 'manual' subscribes to nothing automatic at all (see
+  // scoutTelemetry.ts for the full mode contract + tests).
+  useEffect(() => {
+    if (sensoryMode === null) return; // still resolving the setting
+    const sub = startTelemetrySubscription(sensoryMode, {
+      openEventSource: () => new EventSource(`${API}/api/system/metrics`) as any,
+      fetchSnapshot: () => fetch(`${API}/api/system/metrics/snapshot`).then(r => r.json()).then(d => d.success ? d.metrics : null),
+      onUpdate: applyTelemetry,
+    });
+    refreshNowRef.current = sub.refreshNow;
+    // Deliberately no auto-refresh-on-mount for 'manual' mode here — the
+    // whole point of manual mode is that NOTHING updates telemetry except an
+    // explicit click on "Refresh Now" below. Auto-fetching on navigation
+    // would be exactly the kind of silent automatic update this mode exists
+    // to avoid.
+    return () => { sub.stop(); refreshNowRef.current = null; };
+  }, [sensoryMode]);
 
   // Fetch quarantine discoveries (from cerebro learning approvals as proxy)
   useEffect(() => {
@@ -180,8 +203,22 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
           <Thermometer size={16} className="text-orange-400" /> <ModeLabel simple="Computer Load" dev={'Hardware Telemetry ("Machine Persona")'} />
+          {sensoryMode === 'manual' && (
+            <button
+              onClick={() => { refreshNowRef.current?.().catch(() => {}); }}
+              className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-white/10 transition-all"
+              title="Manual Sensory Mode is on — telemetry only updates when you click this."
+            >
+              <RefreshCw size={11} /> Refresh Now
+            </button>
+          )}
         </h2>
         <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Shows why the watcher is running or sleeping — it backs off automatically when your computer is busy or hot." dev="Visual justification of why ScoutDaemon is active or sleeping. Demonstrates graceful resource yielding." /></p>
+        {sensoryMode === 'manual' && (
+          <div className="mb-3 text-[10px] text-amber-400/80 font-mono flex items-center gap-1.5">
+            <AlertTriangle size={11} /> Manual Sensory Mode — these numbers only update when you click "Refresh Now".
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
@@ -211,9 +248,12 @@ function DashboardView() {
 function SetupView() {
   const [agentStopThreshold, setAgentStopThreshold] = useState(0.65);
   const [maxTokenBurn, setMaxTokenBurn] = useState(2000);
-  const [sseEnabled, setSseEnabled] = useState(true);
-  const [pollingEnabled, setPollingEnabled] = useState(false);
-  const [manualMode, setManualMode] = useState(false);
+  // Single real Sensory Modality choice — replaces the old 3 independent
+  // checkboxes (scout_sse_enabled/scout_polling_enabled/scout_manual_mode),
+  // which could all be on/off simultaneously despite this being conceptually
+  // one choice, AND were saved but never read by anything (see
+  // scoutTelemetry.ts). Persisted as one `scout_sensory_mode` key.
+  const [sensoryMode, setSensoryMode] = useState<SensoryMode>('sse');
   const [tempCeiling, setTempCeiling] = useState(85);
   const [loadCeiling, setLoadCeiling] = useState(0.8);
   const [killSwitchActive, setKillSwitchActive] = useState(false);
@@ -231,6 +271,7 @@ function SetupView() {
         if (d.settings.scout_max_token_burn) setMaxTokenBurn(Number(d.settings.scout_max_token_burn));
         if (d.settings.scout_temp_ceiling) setTempCeiling(Number(d.settings.scout_temp_ceiling));
         if (d.settings.scout_load_ceiling) setLoadCeiling(Number(d.settings.scout_load_ceiling));
+        setSensoryMode(normalizeSensoryMode(d.settings.scout_sensory_mode));
       }
     }).catch(() => {});
     // Whether AgentStop can actually run preemptively depends on the active
@@ -245,7 +286,7 @@ function SetupView() {
     try {
       await fetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_stop_threshold: agentStopThreshold, scout_max_token_burn: maxTokenBurn, scout_temp_ceiling: tempCeiling, scout_load_ceiling: loadCeiling, scout_sse_enabled: sseEnabled, scout_polling_enabled: pollingEnabled, scout_manual_mode: manualMode })
+        body: JSON.stringify({ agent_stop_threshold: agentStopThreshold, scout_max_token_burn: maxTokenBurn, scout_temp_ceiling: tempCeiling, scout_load_ceiling: loadCeiling, scout_sensory_mode: sensoryMode })
       });
     } catch {}
     setSaving(false);
@@ -306,18 +347,24 @@ function SetupView() {
         </h2>
         <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Choose how the background watcher notices new things. The recommended option waits quietly for updates instead of checking constantly (which drains battery)." dev="Configure what ScoutDaemon monitors. Push-based feeds only — no aggressive polling that drains battery." /></p>
 
-        <div className="space-y-3">
+        {/* A real single-choice selector (radio group) — the old version was
+            3 independent checkboxes that could all be on/off at once despite
+            this being one setting, and none of them did anything. Now exactly
+            one mode is active, persisted as `scout_sensory_mode`, and
+            genuinely read by DashboardView's telemetry subscription
+            (scoutTelemetry.ts). */}
+        <div className="space-y-3" role="radiogroup" aria-label="Sensory Modality">
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Wait For Updates (Recommended)" dev="Server-Sent Events (SSE)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Updates arrive on their own — easy on your battery" dev="Passive push-based feeds (recommended)" /></span></div>
-            <input type="checkbox" checked={sseEnabled} onChange={e => setSseEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            <input type="radio" name="scout-sensory-mode" checked={sensoryMode === 'sse'} onChange={() => setSensoryMode('sse')} className="w-4 h-4" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Check Constantly" dev="Active HTTP Polling" /></span><span className="text-[10px] text-red-400">⚠ Battery intensive — not recommended for laptops</span></div>
-            <input type="checkbox" checked={pollingEnabled} onChange={e => setPollingEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            <input type="radio" name="scout-sensory-mode" checked={sensoryMode === 'polling'} onChange={() => setSensoryMode('polling')} className="w-4 h-4" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Only When I Ask" dev="Manual Scout Mode (MVP)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="The watcher only runs when you start it yourself" dev="Triggered one-off sweeps only, no autonomous scheduling" /></span></div>
-            <input type="checkbox" checked={manualMode} onChange={e => setManualMode(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            <input type="radio" name="scout-sensory-mode" checked={sensoryMode === 'manual'} onChange={() => setSensoryMode('manual')} className="w-4 h-4" style={{ accentColor: ACCENT }} />
           </label>
         </div>
       </section>

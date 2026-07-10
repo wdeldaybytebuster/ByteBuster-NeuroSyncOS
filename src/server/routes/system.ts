@@ -21,6 +21,51 @@ export const systemConfig = {
   maxWorkers: Math.max(1, os.cpus().length - 1),
 };
 
+/**
+ * One-shot system telemetry snapshot — the exact payload shape the SSE loop
+ * below pushes on every tick, factored out so a plain-GET polling consumer
+ * (ScoutDaemonDashboard's "polling" Sensory Modality, and the snapshot route
+ * just below) can get the identical numbers without holding an EventSource
+ * open. Never throws — callers get `null` on a read failure so a transient
+ * `si.cpuTemperature()` hiccup can't 500 a poll request.
+ */
+export async function getMetricsSnapshot() {
+  const temp = await si.cpuTemperature();
+  // Calculate basic CPU utilization by diffing os.cpus() times
+  // A simple approximation: sum(idle) / sum(total)
+  const cpus = os.cpus();
+  let idle = 0;
+  let total = 0;
+
+  for (const core of cpus) {
+    for (const type in core.times) {
+      total += core.times[type as keyof typeof core.times];
+    }
+    idle += core.times.idle;
+  }
+
+  const utilization = 100 - Math.round((idle / total) * 100);
+
+  // systeminformation returns -1 (or null) when no thermal sensor is readable;
+  // treat that as "unavailable", not a real 0°C reading.
+  const temperature = typeof temp.main === 'number' && temp.main >= 0 ? temp.main : null;
+
+  return {
+    temperature,
+    utilization,
+    cores: cpus.length,
+    maxWorkersConfig: systemConfig.maxWorkers,
+    pool: {
+      minSize: workerPool.info.minSize,
+      maxSize: workerPool.info.maxSize,
+      workerNodes: workerPool.info.workerNodes,
+      idleWorkerNodes: workerPool.info.idleWorkerNodes,
+      busyWorkerNodes: workerPool.info.busyWorkerNodes,
+      queuedTasks: workerPool.info.queuedTasks
+    }
+  };
+}
+
 systemRouter.get('/metrics', async (c) => {
   return streamSSE(c, async (stream) => {
     let active = true;
@@ -31,52 +76,36 @@ systemRouter.get('/metrics', async (c) => {
 
     while (active) {
       try {
-        const temp = await si.cpuTemperature();
-        // Calculate basic CPU utilization by diffing os.cpus() times
-        // A simple approximation: sum(idle) / sum(total)
-        const cpus = os.cpus();
-        let idle = 0;
-        let total = 0;
-        
-        for (const core of cpus) {
-          for (const type in core.times) {
-            total += core.times[type as keyof typeof core.times];
-          }
-          idle += core.times.idle;
-        }
-
-        const utilization = 100 - Math.round((idle / total) * 100);
-
-        // systeminformation returns -1 (or null) when no thermal sensor is readable;
-        // treat that as "unavailable", not a real 0°C reading.
-        const temperature = typeof temp.main === 'number' && temp.main >= 0 ? temp.main : null;
-
+        const snapshot = await getMetricsSnapshot();
         await stream.writeSSE({
-          data: JSON.stringify({
-            temperature,
-            utilization,
-            cores: cpus.length,
-            maxWorkersConfig: systemConfig.maxWorkers,
-            pool: {
-              minSize: workerPool.info.minSize,
-              maxSize: workerPool.info.maxSize,
-              workerNodes: workerPool.info.workerNodes,
-              idleWorkerNodes: workerPool.info.idleWorkerNodes,
-              busyWorkerNodes: workerPool.info.busyWorkerNodes,
-              queuedTasks: workerPool.info.queuedTasks
-            }
-          }),
+          data: JSON.stringify(snapshot),
           event: 'telemetry'
         });
 
       } catch (err) {
         log.error('Metrics stream error:', err);
       }
-      
+
       // Wait 3 seconds
       await stream.sleep(3000);
     }
   });
+});
+
+/**
+ * Plain-GET, single-shot counterpart to the SSE `/metrics` stream above —
+ * the polling-compatible endpoint ScoutDaemon's "polling" Sensory Modality
+ * needs (see ScoutDaemonDashboard.tsx / src/ui/views/scoutTelemetry.ts).
+ * Same payload shape as one SSE `telemetry` tick, wrapped in the
+ * `{ success, metrics }` envelope this codebase's other GET routes use.
+ */
+systemRouter.get('/metrics/snapshot', async (c) => {
+  try {
+    const metrics = await getMetricsSnapshot();
+    return c.json({ success: true, metrics });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
 });
 
 systemRouter.get('/settings', async (c) => {
