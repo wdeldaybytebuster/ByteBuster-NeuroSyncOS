@@ -302,6 +302,17 @@ injectOKFGenerateFn(_okfGenerateFn);
 // ReflectionExecutor so preference extraction routes through the real LLM
 // instead of keyword heuristics. Falls back to keyword extraction automatically
 // when MockProvider is active (offline / free-tier quota exhausted).
+//
+// NOTE ON estimatedTokens: this is the background reflection/preference
+// extractor (one short line per fact, or a single classification word) — NOT
+// the interactive Cerebro chat endpoint that live-testing found failing on
+// longer prompts (that's `chatEngine.execute` in routes/cerebro.ts, since
+// bumped to 900). This value stays low deliberately since the floor in
+// openai-compatible.ts (DEFAULT_MAX_TOKENS_FLOOR, raised 512 -> 1024) already
+// covers it, and that adapter now also retries once with a larger budget if a
+// response looks like the model burned it all on hidden reasoning
+// (finish_reason=length + a reasoning_content/reasoning field) rather than
+// failing outright.
 const _cerebroGenerateFn = async (prompt: string) => {
   const result = await routeSwitch.execute({ prompt, estimatedTokens: 150, scope: 'cerebro' });
   return result.content;
