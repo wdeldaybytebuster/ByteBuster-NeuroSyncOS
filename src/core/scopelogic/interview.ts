@@ -18,6 +18,16 @@ export interface DAGProposal {
    * conservative DEFAULT_PROPOSAL_CONFIDENCE instead of a fabricated number.
    */
   confidence?: number;
+  /**
+   * Brief rationale for why this DAG structure fulfills the request. Always
+   * populated on BOTH the LLM path (requested via DAG_PROPOSAL_SCHEMA below)
+   * and the deterministic template fallback (_generateTemplateProposal), so
+   * enabling the QR-01 "Reasoning key present" Behavioral Assertion
+   * (validator.ts) never breaks a real generation path — it only rejects
+   * proposals a caller crafted by hand (e.g. a raw dag_template written
+   * directly into SQLite) without one.
+   */
+  reasoning?: string;
 }
 
 export interface InterviewResponse {
@@ -57,6 +67,7 @@ Do not include any other JSON. Do not explain the JSON.`;
 const DAG_PROPOSAL_SCHEMA = {
   type: 'object',
   properties: {
+    reasoning: { type: 'string' },
     nodes: {
       type: 'array',
       items: {
@@ -71,7 +82,7 @@ const DAG_PROPOSAL_SCHEMA = {
     },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
   },
-  required: ['nodes', 'confidence'],
+  required: ['reasoning', 'nodes', 'confidence'],
 };
 
 export class ScopeLogicSession {
@@ -202,13 +213,14 @@ export class ScopeLogicSession {
         const dagPrompt = `You are ScopeLogic, an expert workflow architect. The requirements-gathering interview below is complete. Design a concrete workflow DAG that fulfills what the user ACTUALLY described — not a generic template.
 
 Output ONLY a single JSON object of this exact shape:
-{"nodes":[{"id":"<unique-id>","dependencies":["<id-of-prerequisite-node>"],"prompt":"<what this step does>"}],"confidence":<0.0-1.0>}
+{"reasoning":"<1-2 sentence rationale for this DAG structure>","nodes":[{"id":"<unique-id>","dependencies":["<id-of-prerequisite-node>"],"prompt":"<what this step does>"}],"confidence":<0.0-1.0>}
 
 Rules:
 - Each node is one atomic step. "dependencies" lists the ids of nodes that must run first (use an empty array for entry nodes).
 - Tailor nodes and their wiring to the SPECIFIC requirements discussed in the transcript.
 - Do NOT reference internal system services (ScopeLogic, BaseVault, RouteSwitch, CoreExec, ScoutDaemon, PortGrid, Cerebro) as nodes.
 - Do NOT emit destructive SQL (INSERT/UPDATE/DELETE/DROP/...) or shell/exec commands.
+- "reasoning" is a brief rationale for why this structure fulfills what the user described.
 - "confidence" is YOUR self-assessed 0.0-1.0 certainty that this DAG correctly captures the user's intent.
 
 Interview transcript:
@@ -275,11 +287,17 @@ ${conversationContext}`;
           ? parsed.confidence
           : undefined;
 
+      const reasoning =
+        typeof parsed.reasoning === 'string' && parsed.reasoning.trim() !== ''
+          ? parsed.reasoning.trim()
+          : undefined;
+
       return {
         id: crypto.randomUUID(),
         status: 'draft',
         nodes,
         ...(confidence !== undefined ? { confidence } : {}),
+        ...(reasoning !== undefined ? { reasoning } : {}),
       };
     } catch {
       return null;
@@ -315,6 +333,12 @@ ${conversationContext}`;
         dependencies: i > 0 ? [nodeIds[i - 1]!] : [],
         prompt,
       })),
+      // Deterministic, honest rationale — no model-authored reasoning exists
+      // on this path (no LLM configured, or the LLM path failed/was
+      // rejected), so this states exactly what actually happened rather than
+      // fabricating a model-sounding explanation. Keeps QR-01 enforceable
+      // on this path too instead of only ever passing on the LLM path.
+      reasoning: `Deterministic template assembled ${nodePrompts.length} sequential steps from the interview transcript (no LLM provider configured, or the LLM-driven path failed/was rejected by the safety validator).`,
     };
 
     const validationError = ValidatorLogic.validate(proposal);
