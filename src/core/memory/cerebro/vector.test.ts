@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { db, initDB } from '../../basevault/db';
-import { CerebroVectorStore } from './vector';
+import { CerebroVectorStore, _resetKeywordScoringCache } from './vector';
 
 describe('CerebroVectorStore (sqlite-vec & Fallback)', () => {
   beforeEach(() => {
@@ -74,5 +74,93 @@ describe('CerebroVectorStore (sqlite-vec & Fallback)', () => {
     expect(contents).toContain('Alpha memory');
     expect(contents).toContain('Global memory');
     expect(contents).not.toContain('Beta memory');
+  });
+});
+
+describe('CerebroVectorStore keyword-fallback scoring settings (Base Score / Match Boost dials)', () => {
+  const setKeywordSettings = (baseScore: number | null, matchBoost: number | null) => {
+    if (baseScore === null) {
+      db.prepare("DELETE FROM system_settings WHERE key = 'cerebro_keyword_base'").run();
+    } else {
+      db.prepare(
+        "INSERT INTO system_settings (key, value) VALUES ('cerebro_keyword_base', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      ).run(String(baseScore));
+    }
+    if (matchBoost === null) {
+      db.prepare("DELETE FROM system_settings WHERE key = 'cerebro_keyword_boost'").run();
+    } else {
+      db.prepare(
+        "INSERT INTO system_settings (key, value) VALUES ('cerebro_keyword_boost', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      ).run(String(matchBoost));
+    }
+    _resetKeywordScoringCache();
+  };
+
+  beforeEach(() => {
+    initDB();
+    db.prepare('DELETE FROM cerebro_memories_meta').run();
+    db.prepare('DELETE FROM cerebro_memories_vec').run();
+  });
+
+  afterEach(() => {
+    setKeywordSettings(null, null);
+  });
+
+  it('with no settings persisted, reproduces the pre-existing hardcoded 0.7 + matchCount*0.05 formula', () => {
+    setKeywordSettings(null, null);
+    CerebroVectorStore.insert('NeuroSync sovereign os architecture relies on sqlite-vec', 'knowledge');
+
+    const results = CerebroVectorStore.search('neurosync architecture', 'knowledge');
+    expect(results).toHaveLength(1);
+    // matchCount = 2 (neurosync, architecture) -> 0.7 + 2*0.05 = 0.8
+    expect(results[0]!.similarity).toBeCloseTo(0.8);
+  });
+
+  it('changing cerebro_keyword_base changes the computed score for the same query/document pair', () => {
+    CerebroVectorStore.insert('NeuroSync sovereign os architecture relies on sqlite-vec', 'knowledge');
+
+    setKeywordSettings(0.5, 0.05);
+    const lowBase = CerebroVectorStore.search('neurosync architecture', 'knowledge');
+    // matchCount = 2 -> 0.5 + 2*0.05 = 0.6
+    expect(lowBase[0]!.similarity).toBeCloseTo(0.6);
+
+    setKeywordSettings(0.9, 0.05);
+    const highBase = CerebroVectorStore.search('neurosync architecture', 'knowledge');
+    // matchCount = 2 -> 0.9 + 2*0.05 = 1.0
+    expect(highBase[0]!.similarity).toBeCloseTo(1.0);
+
+    expect(highBase[0]!.similarity!).toBeGreaterThan(lowBase[0]!.similarity!);
+  });
+
+  it('changing cerebro_keyword_boost changes the computed score for the same query/document pair', () => {
+    CerebroVectorStore.insert('NeuroSync sovereign os architecture relies on sqlite-vec', 'knowledge');
+
+    setKeywordSettings(0.7, 0.01);
+    const lowBoost = CerebroVectorStore.search('neurosync architecture', 'knowledge');
+    // matchCount = 2 -> 0.7 + 2*0.01 = 0.72
+    expect(lowBoost[0]!.similarity).toBeCloseTo(0.72);
+
+    setKeywordSettings(0.7, 0.15);
+    const highBoost = CerebroVectorStore.search('neurosync architecture', 'knowledge');
+    // matchCount = 2 -> 0.7 + 2*0.15 = 1.0
+    expect(highBoost[0]!.similarity).toBeCloseTo(1.0);
+
+    expect(highBoost[0]!.similarity!).toBeGreaterThan(lowBoost[0]!.similarity!);
+  });
+
+  it('a raised base score can pull a previously-below-threshold-adjacent document into the results', () => {
+    // A single low-signal match (matchCount=1) barely clears 0 at a tiny base
+    // score, and is filtered out entirely once similarity would be <= 0 —
+    // proving the setting changes which documents are returned, not just
+    // their score.
+    CerebroVectorStore.insert('Completely unrelated single keyword architecture mention', 'knowledge');
+
+    setKeywordSettings(0, 0.05);
+    const zeroBase = CerebroVectorStore.search('architecture', 'knowledge');
+    expect(zeroBase[0]!.similarity).toBeCloseTo(0.05);
+
+    setKeywordSettings(0.7, 0.05);
+    const normalBase = CerebroVectorStore.search('architecture', 'knowledge');
+    expect(normalBase[0]!.similarity).toBeCloseTo(0.75);
   });
 });
