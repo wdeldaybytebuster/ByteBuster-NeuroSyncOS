@@ -57,6 +57,63 @@ export function _resetFreeModeCache(): void {
   cachedUnlockedAt = 0;
 }
 
+/**
+ * CoreExec "Budget & Rigour" dial → Governor token ceiling.
+ *
+ * The dashboard slider (`src/ui/components/AutonomyDials.tsx`) persisted a
+ * `budget` percentage (0-100, default 70) to `system_settings` since its
+ * introduction, but nothing ever read it back — `FreeModeGovernor` always ran
+ * with the constructor's hardcoded 100,000-token ceiling regardless of the
+ * slider's position. This makes the setting real: `budget` is treated as a
+ * percentage of a base ceiling (`BASE_BUDGET_CEILING_TOKENS`, chosen to match
+ * the pre-existing default 100,000-token free-tier quota so 100% behaves
+ * exactly like the old hardcoded value), read with the same short-TTL cache
+ * pattern as `isFreeModeUnlocked` above so a UI change takes effect within a
+ * couple seconds without a DB hit on every route resolution.
+ *
+ * Deliberately conditional: if no `budget` row exists yet (fresh install, or
+ * any test that never touches `system_settings`), `readBudgetPercent()`
+ * returns `null` and `syncBudgetFromSettings()` is a no-op — so every
+ * existing caller that constructs `new FreeModeGovernor(explicitMaxTokens)`
+ * for deterministic unit testing keeps working unchanged. Only once a real
+ * `budget` value is persisted does the ceiling start tracking it.
+ */
+export const BASE_BUDGET_CEILING_TOKENS = 100_000;
+
+const BUDGET_CACHE_TTL_MS = 2000;
+let cachedBudgetPercent: number | null = null;
+let cachedBudgetAt = 0;
+
+function readBudgetPercent(): number | null {
+  const now = Date.now();
+  if (now - cachedBudgetAt > BUDGET_CACHE_TTL_MS) {
+    cachedBudgetAt = now;
+    try {
+      const row = db
+        .prepare("SELECT value FROM system_settings WHERE key = 'budget'")
+        .get() as { value: string } | undefined;
+      const parsed = row ? Number(row.value) : NaN;
+      cachedBudgetPercent = Number.isFinite(parsed) ? parsed : null;
+    } catch {
+      // DB not initialized yet (very early boot), or table missing — leave
+      // the governor's constructor-provided ceiling untouched.
+      cachedBudgetPercent = null;
+    }
+  }
+  return cachedBudgetPercent;
+}
+
+/** Test-only: force the budget cache to re-read on the next call. */
+export function _resetBudgetCache(): void {
+  cachedBudgetAt = 0;
+}
+
+/** Clamp a 0-100 budget percentage into a token ceiling. Exported for tests. */
+export function budgetPercentToMaxTokens(percent: number): number {
+  const clamped = Math.min(100, Math.max(0, percent));
+  return Math.round((BASE_BUDGET_CEILING_TOKENS * clamped) / 100);
+}
+
 export interface UsageRecord {
   timestamp: number;
   tokens: number;
@@ -94,7 +151,21 @@ export class FreeModeGovernor {
     };
   }
 
+  /**
+   * Re-reads the `budget` setting (short-TTL cached) and applies it to this
+   * governor's token ceiling, if a value has been persisted. No-op when the
+   * setting is absent, so constructor-provided ceilings used by tests are
+   * never clobbered by an empty/uninitialized `system_settings` table.
+   */
+  public syncBudgetFromSettings(): void {
+    const percent = readBudgetPercent();
+    if (percent !== null) {
+      this.state.maxTokens = budgetPercentToMaxTokens(percent);
+    }
+  }
+
   public canProceed(estimatedTokens: number): boolean {
+    this.syncBudgetFromSettings();
     return this.state.tokensUsed + estimatedTokens <= this.state.maxTokens;
   }
 
