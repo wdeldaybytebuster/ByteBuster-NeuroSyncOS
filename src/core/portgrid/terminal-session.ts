@@ -517,19 +517,40 @@ export function createTerminalSession(projectId: string, opts: TerminalSessionOp
   return session;
 }
 
-/** Kill every live session. Registered on server shutdown. */
-export function disposeAllTerminalSessions(): void {
-  for (const session of [...terminalSessions.values()]) {
-    session.dispose('server-shutdown');
-  }
+/**
+ * Kill every live session. Registered on server shutdown.
+ *
+ * Async because `TerminalSession.dispose()` now resolves only once the bwrap
+ * child has actually exited (see dispose()'s own doc comment) — its
+ * meaningful cleanup (registry removal, logging, and critically the
+ * auto-scan "learning loop" trigger) happens AFTER that await. A caller that
+ * doesn't await this and then calls `process.exit()` would kill the event
+ * loop before any of that cleanup ever runs, silently dropping the auto-scan
+ * for every session still open at shutdown time — exactly the kind of
+ * regression this function's callers must not reintroduce.
+ */
+export async function disposeAllTerminalSessions(): Promise<void> {
+  await Promise.all(
+    [...terminalSessions.values()].map((session) => session.dispose('server-shutdown')),
+  );
 }
 
 let shutdownHooked = false;
 export function installTerminalShutdownHooks(): void {
   if (shutdownHooked) return;
   shutdownHooked = true;
-  const bye = () => disposeAllTerminalSessions();
-  process.on('exit', bye);
-  process.on('SIGINT', () => { bye(); process.exit(0); });
-  process.on('SIGTERM', () => { bye(); process.exit(0); });
+  // Node's 'exit' event cannot await async work (the event loop is not
+  // processed further once it fires) — this listener is a synchronous-only
+  // last resort for exit paths that don't go through SIGINT/SIGTERM below
+  // (e.g. a natural process end). It still issues every session's kill()
+  // signal synchronously; it just can't wait for confirmed exit or run the
+  // post-exit cleanup, same fundamental constraint the old synchronous
+  // dispose() never had to contend with on this specific path.
+  process.on('exit', () => { void disposeAllTerminalSessions(); });
+  // SIGINT/SIGTERM DO have a chance to await real async work before the
+  // process actually exits — do so, so the auto-scan learning-loop trigger
+  // (and registry cleanup) reliably fires on a normal graceful shutdown
+  // (Ctrl+C, `kill`, a process manager stop) instead of racing process.exit().
+  process.on('SIGINT', () => { void (async () => { await disposeAllTerminalSessions(); process.exit(0); })(); });
+  process.on('SIGTERM', () => { void (async () => { await disposeAllTerminalSessions(); process.exit(0); })(); });
 }
