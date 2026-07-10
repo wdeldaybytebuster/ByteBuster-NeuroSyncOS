@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { CommandSandbox } from './sandbox';
-import { scanProjectForDocs } from '../okf/project-scanner';
+import { scanProjectForDocs, computeProjectDocSignal } from '../okf/project-scanner';
 import { scoutEmitter } from '../scoutdaemon/sse';
 import { log } from '../observability/logger';
 
@@ -59,6 +59,12 @@ import { log } from '../observability/logger';
 // sessions (browser tab closed without a clean WS close, etc.) don't accumulate.
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
+// Bounded fallback for dispose(): the bwrap child normally exits within a few ms
+// of pty.kill(), and dispose() resolves the instant node-pty reports that exit.
+// This cap only matters in the pathological case where the exit event never
+// arrives, so teardown can't hang forever.
+const DISPOSE_EXIT_TIMEOUT_MS = 5000;
+
 const BWRAP_BIN = '/usr/bin/bwrap';
 
 // Auto-scan-on-close (the "learning loop" gap): a coding agent run through this
@@ -67,9 +73,22 @@ const BWRAP_BIN = '/usr/bin/bwrap';
 // than build a new trigger mechanism, this reuses the same in-process scan
 // function on the one lifecycle event every session (WS close, WS error, and
 // shell exit -- see server/index.ts) already funnels through: dispose().
-// Cooldown avoids re-scanning the same project on every rapid open/close.
+//
+// The cooldown avoids re-scanning the same project on every rapid open/close,
+// but it is CHANGE-AWARE, not purely time-based. The original implementation
+// skipped any second close within 60s regardless of whether files had actually
+// changed -- so two sessions for the same project closing inside that window
+// meant the second session's real file changes were silently missed (confirmed
+// in the 24-scenario reality test). Now a close is skipped ONLY when the
+// project's doc-file fingerprint is unchanged since the last scan AND we're
+// still inside the cooldown window; a changed fingerprint always forces a
+// re-scan, even inside the window, which closes that failure mode.
 const AUTO_SCAN_COOLDOWN_MS = 60 * 1000;
-const lastAutoScanAtByProject = new Map<string, number>();
+interface AutoScanRecord {
+  at: number;
+  signal: string | null;
+}
+const lastAutoScanByProject = new Map<string, AutoScanRecord>();
 
 /**
  * Broadcasts a TERMINAL_AUTO_SCAN event over the existing ScoutDaemon SSE
@@ -82,14 +101,33 @@ const lastAutoScanAtByProject = new Map<string, number>();
 // Exported (not called externally in production) so it's testable without
 // needing a real bwrap-spawned pty session.
 export function triggerAutoScan(projectId: string): void {
-  const last = lastAutoScanAtByProject.get(projectId) ?? 0;
   const now = Date.now();
-  if (now - last < AUTO_SCAN_COOLDOWN_MS) return;
-  lastAutoScanAtByProject.set(projectId, now);
 
   try {
+    // Cheap change-detection fingerprint of the project's doc files (null when
+    // the project has no root path -- then we can't tell, so we don't skip).
+    const signal = computeProjectDocSignal(projectId);
+    const last = lastAutoScanByProject.get(projectId);
+
+    // Skip ONLY when nothing has changed since the last successful scan AND we
+    // are still inside the cooldown window. A changed fingerprint forces a
+    // re-scan even within the window -- this is the fix for the "two rapid
+    // closes, second one's real changes silently missed" bug (a time-based-only
+    // cooldown had no way to notice the second close carried new changes).
+    if (
+      last &&
+      signal !== null &&
+      last.signal === signal &&
+      now - last.at < AUTO_SCAN_COOLDOWN_MS
+    ) {
+      return;
+    }
+
     const result = scanProjectForDocs(projectId);
     if (result.success) {
+      // Record the fingerprint we just scanned, so the next close can tell
+      // whether anything changed relative to this scan.
+      lastAutoScanByProject.set(projectId, { at: now, signal });
       log.info(
         `[Terminal] auto-scan for project ${projectId}: ${result.totalFound} doc(s) found, ${result.unprocessedCount} unprocessed`,
       );
@@ -102,7 +140,9 @@ export function triggerAutoScan(projectId: string): void {
     }
     // If the project has no project_root_path configured, scanProjectForDocs
     // returns success:false -- not every project is scannable, and that's
-    // not an error worth surfacing loudly on terminal close.
+    // not an error worth surfacing loudly on terminal close. We deliberately
+    // do NOT record a cooldown entry in that case, so a project that later
+    // gains a root path is scanned promptly on its next close.
   } catch (err) {
     // Best-effort only: never let a scan failure affect terminal teardown.
     log.warn(`[Terminal] auto-scan failed for project ${projectId}:`, err);
@@ -324,6 +364,10 @@ export class TerminalSession {
   readonly projectDir: string;
   private idleTimer: NodeJS.Timeout;
   private disposed = false;
+  // Set once node-pty reports the bwrap process has actually exited. dispose()
+  // uses this to know whether it still needs to wait for teardown or the child
+  // is already gone (e.g. the user typed `exit`, so onExit fired before close).
+  private ptyExited = false;
 
   constructor(id: string, projectId: string, projectDir: string, opts: TerminalSessionOptions) {
     this.id = id;
@@ -343,7 +387,14 @@ export class TerminalSession {
       env: { TERM: process.env.TERM || 'xterm-256color', PATH: process.env.PATH || '/usr/bin:/bin' },
     });
 
-    this.idleTimer = setTimeout(() => this.dispose('idle-timeout'), IDLE_TIMEOUT_MS);
+    // node-pty's onExit supports multiple listeners; this internal one just
+    // records that the child is truly gone (see dispose()'s wait logic). The
+    // WS server registers its own onExit separately via session.onExit().
+    this.pty.onExit(() => {
+      this.ptyExited = true;
+    });
+
+    this.idleTimer = setTimeout(() => { void this.dispose('idle-timeout'); }, IDLE_TIMEOUT_MS);
     this.idleTimer.unref();
 
     // Track every session in the global registry so it is always reapable on
@@ -377,22 +428,66 @@ export class TerminalSession {
 
   private bumpIdle(): void {
     clearTimeout(this.idleTimer);
-    this.idleTimer = setTimeout(() => this.dispose('idle-timeout'), IDLE_TIMEOUT_MS);
+    this.idleTimer = setTimeout(() => { void this.dispose('idle-timeout'); }, IDLE_TIMEOUT_MS);
     this.idleTimer.unref();
   }
 
-  dispose(reason: string = 'closed'): void {
+  /**
+   * Tear the session down and RESOLVE ONLY once the bwrap child has actually
+   * exited. This is intentionally async: `pty.kill()` merely sends a signal, and
+   * the bwrap process (its own PID namespace via `--unshare-pid`, cwd + fresh
+   * /proc /dev /tmp mounts layered under the project bind) takes a moment to
+   * exit and release the project directory. A synchronous dispose returned while
+   * the child was still tearing down, so any caller that then removed the
+   * project dir raced live mounts/handles inside it -- the source of the
+   * intermittent `ENOTEMPTY` failures in the empirical-containment tests.
+   * Awaiting real exit (not a fixed sleep) closes that race; a bounded fallback
+   * guarantees dispose never hangs if `onExit` somehow never fires.
+   *
+   * External callers (WS close/error, shell exit, server shutdown) fire-and-
+   * forget it, which is fine -- `pty.kill()` is still issued synchronously below
+   * so the signal goes out immediately regardless of whether anyone awaits.
+   */
+  async dispose(reason: string = 'closed'): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
     clearTimeout(this.idleTimer);
-    try {
-      this.pty.kill();
-    } catch {
-      /* already dead */
-    }
+
+    await this.killAndAwaitExit();
+
     terminalSessions.delete(this.id);
     log.info(`[Terminal] session ${this.id} disposed (${reason})`);
     triggerAutoScan(this.projectId);
+  }
+
+  // Send the kill signal (synchronously) and resolve once the child is confirmed
+  // gone. Resolves immediately if it already exited; otherwise waits for the
+  // node-pty exit event, with a bounded timeout fallback so teardown can never
+  // block forever on a stuck child.
+  private killAndAwaitExit(): Promise<void> {
+    if (this.ptyExited) {
+      try { this.pty.kill(); } catch { /* already dead */ }
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(fallback);
+        resolve();
+      };
+      const fallback = setTimeout(done, DISPOSE_EXIT_TIMEOUT_MS);
+      fallback.unref();
+      this.pty.onExit(() => done());
+      try {
+        this.pty.kill();
+      } catch {
+        // Already dead and onExit may never fire for this late listener --
+        // resolve now rather than wait out the fallback.
+        done();
+      }
+    });
   }
 }
 
