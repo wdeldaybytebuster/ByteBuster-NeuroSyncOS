@@ -48,9 +48,51 @@ todosRouter.post('/resolve', async (c) => {
   }
 });
 
-// Deference UI bulk-approve — resolves a batch of high-confidence (>=0.70)
-// todos in one transaction, mirroring /resolve's per-item logic for each id.
-const DEFERENCE_THRESHOLD = 0.70;
+// Deference UI bulk-approve — resolves a batch of high-confidence (>=0.70 by
+// default) todos in one transaction, mirroring /resolve's per-item logic for
+// each id.
+//
+// The 0.70 default mirrors the CoreExec "Autonomy & Delegation" dial's own
+// default of 30% (`src/ui/components/AutonomyDials.tsx`,
+// `src/ui/lib/approvalQueue.ts`'s `autonomyToThreshold`): threshold = 1 -
+// autonomy/100. This is a server-side trust boundary (a client could forward
+// any threshold it likes), so it independently re-reads the same `autonomy`
+// setting rather than trusting a client-supplied value — same duplication
+// pattern as `DEFERENCE_THRESHOLD` in `approvalQueue.ts`. Cached with the same
+// short-TTL pattern used for `free_mode_unlocked` in `governor.ts` so a UI
+// change takes effect within a couple seconds without a DB hit per request.
+const DEFAULT_DEFERENCE_THRESHOLD = 0.70;
+const AUTONOMY_CACHE_TTL_MS = 2000;
+let cachedDeferenceThreshold = DEFAULT_DEFERENCE_THRESHOLD;
+let cachedAutonomyAt = 0;
+
+function getDeferenceThreshold(): number {
+  const now = Date.now();
+  if (now - cachedAutonomyAt > AUTONOMY_CACHE_TTL_MS) {
+    cachedAutonomyAt = now;
+    try {
+      const row = db
+        .prepare("SELECT value FROM system_settings WHERE key = 'autonomy'")
+        .get() as { value: string } | undefined;
+      const autonomy = row ? Number(row.value) : NaN;
+      if (Number.isFinite(autonomy)) {
+        const clamped = Math.min(100, Math.max(0, autonomy));
+        cachedDeferenceThreshold = 1 - clamped / 100;
+      } else {
+        cachedDeferenceThreshold = DEFAULT_DEFERENCE_THRESHOLD;
+      }
+    } catch {
+      // DB not initialized yet, or table missing — safe default.
+      cachedDeferenceThreshold = DEFAULT_DEFERENCE_THRESHOLD;
+    }
+  }
+  return cachedDeferenceThreshold;
+}
+
+/** Test-only: force the autonomy cache to re-read on the next call. */
+export function _resetDeferenceThresholdCache(): void {
+  cachedAutonomyAt = 0;
+}
 
 todosRouter.post('/resolve-bulk', async (c) => {
   const body = await c.req.json();
@@ -63,6 +105,9 @@ todosRouter.post('/resolve-bulk', async (c) => {
   try {
     const resolved: string[] = [];
     const failed: { id: string; error: string }[] = [];
+    // Read once per request so every item in this batch is judged against
+    // the same threshold, even if the cache TTL happens to expire mid-loop.
+    const deferenceThreshold = getDeferenceThreshold();
 
     db.transaction(() => {
       for (const todoId of todoIds) {
@@ -80,10 +125,10 @@ todosRouter.post('/resolve-bulk', async (c) => {
             continue;
           }
           const confidenceValue = todo.confidence;
-          if (typeof confidenceValue !== 'number' || Number.isNaN(confidenceValue) || confidenceValue < DEFERENCE_THRESHOLD) {
+          if (typeof confidenceValue !== 'number' || Number.isNaN(confidenceValue) || confidenceValue < deferenceThreshold) {
             failed.push({
               id: todoId,
-              error: `confidence ${confidenceValue} is below the ${DEFERENCE_THRESHOLD} auto-approve threshold — resolve individually via /resolve instead`,
+              error: `confidence ${confidenceValue} is below the ${deferenceThreshold} auto-approve threshold — resolve individually via /resolve instead`,
             });
             continue;
           }

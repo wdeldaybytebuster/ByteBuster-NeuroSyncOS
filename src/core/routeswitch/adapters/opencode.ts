@@ -1,4 +1,5 @@
 import { OpenAICompatibleProvider } from './openai-compatible';
+import { GenerationStreamHooks } from '../providers';
 import { OpenCodeDiscoveryService } from '../discovery';
 
 export interface OpenCodeProviderConfig {
@@ -25,7 +26,13 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
     }, customId || 'opencode');
   }
 
-  override async generate(prompt: string, estimatedTokens: number, schema?: any): Promise<string> {
+  // HEURISTIC FALLBACK: `streamHooks` ignored — see OpenAICompatibleProvider.generate.
+  override async generate(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    _streamHooks?: GenerationStreamHooks,
+  ): Promise<string> {
     const cfg = this.config;
     if (cfg.modelId && cfg.modelId.toLowerCase() !== 'auto') {
       return this._generateWithConfig(prompt, estimatedTokens, schema, cfg);

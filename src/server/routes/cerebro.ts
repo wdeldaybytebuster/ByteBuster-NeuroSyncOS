@@ -401,9 +401,23 @@ cerebroRouter.post('/chat', async (c) => {
 
     const fullPrompt = `${CEREBRO_SYSTEM_PROMPT}\n\n${routedContextBlock ? `${routedContextBlock}\n` : ''}${historyContext ? `CONVERSATION HISTORY:\n${historyContext}\n\n` : ''}User: ${message}\n\nCerebro:`;
 
+    // estimatedTokens raised 300 -> 900 (2026-07-10): live testing found a
+    // longer/complex Cerebro chat prompt consistently failing with "LLM API
+    // returned no content in response" against OpenCode Zen's free catalog,
+    // while a trivial prompt ("what is a DAG?") succeeded. Many "free" routed
+    // models on these gateways are reasoning models that spend hidden
+    // chain-of-thought tokens before any visible reply, so a small budget can
+    // be entirely consumed before content is emitted. 900 keeps a chat reply
+    // smaller than CoreExec's generic-task budget (1000) and well under
+    // ScopeLogic's DAG-schema budget (2000) — it's a conversational reply, not
+    // structured/analytical output — while giving real headroom above the
+    // shared 1024-token floor in openai-compatible.ts (see
+    // DEFAULT_MAX_TOKENS_FLOOR there, which also gained a bounded
+    // reasoning-exhaustion retry as the primary defense for prompts that still
+    // exceed this).
     const result = await chatEngine.execute({
       prompt: fullPrompt,
-      estimatedTokens: 300,
+      estimatedTokens: 900,
       scope: 'cerebro',
       ...(projectId !== undefined ? { projectId } : {}),
     });
