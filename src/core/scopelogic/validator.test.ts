@@ -1,8 +1,33 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { ValidatorLogic } from './validator';
 import { DAGProposal } from './interview';
+import { db, initDB } from '../basevault/db';
+
+const ASSERTION_KEYS = [
+  'scopelogic_assertion_si01_enabled',
+  'scopelogic_assertion_si03_enabled',
+  'scopelogic_assertion_si05_enabled',
+  'scopelogic_assertion_qr01_enabled',
+];
+
+function setAssertion(key: string, enabled: boolean) {
+  db.prepare(
+    "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+  ).run(key, String(enabled));
+}
 
 describe('ValidatorLogic (Category A Boundaries)', () => {
+  beforeAll(() => {
+    initDB();
+  });
+
+  // Behavioral Assertion toggles must never leak between tests.
+  afterEach(() => {
+    for (const key of ASSERTION_KEYS) {
+      db.prepare('DELETE FROM system_settings WHERE key = ?').run(key);
+    }
+  });
+
   const createProposal = (prompts: string[]): DAGProposal => ({
     id: 'test-prop',
     status: 'draft',
@@ -91,5 +116,117 @@ describe('ValidatorLogic (Category A Boundaries)', () => {
     // 'preconfigured' contains 'configured' but not the reserved 'scoutdaemon'/'coreexec'.
     // 'lowscopelogic' contains 'scopelogic' but without a word boundary prefix.
     expect(ValidatorLogic.validate(createProposal(['preconfigured data', 'lowscopelogic threshold']))).toBeNull();
+  });
+});
+
+// ─── Behavioral Assertion Framework — toggleable SI-*/QR-01 checks ─────────
+// Proves the ScopeLogicDashboard "Behavioral Assertion" toggles (Control D)
+// actually gate ValidatorLogic.validate()'s outcome: same proposal, setting
+// on vs off, different accept/reject result. Each toggleable assertion
+// defaults OFF (permissive / matches pre-existing behavior) when its
+// system_settings key has never been saved.
+describe('ValidatorLogic — Behavioral Assertion toggles', () => {
+  beforeAll(() => {
+    initDB();
+  });
+
+  afterEach(() => {
+    for (const key of ASSERTION_KEYS) {
+      db.prepare('DELETE FROM system_settings WHERE key = ?').run(key);
+    }
+  });
+
+  describe('QR-01 — Reasoning key present', () => {
+    const proposalNoReasoning: DAGProposal = {
+      id: 'p1', status: 'draft',
+      nodes: [{ id: 'n1', dependencies: [], prompt: 'fetch weather data' }],
+    };
+
+    it('passes when disabled (default) even without a reasoning field', () => {
+      expect(ValidatorLogic.validate(proposalNoReasoning)).toBeNull();
+    });
+
+    it('rejects a proposal missing reasoning once enabled', () => {
+      setAssertion('scopelogic_assertion_qr01_enabled', true);
+      expect(ValidatorLogic.validate(proposalNoReasoning)).toContain('QR-01');
+    });
+
+    it('passes once enabled if reasoning IS present', () => {
+      setAssertion('scopelogic_assertion_qr01_enabled', true);
+      const withReasoning: DAGProposal = { ...proposalNoReasoning, reasoning: 'Fetches current weather for the summary step.' };
+      expect(ValidatorLogic.validate(withReasoning)).toBeNull();
+    });
+  });
+
+  describe('SI-05 — Confidence above minimum', () => {
+    const lowConfidence: DAGProposal = {
+      id: 'p2', status: 'draft', confidence: 0.1,
+      nodes: [{ id: 'n1', dependencies: [], prompt: 'summarize results' }],
+    };
+
+    it('passes when disabled (default) even with low confidence', () => {
+      expect(ValidatorLogic.validate(lowConfidence)).toBeNull();
+    });
+
+    it('rejects low confidence once enabled', () => {
+      setAssertion('scopelogic_assertion_si05_enabled', true);
+      expect(ValidatorLogic.validate(lowConfidence)).toContain('SI-05');
+    });
+
+    it('passes once enabled if confidence clears the minimum', () => {
+      setAssertion('scopelogic_assertion_si05_enabled', true);
+      const highConfidence: DAGProposal = { ...lowConfidence, confidence: 0.9 };
+      expect(ValidatorLogic.validate(highConfidence)).toBeNull();
+    });
+  });
+
+  describe('SI-01 — Output shape validity (JSON)', () => {
+    const danglingDep: DAGProposal = {
+      id: 'p3', status: 'draft',
+      nodes: [{ id: 'n1', dependencies: ['does-not-exist'], prompt: 'fetch data' }],
+    };
+
+    it('passes when disabled (default) even with a dangling dependency ref', () => {
+      expect(ValidatorLogic.validate(danglingDep)).toBeNull();
+    });
+
+    it('rejects a dangling dependency ref once enabled', () => {
+      setAssertion('scopelogic_assertion_si01_enabled', true);
+      expect(ValidatorLogic.validate(danglingDep)).toContain('SI-01');
+    });
+
+    it('passes once enabled if the proposal is well-formed', () => {
+      setAssertion('scopelogic_assertion_si01_enabled', true);
+      const wellFormed: DAGProposal = {
+        id: 'p3b', status: 'draft',
+        nodes: [
+          { id: 'n1', dependencies: [], prompt: 'fetch data' },
+          { id: 'n2', dependencies: ['n1'], prompt: 'process it' },
+        ],
+      };
+      expect(ValidatorLogic.validate(wellFormed)).toBeNull();
+    });
+  });
+
+  describe('SI-03 — Explanation non-empty (minimum-length prompt)', () => {
+    const terseProposal: DAGProposal = {
+      id: 'p4', status: 'draft',
+      nodes: [{ id: 'n1', dependencies: [], prompt: 'x' }],
+    };
+
+    it('passes when disabled (default) even with a 1-word prompt', () => {
+      expect(ValidatorLogic.validate(terseProposal)).toBeNull();
+    });
+
+    it('rejects a too-short explanation once enabled', () => {
+      setAssertion('scopelogic_assertion_si03_enabled', true);
+      expect(ValidatorLogic.validate(terseProposal)).toContain('SI-03');
+    });
+
+    it('passes once enabled if the prompt is descriptive enough', () => {
+      setAssertion('scopelogic_assertion_si03_enabled', true);
+      const descriptive: DAGProposal = { ...terseProposal, nodes: [{ id: 'n1', dependencies: [], prompt: 'fetch the latest weather data' }] };
+      expect(ValidatorLogic.validate(descriptive)).toBeNull();
+    });
   });
 });
