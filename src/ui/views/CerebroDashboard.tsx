@@ -353,6 +353,12 @@ function SetupView() {
         if (d.settings.cerebro_min_similarity) setMinSimilarity(Number(d.settings.cerebro_min_similarity));
         if (d.settings.cerebro_decay_multiplier) setDecayMultiplier(Number(d.settings.cerebro_decay_multiplier));
         if (d.settings.cerebro_access_boost) setAccessBoost(Number(d.settings.cerebro_access_boost));
+        // These two now actually drive _keywordFallbackSearch's scoring
+        // formula server-side — round-trip them on load like their siblings
+        // above so the sliders don't silently reset to their useState
+        // defaults on every page refresh.
+        if (d.settings.cerebro_keyword_base) setKeywordBaseScore(Number(d.settings.cerebro_keyword_base));
+        if (d.settings.cerebro_keyword_boost) setKeywordMatchBoost(Number(d.settings.cerebro_keyword_boost));
       }
     }).catch(() => {});
   }, []);
@@ -402,11 +408,11 @@ function SetupView() {
           {keywordFallback && (
             <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-blue-500/20">
               <div>
-                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400">Base Score</span><span className="font-mono" style={{ color: ACCENT }}>{keywordBaseScore}</span></div>
+                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400 flex items-center gap-1">Base Score <HelpTip text="The starting similarity score any memory gets as soon as at least one word matches your search, when smart search isn't available." /></span><span className="font-mono" style={{ color: ACCENT }}>{keywordBaseScore}</span></div>
                 <input type="range" min={0.3} max={0.9} step={0.05} value={keywordBaseScore} onChange={e => setKeywordBaseScore(+e.target.value)} className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
               </div>
               <div>
-                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400">Match Boost</span><span className="font-mono" style={{ color: ACCENT }}>+{keywordMatchBoost}</span></div>
+                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400 flex items-center gap-1">Match Boost <HelpTip text="How much extra score each additional matching word adds on top of the Base Score, when smart search isn't available." /></span><span className="font-mono" style={{ color: ACCENT }}>+{keywordMatchBoost}</span></div>
                 <input type="range" min={0.01} max={0.15} step={0.01} value={keywordMatchBoost} onChange={e => setKeywordMatchBoost(+e.target.value)} className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
               </div>
             </div>

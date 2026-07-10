@@ -6,7 +6,7 @@ import { OKFWorkspaceWidget } from '../components/OKFWorkspaceWidget';
 import { OKFMindmap } from '../components/OKFMindmap';
 import { DeferenceUI } from '../components/DeferenceUI';
 import { EmbeddedTerminal } from '../components/EmbeddedTerminal';
-import { buildApprovalItems, partitionByConfidence, partitionByKind, type ApprovalItem } from '../lib/approvalQueue';
+import { buildApprovalItems, partitionByConfidence, partitionByKind, autonomyToThreshold, type ApprovalItem } from '../lib/approvalQueue';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { ReactFlow, Controls, Background, BackgroundVariant, Handle, Position, useNodesState, useEdgesState } from '@xyflow/react';
@@ -58,6 +58,20 @@ function DashboardView() {
   const [showMindmap, setShowMindmap] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [autoScanNotice, setAutoScanNotice] = useState<string | null>(null);
+  // CoreExec "Autonomy & Delegation" dial (default 30%, matching the
+  // pre-existing hardcoded 0.70 Deference threshold) — drives the real
+  // confidence split below via autonomyToThreshold(). See approvalQueue.ts.
+  const [autonomySetting, setAutonomySetting] = useState(30);
+
+  // Fetch the Autonomy setting on mount so the approval split reflects
+  // whatever the user last set on the CoreExec dashboard.
+  useEffect(() => {
+    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+      if (d.success && d.settings && d.settings.autonomy !== undefined) {
+        setAutonomySetting(Number(d.settings.autonomy));
+      }
+    }).catch(() => {});
+  }, []);
 
   // Fetch pending proposal on mount
   useEffect(() => {
@@ -255,7 +269,7 @@ function DashboardView() {
     ? { id: proposalId, confidence: proposalConfidence, proposal: pendingProposal }
     : null;
   const approvalItems = buildApprovalItems(approvalQueue, pendingProposalLike);
-  const { low: lowItems, high: highItems } = partitionByConfidence(approvalItems);
+  const { low: lowItems, high: highItems } = partitionByConfidence(approvalItems, autonomyToThreshold(autonomySetting));
   const todoById = new Map(approvalQueue.map(t => [t.id, t]));
 
   const approveItem = (item: ApprovalItem) =>

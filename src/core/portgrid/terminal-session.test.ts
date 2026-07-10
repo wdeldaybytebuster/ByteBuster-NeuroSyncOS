@@ -230,8 +230,13 @@ maybe('terminal-session — empirical containment (bwrap present)', () => {
   let tmpDir: string;
   let session: TerminalSession | null = null;
 
-  afterEach(() => {
-    session?.dispose('test-cleanup');
+  afterEach(async () => {
+    // MUST await: dispose() now resolves only once the bwrap child has actually
+    // exited and released the project dir. Removing tmpDir before that (as the
+    // old synchronous dispose allowed) raced live mounts/handles inside it and
+    // caused the intermittent `ENOTEMPTY` cleanup failures this suite was known
+    // for. Awaiting real exit is the fix, not a sleep.
+    await session?.dispose('test-cleanup');
     session = null;
     if (tmpDir && fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -313,7 +318,9 @@ maybe('terminal-session — empirical containment (bwrap present)', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-term-'));
     session = new TerminalSession('test-2', 'test-project', tmpDir, {});
     expect(terminalSessions.has('test-2')).toBe(true);
-    session.dispose('test');
+    // dispose() is now async (resolves once the child has truly exited); the
+    // registry entry is removed as part of that, so await it before asserting.
+    await session.dispose('test');
     expect(terminalSessions.has('test-2')).toBe(false);
   });
 });
@@ -374,6 +381,37 @@ describe('terminal-session — auto-scan-on-close', () => {
 
     const events = received.filter((d) => d.type === 'TERMINAL_AUTO_SCAN' && d.projectId === projectId);
     expect(events.length).toBe(1);
+  });
+
+  it('re-scans within the cooldown window when files actually changed (change-aware)', () => {
+    // Regression test for the "two rapid closes, second one's real changes
+    // silently missed" bug. Two triggerAutoScan calls happen well inside the
+    // 60s cooldown window (no fake timers, no sleeps -- back to back), but a new
+    // doc file is written between them, exactly as a second terminal session's
+    // coding agent would. The OLD purely-time-based cooldown skipped the second
+    // call outright, so this asserted length would have been 1 (the new file
+    // silently missed). The change-aware cooldown detects the changed
+    // fingerprint and re-scans, so it is 2 and the second scan sees the new file.
+    const { projectId, rootPath } = makeScannableProject(); // starts with 1 doc
+    const received: any[] = [];
+    const onUpdate = (data: any) => received.push(data);
+    scoutEmitter.on('update', onUpdate);
+
+    try {
+      triggerAutoScan(projectId); // scan #1: sees the 1 initial doc
+      // A second session's agent writes a brand-new doc, still inside the 60s
+      // cooldown window relative to scan #1.
+      fs.writeFileSync(path.join(rootPath, 'second-session-change.md'), '# new agent work');
+      triggerAutoScan(projectId); // must NOT be skipped: real changes exist
+    } finally {
+      scoutEmitter.off('update', onUpdate);
+      fs.rmSync(rootPath, { recursive: true, force: true });
+    }
+
+    const events = received.filter((d) => d.type === 'TERMINAL_AUTO_SCAN' && d.projectId === projectId);
+    expect(events.length).toBe(2); // OLD BUG: was 1 (blind time-based skip)
+    expect(events[0].totalFound).toBe(1); // first scan saw the initial doc
+    expect(events[1].totalFound).toBe(2); // second scan picked up the new file
   });
 
   it('does not throw or emit when the project has no project_root_path', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFERENCE_THRESHOLD,
+  autonomyToThreshold,
   buildApprovalItems,
   partitionByConfidence,
   partitionByKind,
@@ -61,6 +62,39 @@ describe('partitionByConfidence', () => {
     const { low, high } = partitionByConfidence(items);
     expect(low).toHaveLength(1);
     expect(high).toHaveLength(0);
+  });
+});
+
+describe('autonomyToThreshold — CoreExec "Autonomy & Delegation" dial', () => {
+  it('the default autonomy (30%) reproduces the pre-existing hardcoded 0.7 threshold', () => {
+    expect(autonomyToThreshold(30)).toBeCloseTo(DEFERENCE_THRESHOLD, 10);
+  });
+
+  it('higher autonomy lowers the bar (more auto-approved)', () => {
+    expect(autonomyToThreshold(100)).toBe(0);
+    expect(autonomyToThreshold(0)).toBe(1);
+    expect(autonomyToThreshold(50)).toBeCloseTo(0.5, 10);
+  });
+
+  it('clamps out-of-range input', () => {
+    expect(autonomyToThreshold(150)).toBe(0);
+    expect(autonomyToThreshold(-20)).toBe(1);
+  });
+
+  it('changing autonomy actually moves an item between the low and high bucket', () => {
+    const items = buildApprovalItems([todo('mid', 0.6)], null);
+    // At the default 30% autonomy (threshold 0.7), a 0.6-confidence item is
+    // low (needs review).
+    const lowAutonomy = partitionByConfidence(items, autonomyToThreshold(30));
+    expect(lowAutonomy.low.map(i => i.id)).toEqual(['mid']);
+    expect(lowAutonomy.high).toHaveLength(0);
+
+    // Dial autonomy up to 50% (threshold 0.5) and the SAME item now clears
+    // the bar and auto-approves — proving the setting changes a real
+    // decision, not just a display label.
+    const highAutonomy = partitionByConfidence(items, autonomyToThreshold(50));
+    expect(highAutonomy.high.map(i => i.id)).toEqual(['mid']);
+    expect(highAutonomy.low).toHaveLength(0);
   });
 });
 
