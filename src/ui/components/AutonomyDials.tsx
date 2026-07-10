@@ -48,7 +48,7 @@ export function AutonomyDials() {
             </div>
          </div>
          <p className="text-xs text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">
-           Controls Iteration Ceilings, context compaction depth, and logprob confidence thresholds (AgentStop).
+           Sets the Free Mode Governor's token ceiling as a percentage of the base {'100,000'}-token quota — a lower Budget makes the Governor block requests sooner.
          </p>
          <div className="relative pt-1">
            <input 
@@ -78,7 +78,7 @@ export function AutonomyDials() {
             </div>
          </div>
          <p className="text-xs text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">
-           Adjusts strict Intent Previews (Sandbox isolation) versus immediate read-only execution.
+           Sets the Deference UI auto-approve confidence bar — higher Autonomy auto-approves more todos and workflow proposals without a manual review click.
          </p>
          <div className="relative pt-1">
            <input 
