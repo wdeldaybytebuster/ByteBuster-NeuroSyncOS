@@ -280,8 +280,41 @@ export class RouteSwitchEngine {
       }
     }
 
+    // Council Mode candidate pool: primary + the configured council providers,
+    // de-duplicated by id (the primary is often also a council member).
+    const councilCandidates = [primaryProvider, ...this.councilProviders.filter(p => p.id !== primaryProvider.id)];
+
+    // Free Mode Governor: apply the SAME paid-provider lock the sequential
+    // fallback chain applies (see the `isProviderAllowed` skip below). Council
+    // Mode queries every provider in PARALLEL, so unlike the sequential chain it
+    // can't "fall through" one provider at a time — instead we pre-filter the
+    // pool so a paid+locked provider is simply never called, exactly as it would
+    // be skipped in the sequential chain. This closes the gap flagged in
+    // docs/base-knowledge-integration-tracker.md ("Council Mode does not filter
+    // paid providers").
+    const eligibleCouncilProviders = councilCandidates.filter(
+      p => this.governor.isProviderAllowed(this._isProviderPaidTier(p.id))
+    );
+
+    // JUDGMENT CALL (documented, not silent): a meaningful consensus needs >= 2
+    // providers. If the paid-provider lock drops the eligible pool below 2, we do
+    // NOT run a degenerate 1-provider "council" (which would return the existing
+    // confidence:0 / disagreement:1.0 degenerate signal). Instead we fall back to
+    // the normal sequential fallback chain for this request. That chain ALREADY
+    // skips paid+locked providers the same way and degrades gracefully to a free
+    // provider — or errors only if nothing is eligible. This matches how the
+    // sequential chain already treats a locked paid provider (like an exhausted
+    // one) rather than inventing a new refuse/error path, and it keeps the
+    // request served by a free provider whenever one exists.
+    const councilFilteredOut = TriageClassifier.isHighRisk(request.prompt)
+      && this.councilProviders.length >= 2
+      && eligibleCouncilProviders.length < 2;
+    if (councilFilteredOut) {
+      log.info(`[RouteSwitch] High-risk prompt, but Free Mode lock left only ${eligibleCouncilProviders.length} eligible council provider(s) (need >= 2). Falling back to the sequential single-provider chain.`);
+    }
+
     // Check if Council Mode should be triggered
-    const isCouncilTriggered = TriageClassifier.isHighRisk(request.prompt) && this.councilProviders.length >= 2;
+    const isCouncilTriggered = TriageClassifier.isHighRisk(request.prompt) && eligibleCouncilProviders.length >= 2;
 
     let responseContent: string;
     let finalProvider = primaryProvider.id;
@@ -289,7 +322,7 @@ export class RouteSwitchEngine {
 
     if (isCouncilTriggered) {
       log.info('High-risk prompt detected. Triggering Council Mode.');
-      const allProviders = [primaryProvider, ...this.councilProviders];
+      const allProviders = eligibleCouncilProviders;
       const consensus = await ConsensusSynthesizer.executeCouncilMode(enrichedPrompt, request.estimatedTokens, allProviders, request.responseSchema);
       responseContent = consensus.content;
       confidence = consensus.confidence;
@@ -377,7 +410,7 @@ export class RouteSwitchEngine {
       }
     }
 
-    const actualTokens = isCouncilTriggered ? request.estimatedTokens * (this.councilProviders.length + 1) : request.estimatedTokens;
+    const actualTokens = isCouncilTriggered ? request.estimatedTokens * eligibleCouncilProviders.length : request.estimatedTokens;
 
     return {
       content: responseContent!,
