@@ -65,6 +65,7 @@ Do not include any other JSON. Do not explain the JSON.`;
  * ValidatorLogic gate + template fallback as the real safety net.
  */
 const DAG_PROPOSAL_SCHEMA = {
+  title: 'DAG_PROPOSAL_SCHEMA',
   type: 'object',
   properties: {
     reasoning: { type: 'string' },

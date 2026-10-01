@@ -46,6 +46,7 @@ export function initDB() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       workspace_path TEXT,
+      project_root_path TEXT,
       created_at INTEGER NOT NULL
     );
 
@@ -374,6 +375,14 @@ export function initDB() {
   } catch (e: any) {
     if (!e.message.includes('duplicate column name')) {
       console.error('Error adding permission_archetype column to projects:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN project_root_path TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding project_root_path column to projects:', e);
     }
   }
 

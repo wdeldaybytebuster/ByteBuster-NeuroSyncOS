@@ -64,9 +64,40 @@ function DashboardView() {
   }, [activeProjectId]);
 
   // Fetch config for provider status
+  // Fetch config for provider status and forecasting alerts
   useEffect(() => {
-    fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => { if (d.success) setConfig(d); }).catch(() => {});
-  }, []);
+    const fetchConfig = () => {
+      fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
+        if (d.success) {
+          setConfig(d);
+          
+          const newAlerts: string[] = [];
+          
+          if (d.telemetry) {
+            if (d.telemetry.tokensUsed >= d.telemetry.maxTokens) {
+              newAlerts.push(`Governor Block: Token limit reached (${d.telemetry.tokensUsed.toLocaleString()} / ${d.telemetry.maxTokens.toLocaleString()}). No further requests allowed.`);
+            } else if (d.telemetry.tokensUsed >= d.telemetry.maxTokens * 0.9) {
+              newAlerts.push(`Governor Warning: Nearing token limit (${d.telemetry.tokensUsed.toLocaleString()} / ${d.telemetry.maxTokens.toLocaleString()}).`);
+            }
+          }
+          
+          if (d.health) {
+            for (const [providerId, state] of Object.entries(d.health)) {
+              if ((state as any).isExhausted) {
+                const name = fleetProviders.find(p => p.id === providerId)?.name || providerId;
+                newAlerts.push(`Provider Error: ${name} is exhausted or rate-limited. Routing chain will bypass it.`);
+              }
+            }
+          }
+          
+          setAlerts(newAlerts);
+        }
+      }).catch(() => {});
+    };
+    fetchConfig();
+    const iv = setInterval(fetchConfig, 5000);
+    return () => clearInterval(iv);
+  }, [fleetProviders]);
 
   // Fetch real provider registry for the Fleet Health widget (was 3 hardcoded rows)
   useEffect(() => {
@@ -84,7 +115,7 @@ function DashboardView() {
   }, []);
 
   const currentMode = config?.config?.provider === 'mock' ? 'Offline Mode' : config?.config?.provider === 'openai-compatible' ? 'Free-Cloud Mode' : 'Local Mode';
-  const dailyCap = config?.telemetry?.dailyTokenCap || 50000;
+  const dailyCap = config?.telemetry?.maxTokens || 100000;
   const tokensUsed = usage.tokens || 0;
   const callsRemaining = Math.max(0, Math.floor((dailyCap - tokensUsed) / 150));
 

@@ -8,6 +8,14 @@ export class ProviderHealthState {
   private static states: Map<string, ProviderHealth> = new Map();
   private static readonly EXHAUST_THRESHOLD = 1500;
 
+  public static getAllStates(): Record<string, ProviderHealth> {
+    const obj: Record<string, ProviderHealth> = {};
+    for (const [key, val] of this.states.entries()) {
+      obj[key] = { ...val };
+    }
+    return obj;
+  }
+
   public static getState(providerModel: string): ProviderHealth {
     if (!this.states.has(providerModel)) {
       this.states.set(providerModel, {

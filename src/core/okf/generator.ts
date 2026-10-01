@@ -165,6 +165,7 @@ ${inputText.substring(0, 4000)}`;
 
     // The schema hint tells compatible providers (OpenAI, llama.cpp with GBNF) to enforce structure
     const schema = {
+      title: 'OKF_CONCEPT_EXTRACTION_SCHEMA',
       type: 'array',
       items: {
         type: 'object',
