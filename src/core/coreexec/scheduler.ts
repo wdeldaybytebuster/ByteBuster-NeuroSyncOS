@@ -59,37 +59,23 @@ export function initScheduler() {
   // re-arms itself at the current polling_interval setting on every tick.
   _scheduleRefreshLoop();
 
-  // Initialize background reflection worker
+  // Initialize background reflection directly (which offloads to its own worker pool)
   try {
-    const { Worker } = require('worker_threads');
-    const path = require('path');
-    const workerPath = path.join(__dirname, '../basevault/reflection-worker.ts');
+    const { ReflectionExecutor } = require('../memory/cerebro/reflection');
     
-    // We use execArgv to allow tsx/ts-node to run the typescript worker if needed
-    // Usually the main process is already spawned with tsx in this project.
-    reflectionWorker = new Worker(workerPath);
-    
-    reflectionWorker?.on('message', (msg) => {
-      if (msg.type === 'reflection_done') {
-        log.info(`[CoreExec] Reflection cycle complete. Pruned ${msg.pruned} memories.`);
-      } else if (msg.type === 'reflection_error') {
-        log.error(`[CoreExec] Reflection cycle failed: ${msg.error}`);
-      }
-    });
-
-    reflectionWorker?.on('error', (err) => {
-      log.error('[CoreExec] Reflection worker encountered an error:', err);
-    });
-
     // Run every 10 minutes
     reflectionInterval = setInterval(() => {
-      reflectionWorker?.postMessage({ type: 'run_reflection' });
+      ReflectionExecutor.runReflectionCycle().catch((err: any) => {
+        log.error('[CoreExec] Reflection cycle failed:', err);
+      });
     }, 10 * 60 * 1000);
     
     // Trigger initial run
-    reflectionWorker?.postMessage({ type: 'run_reflection' });
+    ReflectionExecutor.runReflectionCycle().catch((err: any) => {
+      log.error('[CoreExec] Initial reflection cycle failed:', err);
+    });
   } catch (err) {
-    log.error('[CoreExec] Failed to initialize reflection worker:', err);
+    log.error('[CoreExec] Failed to initialize reflection interval:', err);
   }
 }
 
