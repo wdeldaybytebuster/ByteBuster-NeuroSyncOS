@@ -3,9 +3,9 @@ import * as os from 'os';
 import path from 'path';
 
 const cores = os.cpus().length;
-// Hard-cap the worker pool at 1 to strictly prevent OOM crashing on 8-core/6GB RAM devices
+// Hard-cap the worker pool at 2 to strictly prevent OOM crashing on 8-core/6GB RAM devices
 // since two separate pools (CoreExec + Cerebro) run simultaneously.
-export const safeMaxThreads = 1;
+export const safeMaxThreads = 2;
 
 /**
  * Resolve the JS file poolifier's DynamicThreadPool should spawn as a worker.
