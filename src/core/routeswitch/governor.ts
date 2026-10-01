@@ -165,13 +165,14 @@ export class FreeModeGovernor {
   }
 
   public canProceed(estimatedTokens: number): boolean {
+    if (this.isUnlocked()) return true;
     this.syncBudgetFromSettings();
     return this.state.tokensUsed + estimatedTokens <= this.state.maxTokens;
   }
 
   public recordUsage(tokens: number, provider: string = 'unknown'): void {
     this.state.tokensUsed += tokens;
-    if (this.state.tokensUsed > this.state.maxTokens) {
+    if (!this.isUnlocked() && this.state.tokensUsed > this.state.maxTokens) {
       console.warn('Governor Warning: Token usage exceeded the free tier maximum!');
     }
     this.history.push({ timestamp: Date.now(), tokens, provider });

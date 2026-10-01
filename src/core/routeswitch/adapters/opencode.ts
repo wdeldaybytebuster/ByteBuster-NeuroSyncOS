@@ -56,7 +56,10 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
         return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id });
       } catch (err: any) {
         lastErr = err;
-        if (!/429|rate.?limit/i.test(err?.message || '')) throw err;
+        // Treat both rate-limits and intermittent empty-content failures (a known issue
+        // with some OpenCode Zen free models on longer prompts) as retriable so we
+        // advance to the next candidate model.
+        if (!/429|rate.?limit|no content/i.test(err?.message || '')) throw err;
       }
     }
     throw lastErr;

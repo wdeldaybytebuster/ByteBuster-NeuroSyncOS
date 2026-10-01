@@ -87,16 +87,47 @@ export class CommandSandbox {
       }
     }
 
-    // 2.5 Strict Path Containment Validation
-    for (const arg of parts.slice(1)) {
-      PathValidator.validateContainment(this.baseDir, arg);
+    // Read settings from DB
+    let envStripping = true;
+    let directoryLock = true;
+    let fileArgValidation = true;
+
+    try {
+      const { db } = require('../basevault/db');
+      
+      const envRow = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('env_stripping');
+      if (envRow) envStripping = (envRow.value === 'true' || envRow.value === '1');
+
+      const dirRow = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('directory_lock');
+      if (dirRow) directoryLock = (dirRow.value === 'true' || dirRow.value === '1');
+
+      const fileRow = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('file_arg_validation');
+      if (fileRow) fileArgValidation = (fileRow.value === 'true' || fileRow.value === '1');
+    } catch {
+      // Fallback to true if DB is unavailable
     }
+
+    // 2.5 Strict Path Containment Validation
+    if (fileArgValidation) {
+      for (const arg of parts.slice(1)) {
+        PathValidator.validateContainment(this.baseDir, arg);
+      }
+    }
+
+    const execCwd = directoryLock ? this.baseDir : process.cwd();
+    const execEnv = envStripping ? {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      USER: process.env.USER,
+      LANG: process.env.LANG,
+      LC_ALL: process.env.LC_ALL
+    } : { ...process.env };
 
     // 3. Execute with strict network isolation using bubblewrap (since unshare --net fails locally)
     return new Promise((resolve, reject) => {
       const child = spawn('bwrap', ['--unshare-net', '--dev-bind', '/', '/', rootCommand, ...parts.slice(1)], {
-        cwd: this.baseDir,
-        env: { ...process.env },
+        cwd: execCwd,
+        env: execEnv,
         shell: false
       }) as any;
 

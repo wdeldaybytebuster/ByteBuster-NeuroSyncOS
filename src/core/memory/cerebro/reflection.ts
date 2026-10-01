@@ -3,6 +3,7 @@ import { db } from '../../basevault/db';
 import { CerebroVectorStore } from './vector';
 import { OKFGenerator } from '../../okf/generator';
 import { log } from '../../observability/logger';
+import { runReflectionSweep } from './reflection-sweep';
 
 /** Injected by server/index.ts at startup. Avoids circular import. */
 let _generateFn: ((prompt: string) => Promise<string>) | null = null;
@@ -65,38 +66,21 @@ export class ReflectionExecutor {
     // activates for tests and offline/MockProvider sessions.
     const extractedFacts = await this._extractPreferences(historyToProcess);
 
-    for (const fact of extractedFacts) {
-      // Pre-Consolidation Validation: Check for semantic drift/contradictions
-      // Search memory for existing facts similar to the new one
-      const existing = CerebroVectorStore.search(fact, 'preference', undefined, 1);
-
-      let skip = false;
-      if (existing.length > 0 && existing[0]!.similarity! > 0.85) {
-        // High similarity could mean this is a reworded duplicate (safe to skip),
-        // a genuine update/contradiction (must not be silently dropped), or a
-        // false-positive match (safe to insert normally). Classify before acting.
-        const classification = await this._classifyAgainstExisting(fact, existing[0]!.content);
-
-        if (classification === 'duplicate') {
-          skip = true;
-          log.info(`Cerebro: Ignored duplicate/contradictory fact: "${fact}"`);
-        } else if (classification === 'update') {
-          skip = true;
-          const conflictId = existing[0]!.id;
-          const conflictReasoning = `Possibly contradicts or updates an existing memory: "${existing[0]!.content}"`;
-          db.prepare(`
-            INSERT INTO cerebro_learning_approvals (id, fact, confidence, status, source_run_id, created_at, conflict_with_id, conflict_reasoning)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(crypto.randomUUID(), fact, 0.6, 'pending', null, Date.now(), conflictId, conflictReasoning);
-          log.info(`Cerebro: Queued potential contradiction/update for approval: "${fact}" (conflicts with ${conflictId})`);
-        }
-        // classification === 'unrelated' → falls through, inserted below as normal.
+    // Offload DB consolidation, vector search, and habituation sweeps to worker
+    try {
+      if (process.env.NODE_ENV === 'test') {
+        await runReflectionSweep({ historyToProcess, extractedFacts });
+        log.info(`Cerebro: Inline sweep completed (test mode).`);
+      } else {
+        const { cerebroWorkerPool } = require('./worker-pool');
+        await cerebroWorkerPool.execute({
+          historyToProcess,
+          extractedFacts
+        });
+        log.info(`Cerebro: Worker pool completed consolidation and sweep.`);
       }
-
-      if (!skip) {
-        CerebroVectorStore.insert(fact, 'preference');
-        log.info(`Cerebro: Consolidated new preference: "${fact}"`);
-      }
+    } catch (err) {
+      log.error(`Cerebro: Worker pool failed during reflection cycle:`, err);
     }
 
     // OKF Generation: persist extracted preferences as structured Markdown files
