@@ -52,8 +52,34 @@ export async function runReflectionSweep(input: CerebroWorkerInput) {
     for (const mem of ranked) {
       if (mem.r_final < PRUNE_THRESHOLD) {
         db.prepare('DELETE FROM cerebro_memories_meta WHERE id = ?').run(mem.id);
-        db.prepare('DELETE FROM cerebro_memories_vec WHERE rowid = ?').run(mem.id);
+        db.prepare('DELETE FROM cerebro_memories_vec WHERE id = ?').run(mem.id);
       }
     }
   }
+
+  // Pruning stale facts (e.g. older than 30 days and rarely accessed)
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const staleThreshold = Date.now() - THIRTY_DAYS_MS;
+
+  const pruneStmt = db.prepare(`
+    DELETE FROM cerebro_memories_meta 
+    WHERE last_accessed_at < ? AND access_count < 5
+  `);
+  const pruneInfo = pruneStmt.run(staleThreshold);
+  
+  if (pruneInfo.changes > 0) {
+    // Also clean up vectors for pruned metadata
+    const cleanupVecStmt = db.prepare(`
+      DELETE FROM cerebro_memories_vec 
+      WHERE id NOT IN (SELECT id FROM cerebro_memories_meta)
+    `);
+    cleanupVecStmt.run();
+  }
+
+  // Decay access counts slightly over time to simulate "forgetting" unused facts
+  const decayStmt = db.prepare(`
+    UPDATE cerebro_memories_meta 
+    SET access_count = max(0, access_count - 1)
+  `);
+  decayStmt.run();
 }
