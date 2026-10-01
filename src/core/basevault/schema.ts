@@ -35,6 +35,18 @@ export const TaskSchema = z.object({
 });
 export type Task = z.infer<typeof TaskSchema>;
 
+export const OsTodoSchema = z.object({
+  id: z.string().uuid(),
+  dag_node_id: z.string().uuid(),
+  severity: z.string(),
+  escalation_reason: z.string(),
+  required_action_type: z.string(),
+  status: z.string(),
+  created_at: z.number().int(),
+  confidence: z.number().optional().default(0.5)
+});
+export type OsTodo = z.infer<typeof OsTodoSchema>;
+
 // §3.3 — single helper used by every /api/basevault/* endpoint that returns
 // a list. Runtime truth is enforced here at the HTTP boundary instead of
 // relying on type-system-only discipline. Future callers should import

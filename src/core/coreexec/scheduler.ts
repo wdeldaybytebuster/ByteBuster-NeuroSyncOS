@@ -150,7 +150,7 @@ async function triggerWorkflow(wf: any) {
     const dagLayout = JSON.parse(wf.dag_template);
 
     db.prepare(
-      'INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)',
+      "INSERT INTO workflow_runs (id, project_id, dag_layout, status, track, created_at) VALUES (?, ?, ?, ?, 'track1', ?)",
     ).run(runId, wf.project_id, wf.dag_template, 'pending', Date.now());
 
     const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
