@@ -33,6 +33,7 @@ llmRouter.get('/config', (c) => {
     success: true,
     config: currentConfig,
     telemetry: activeGovernor ? activeGovernor.getStatus() : null,
+    health: ProviderHealthState.getAllStates(),
     // Honest AgentStop capability of the *currently-active* provider: real
     // preemptive early-termination (llama-cpp streams real per-token confidence)
     // vs. heuristic fallback (HTTP/synthetic providers). Backs the UI badge.

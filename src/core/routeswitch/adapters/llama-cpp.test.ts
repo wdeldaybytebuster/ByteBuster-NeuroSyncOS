@@ -147,7 +147,7 @@ describe('LlamaCppProvider streaming-confidence wiring', () => {
   it('passes a grammar evaluation state when a schema is supplied', async () => {
     h.script = [[10, 0.9]];
     const provider = new LlamaCppProvider({ modelPath: '/fake.gguf' });
-    await provider.generate('hello', 8, { type: 'array' }, {
+    await provider.generate('hello', 8, { title: 'OKF_CONCEPT_EXTRACTION_SCHEMA', type: 'array' }, {
       onTokenConfidence: () => {},
       signal: new AbortController().signal,
     });

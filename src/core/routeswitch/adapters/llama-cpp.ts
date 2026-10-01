@@ -9,6 +9,7 @@ import type {
 } from 'node-llama-cpp';
 import { GenerationStreamHooks, LLMProvider } from '../providers';
 import { OKF_CONCEPT_EXTRACTION_GBNF } from '../../okf/generator';
+import { ScopeLogicGBNF } from '../../scopelogic/gbnf-grammar';
 import { consumeConfidenceStream } from '../confidence';
 
 export interface LlamaCppConfig {
@@ -254,10 +255,13 @@ export class LlamaCppProvider implements LLMProvider {
       return this.config.grammar;
     }
 
-    // 2. If a JSON schema is provided, use the OKF concept extraction grammar
-    // This ensures all structured output requests get grammar enforcement
-    if (schema) {
+    // 2. If a JSON schema is provided, resolve the correct GBNF grammar
+    // This ensures structured output requests get precise token constraints
+    if (schema?.title === 'OKF_CONCEPT_EXTRACTION_SCHEMA') {
       return OKF_CONCEPT_EXTRACTION_GBNF;
+    }
+    if (schema?.title === 'DAG_PROPOSAL_SCHEMA') {
+      return ScopeLogicGBNF;
     }
 
     // 3. No grammar — free-form text generation
