@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { db } from '../../core/basevault/db';
 import { SensitiveDataRedactor, DataTier } from '../../core/basevault/redactor';
+import { executeRun } from '../../core/coreexec/engine';
 
 export const todosRouter = new Hono();
 
@@ -38,6 +39,8 @@ todosRouter.post('/resolve', async (c) => {
         const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
         if (task) {
           db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+          // Resume the executeRun loop now that it is no longer parked
+          executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after To-Do resolution:`, err));
         }
       }
     })();
@@ -147,6 +150,8 @@ todosRouter.post('/resolve-bulk', async (c) => {
           const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
           if (task) {
             db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+            // Fire-and-forget resume for the newly unparked run
+            executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after bulk To-Do resolution:`, err));
           }
           resolved.push(todoId);
         } catch (err: any) {

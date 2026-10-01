@@ -3,9 +3,9 @@ import * as os from 'os';
 import path from 'path';
 
 const cores = os.cpus().length;
-// Hard-cap the worker pool at 2 to prevent OOM crashing on 8-core/6GB RAM devices
+// Hard-cap the worker pool at 1 to strictly prevent OOM crashing on 8-core/6GB RAM devices
 // since two separate pools (CoreExec + Cerebro) run simultaneously.
-export const safeMaxThreads = Math.min(2, Math.max(1, cores - 1));
+export const safeMaxThreads = 1;
 
 function resolveWorkerFile(): string {
   if (path.extname(__filename) !== '.ts') {

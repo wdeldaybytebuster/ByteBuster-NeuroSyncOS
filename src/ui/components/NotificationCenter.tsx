@@ -108,7 +108,7 @@ export function NotificationCenter() {
             {todo.required_action_type === 'FILE_UPLOAD' && (
               <div className="flex-1 flex gap-2 items-center text-sm text-gray-400 bg-gray-900 border border-gray-600 rounded px-3 py-1 border-dashed">
                 <FileUp size={16} />
-                <span>[Mock] Provide required file path</span>
+                <span>Provide required file path</span>
                 <input 
                   type="text" 
                   placeholder="/path/to/file.pdf" 
