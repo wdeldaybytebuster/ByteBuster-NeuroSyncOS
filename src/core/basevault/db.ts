@@ -65,6 +65,7 @@ export function initDB() {
       project_id TEXT NOT NULL,
       dag_layout TEXT NOT NULL,
       status TEXT NOT NULL,
+      track TEXT NOT NULL DEFAULT 'track2',
       created_at INTEGER NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
@@ -383,6 +384,14 @@ export function initDB() {
   } catch (e: any) {
     if (!e.message.includes('duplicate column name')) {
       console.error('Error adding project_root_path column to projects:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE workflow_runs ADD COLUMN track TEXT NOT NULL DEFAULT 'track2';`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding track column to workflow_runs:', e);
     }
   }
 
