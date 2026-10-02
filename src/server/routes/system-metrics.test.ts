@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { db, initDB } from '../../core/basevault/db';
-import { systemRouter, systemConfig } from './system';
+import { systemRouter } from './system';
+import { systemConfig } from '../../core/coreexec/settings';
 
 beforeAll(() => {
   initDB();

@@ -31,7 +31,7 @@ describe('CerebroVectorStore (sqlite-vec & Fallback)', () => {
     embed1[0] = 0.9;
     
     const embed2 = new Float32Array(1536);
-    embed2[0] = 0.1;
+    embed2[0] = -0.1;
 
     CerebroVectorStore.insert('Memory A', 'test', embed1);
     CerebroVectorStore.insert('Memory B', 'test', embed2);

@@ -147,8 +147,8 @@ describe('cerebroRouter pruning', () => {
   it('confirm actually deletes decayed rows (meta + vec), keeps fresh, and logs the count', async () => {
     seed();
     // Also seed the vec side so we can prove BOTH tables are cleaned.
-    db.prepare('INSERT OR REPLACE INTO cerebro_memories_vec (id, embedding) VALUES (?, ?)')
-      .run(DECAYED_ID, Buffer.from(new Float32Array(1536).buffer));
+    db.prepare('INSERT OR REPLACE INTO cerebro_memories_vec (id, embedding) VALUES (?, vec_quantize_binary(?))')
+      .run(DECAYED_ID, new Float32Array(1536));
 
     const before = (db.prepare('SELECT SUM(count) AS t FROM cerebro_prune_log WHERE pruned_at >= ?')
       .get(now - 30 * 24 * 60 * 60 * 1000) as any).t ?? 0;
@@ -183,8 +183,8 @@ describe('cerebroRouter learning approvals: conflict supersession', () => {
       INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(oldId, 'User prefers Node.js.', 'fact', now, 0, now);
-    db.prepare('INSERT INTO cerebro_memories_vec (id, embedding) VALUES (?, ?)')
-      .run(oldId, Buffer.from(new Float32Array(1536).buffer));
+    db.prepare('INSERT INTO cerebro_memories_vec (id, embedding) VALUES (?, vec_quantize_binary(?))')
+      .run(oldId, new Float32Array(1536));
 
     const approvalId = 'approve-conflict-approval';
     db.prepare(`

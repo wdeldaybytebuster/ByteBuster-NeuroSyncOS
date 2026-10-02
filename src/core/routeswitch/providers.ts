@@ -30,8 +30,36 @@ export interface GenerationStreamHooks {
   signal?: AbortSignal;
 }
 
+/**
+ * Standardized capability matrix.
+ * Providers self-declare what they support. All fields are optional;
+ * absence means unsupported. ScopeLogic queries this before constructing
+ * DAGs so it can pick the right provider for vision/tool-calling tasks
+ * without guessing (Axiom 2 — Complete Technological Agnosticism).
+ *
+ * Never infer from provider ID — adapters must explicitly declare.
+ */
+export interface ProviderCapabilities {
+  /** Provider can process image inputs in prompts. */
+  supportsVision?: boolean;
+  /** Provider can call externally-defined tools/functions. */
+  supportsFunctionCalling?: boolean;
+  /** Provider can return guaranteed-valid JSON via structured output. */
+  supportsStructuredOutput?: boolean;
+  /** Maximum context window in tokens. */
+  contextWindowTokens?: number;
+  /** Accepted input modalities. */
+  inputTypes?: Array<'text' | 'image' | 'audio' | 'video'>;
+}
+
 export interface LLMProvider {
   id: string;
+  /**
+   * Declarative capability matrix. ScopeLogic reads this before DAG
+   * construction to select the right provider for the task.
+   * All fields optional; absence = feature unsupported.
+   */
+  capabilities?: ProviderCapabilities;
   /**
    * Capability flag. `true` only when {@link generate} emits real per-token
    * confidence through {@link GenerationStreamHooks.onTokenConfidence} and

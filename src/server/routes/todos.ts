@@ -14,21 +14,22 @@ todosRouter.get('/', async (c) => {
   }
 });
 
-todosRouter.post('/resolve', async (c) => {
-  const body = await c.req.json();
-  const { todoId, resolutionData } = body;
+todosRouter.post('/:id/resolve', async (c) => {
+  const todoId = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const { resolutionData, resolvedBy = 'operator' } = body;
 
   try {
     db.transaction(() => {
       // 1. Mark todo as resolved
-      const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved' WHERE id = ?");
-      const info = updateTodo.run(todoId);
+      const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved', resolved_at = ?, resolved_by = ? WHERE id = ?");
+      const info = updateTodo.run(Date.now(), resolvedBy, todoId);
       
       if (info.changes === 0) throw new Error('To-Do not found');
 
       // 2. Find the associated task
       const todo = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
-      if (todo) {
+      if (todo && todo.dag_node_id) {
         // 3. Update task status back to unclaimed so the engine will re-queue it
         // We inject the resolutionData into the task's output_data so the worker has context on retry
         const redactedResolution = SensitiveDataRedactor.redactObject(resolutionData, DataTier.INTERNAL);
@@ -136,22 +137,24 @@ todosRouter.post('/resolve-bulk', async (c) => {
             continue;
           }
 
-          const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved' WHERE id = ?");
-          const info = updateTodo.run(todoId);
+          const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved', resolved_at = ?, resolved_by = ? WHERE id = ?");
+          const info = updateTodo.run(Date.now(), 'operator', todoId);
           if (info.changes === 0) {
             failed.push({ id: todoId, error: 'To-Do not found' });
             continue;
           }
 
-          const redactedResolution = SensitiveDataRedactor.redactObject('approved', DataTier.INTERNAL);
-          const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
-          updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
+          if (todo.dag_node_id) {
+            const redactedResolution = SensitiveDataRedactor.redactObject('approved', DataTier.INTERNAL);
+            const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
+            updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
 
-          const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
-          if (task) {
-            db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
-            // Fire-and-forget resume for the newly unparked run
-            executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after bulk To-Do resolution:`, err));
+            const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
+            if (task) {
+              db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+              // Fire-and-forget resume for the newly unparked run
+              executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after bulk To-Do resolution:`, err));
+            }
           }
           resolved.push(todoId);
         } catch (err: any) {
@@ -225,20 +228,13 @@ todosRouter.post('/promote', async (c) => {
   // the os_todos column default) when the caller doesn't provide one.
   const confidenceValue = typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? confidence : 0.5;
 
-  try {
+    try {
     const id = require('crypto').randomUUID();
-    // Create a sentinel task and os_todo so PortGrid's HITL queue surfaces it
-    const sentinelTaskId = `promote-${id}`;
-    const sentinelRunId = `scout-discovery-${id}`;
-    const projectId = `scout-promote-${id}`;
+    const contextPayload = JSON.stringify({ fact, sourceId });
 
     db.transaction(() => {
-      // Insert sentinel project, run, and task to satisfy FK constraints
-      db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(projectId, 'ScoutDaemon Discovery', Date.now());
-      db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(sentinelRunId, projectId, JSON.stringify({ nodes: [{ id: sentinelTaskId, prompt: fact }] }), 'pending', Date.now());
-      db.prepare('INSERT INTO tasks (id, run_id, status, claim_lease, output_data) VALUES (?, ?, ?, ?, ?)').run(sentinelTaskId, sentinelRunId, 'unclaimed', null, null);
-      db.prepare('INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-        id, sentinelTaskId, 'MEDIUM', `ScoutDaemon Discovery: ${fact.substring(0, 120)}`, 'APPROVE_PROPOSAL', 'open', Date.now(), confidenceValue
+      db.prepare('INSERT INTO os_todos (id, source_module, context_payload, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id, 'ScoutDaemon', contextPayload, 'MEDIUM', `ScoutDaemon Discovery: ${fact.substring(0, 120)}`, 'APPROVE_PROPOSAL', 'open', Date.now(), confidenceValue
       );
     })();
 

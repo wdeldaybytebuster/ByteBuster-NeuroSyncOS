@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import { db, initDB, dbPath } from '../basevault/db';
 import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from './engine';
 import { workerPool } from './worker-pool';
-import { systemConfig } from '../../server/routes/system';
+import { systemConfig } from './settings';
 import fs from 'fs';
 import crypto from 'crypto';
 
@@ -186,8 +186,8 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     expect(task.status).toBe('parked');
 
     const todo = db.prepare(
-      'SELECT severity, confidence, required_action_type, status FROM os_todos WHERE dag_node_id = ?'
-    ).get(taskId) as any;
+      'SELECT severity, confidence, required_action_type, status FROM os_todos WHERE context_payload LIKE ?'
+    ).get(`%"taskId":"${taskId}"%`) as any;
     expect(todo).toBeTruthy();
     expect(todo.confidence).toBe(0.0);
     expect(todo.severity).toBe('HIGH');
@@ -204,7 +204,7 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     const task = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as any;
     expect(task.status).toBe('parked');
 
-    const todo = db.prepare('SELECT confidence FROM os_todos WHERE dag_node_id = ?').get(taskId) as any;
+    const todo = db.prepare('SELECT confidence FROM os_todos WHERE context_payload LIKE ?').get(`%"taskId":"${taskId}"%`) as any;
     expect(todo).toBeTruthy();
     expect(todo.confidence).toBe(0.0);
   });

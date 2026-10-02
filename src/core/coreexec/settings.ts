@@ -51,3 +51,12 @@ export function getConfiguredMaxConcurrent(defaultValue: number): number {
 export function getClaimBatchSize(): number {
   return readIntSetting('claim_batch_size', Number.MAX_SAFE_INTEGER, 1);
 }
+
+import os from 'os';
+export const HARDWARE_SAFE_MAX_WORKERS = Math.max(1, os.cpus().length - 1);
+
+// In-memory config state. `maxWorkers` is CoreExec's real live concurrency
+// gate (engine.ts's dispatch loop reads it every tick).
+export const systemConfig = {
+  maxWorkers: getConfiguredMaxConcurrent(HARDWARE_SAFE_MAX_WORKERS),
+};

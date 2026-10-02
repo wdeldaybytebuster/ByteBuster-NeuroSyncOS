@@ -12,7 +12,7 @@
  */
 import { ALLOWLIST } from '../portgrid/sandbox';
 
-export type DirectiveAction = 'shell' | 'scrape' | 'generic';
+export type DirectiveAction = 'shell' | 'scrape' | 'verify' | 'generic';
 
 export interface NodeDirective {
   action: DirectiveAction;
@@ -22,6 +22,10 @@ export interface NodeDirective {
 
 const URL_REGEX = /\bhttps?:\/\/[^\s]+/;
 const BASH_FENCE_REGEX = /```(?:bash|sh)?\s*\n([\s\S]*?)```/;
+// §4.0 — Adversarial Verification sentinel. DAG authoring surfaces embed this
+// prefix so verify nodes are unambiguously identified at dispatch time without
+// requiring the full JSON schema to be parsed again in the worker.
+const VERIFY_SENTINEL = /^§VERIFY:/i;
 
 /**
  * Classify a free-form prompt into a NodeDirective.
@@ -33,6 +37,16 @@ export function classifyDirective(prompt: string): NodeDirective {
   }
 
   const trimmed = prompt.trim();
+
+  // 0) §VERIFY sentinel — adversarial verification node (Axiom 4).
+  // Payload is the JSON schema or heuristic expression to validate against.
+  if (VERIFY_SENTINEL.test(trimmed)) {
+    return {
+      action: 'verify',
+      payload: trimmed.replace(VERIFY_SENTINEL, '').trim(),
+      reason: '§VERIFY sentinel detected — deterministic output gate',
+    };
+  }
 
   // 1) URL fetch — any URL token in the prompt routes to StealthScraper.
   const urlMatch = trimmed.match(URL_REGEX);

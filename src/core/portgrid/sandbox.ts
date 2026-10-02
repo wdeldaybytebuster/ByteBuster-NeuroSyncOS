@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { PathValidator } from '../coreexec/path-validator';
+import { getEnvRule } from '../scoutdaemon/hardware-profiler';
 
 /**
  * Export the allowlist so dispatch.ts (the §2.1 prompt classifier) can mirror
@@ -115,13 +116,27 @@ export class CommandSandbox {
     }
 
     const execCwd = directoryLock ? this.baseDir : process.cwd();
-    const execEnv = envStripping ? {
+
+    // ── Axiom 6: Inject hardware-aware environment limits ─────────────────────
+    // Reads UV_THREADPOOL_SIZE and Node.js heap limit from environment_rules.
+    // Falls back to constrained-mode defaults if genesis profiling has not run yet
+    // (e.g., on a clean install before first-run setup completes).
+    const uvThreadpool = getEnvRule('UV_THREADPOOL_SIZE', '3');
+    const maxOldSpaceMb = getEnvRule('max_old_space_size_mb', '1024');
+
+    const baseExecEnv = envStripping ? {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
       USER: process.env.USER,
       LANG: process.env.LANG,
-      LC_ALL: process.env.LC_ALL
+      LC_ALL: process.env.LC_ALL,
     } : { ...process.env };
+
+    const execEnv = {
+      ...baseExecEnv,
+      UV_THREADPOOL_SIZE: uvThreadpool,
+      NODE_OPTIONS: `--max-old-space-size=${maxOldSpaceMb}`,
+    };
 
     // 3. Execute with strict network isolation using bubblewrap (since unshare --net fails locally)
     return new Promise((resolve, reject) => {
