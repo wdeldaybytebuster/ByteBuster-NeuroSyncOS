@@ -2,8 +2,7 @@ import { db } from '../basevault/db';
 import { claimTask } from './queue';
 import { scoutEmitter } from '../scoutdaemon/sse';
 import { workerPool } from './worker-pool';
-import { systemConfig } from '../../server/routes/system';
-import { getClaimBatchSize } from './settings';
+import { systemConfig, getClaimBatchSize } from './settings';
 import { SensitiveDataRedactor, DataTier } from '../basevault/redactor';
 import { WorktreeIsolation } from './worktree';
 import { classifyDirective } from './dispatch';
@@ -85,19 +84,61 @@ export function executeRun(
   });
 }
 
+function getEnvironmentMaxWorkers(): number {
+  try {
+    const row = db.prepare("SELECT rule_value FROM environment_rules WHERE rule_key = 'max_workers' ORDER BY created_at DESC LIMIT 1").get() as { rule_value: string } | undefined;
+    if (row && row.rule_value) {
+      const parsed = parseInt(row.rule_value, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch (err) {
+    // Ignore db errors, use fallback
+  }
+  return 3;
+}
+
 async function dispatchLoop() {
   const timeoutMs = 5 * 60 * 1000; // 5 minute lease
   const batchLimit = getClaimBatchSize();
+
+  // Circuit Breaker: Evaluate recent failure rate (last 15 minutes)
+  const fifteenMinutesAgo = Date.now() - 15 * 60 * 1000;
+  const recentRuns = db.prepare(`
+    SELECT status, count(*) as count 
+    FROM workflow_runs 
+    WHERE completed_at > ? 
+    GROUP BY status
+  `).all(fifteenMinutesAgo) as { status: string, count: number }[];
+
+  let completedCount = 0;
+  let failedCount = 0;
+  for (const row of recentRuns) {
+    if (row.status === 'completed') completedCount += row.count;
+    if (row.status === 'failed') failedCount += row.count;
+  }
+
+  const totalFinished = completedCount + failedCount;
+  if (totalFinished > 0) {
+    const failureRate = failedCount / totalFinished;
+    if (failureRate > 0.4) {
+      log.warn(`[CoreExec] CIRCUIT BREAKER TRIGGERED: Failure rate ${failureRate.toFixed(2)} exceeds 0.4 threshold. Pausing dispatch.`);
+      scoutEmitter.emit('alert', { message: 'Circuit Breaker triggered. High failure rate.' });
+      return; // Return early
+    }
+  }
   
   const runs = db.prepare("SELECT id, track, dag_layout, status, project_id FROM workflow_runs WHERE status IN ('pending', 'running')").all() as any[];
   if (runs.length === 0) return;
   
-  // Dual-Track priority: track1 (cron/system) before track2 (user/generative)
-  runs.sort((a, b) => a.track.localeCompare(b.track));
+  // Track A (User/Interactive - e.g., 'track1') takes precedence over Track B (Background - e.g., 'track2')
+  runs.sort((a, b) => (a.track || 'track2').localeCompare(b.track || 'track2'));
 
   let hasClaimedTasksGlobal = false;
+  let trackANeedsSlots = false;
 
   for (const run of runs) {
+    const isTrackA = (run.track || 'track2') === 'track1';
+
     if (run.status === 'pending') {
       db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ?").run(run.id);
       scoutEmitter.emit('update', { type: 'RUN_STATUS', runId: run.id, status: 'running' });
@@ -136,7 +177,7 @@ async function dispatchLoop() {
       const isUnclaimed = taskObj.status === 'unclaimed';
       const isExpired = taskObj.status === 'claimed' && taskObj.claim_lease !== null && taskObj.claim_lease < Date.now();
       if (!isUnclaimed && !isExpired) return false;
-      return node.dependencies.every((depId: string) => completedTaskIds.has(depId));
+      return (node.dependencies || []).every((depId: string) => completedTaskIds.has(depId));
     });
 
     if (eligibleTasks.length === 0) {
@@ -158,13 +199,25 @@ async function dispatchLoop() {
       continue;
     }
 
-    const availableSlots = Math.max(0, systemConfig.maxWorkers - workerPool.info.executingTasks);
+    // Defer spawning Track B if Track A is pending/running and needs slots
+    if (!isTrackA && trackANeedsSlots) {
+      continue;
+    }
+
+    const envMaxWorkers = getEnvironmentMaxWorkers();
+    const availableSlots = Math.max(0, envMaxWorkers - workerPool.info.executingTasks);
     if (availableSlots === 0) {
+      if (isTrackA) trackANeedsSlots = true;
       hasClaimedTasksGlobal = true;
       continue; // Move to next run, but effectively we are full since workers are saturated
     }
 
     const tasksToDispatch = eligibleTasks.slice(0, Math.min(availableSlots, batchLimit));
+    
+    // If we dispatched fewer tasks than are eligible, and this is Track A, it still needs slots for the rest
+    if (isTrackA && tasksToDispatch.length < eligibleTasks.length) {
+      trackANeedsSlots = true;
+    }
     
     for (const node of tasksToDispatch) {
       const claimed = claimTask(node.id, Date.now() + timeoutMs);
@@ -178,14 +231,24 @@ async function dispatchLoop() {
       // Async IIFE execution for the task to avoid blocking the dispatch loop
       (async () => {
         const parkTask = (errorMsg: string) => {
+          const taskRow = db.prepare('SELECT retry_count FROM tasks WHERE id = ?').get(node.id) as { retry_count: number } | undefined;
+          const retryCount = taskRow?.retry_count || 0;
+
+          if (retryCount < 3) {
+            db.prepare("UPDATE tasks SET status = 'unclaimed', claim_lease = NULL, retry_count = retry_count + 1 WHERE id = ?").run(node.id);
+            scoutEmitter.emit('update', { type: 'TASK_STATUS', runId: run.id, taskId: node.id, status: 'unclaimed', retryCount: retryCount + 1, error: errorMsg });
+            triggerDispatch();
+            return;
+          }
+
           const redactedErrorMsg = SensitiveDataRedactor.redact(errorMsg, DataTier.INTERNAL);
           const updateTask = db.prepare("UPDATE tasks SET status = 'parked', output_data = ? WHERE id = ?");
           updateTask.run(JSON.stringify({ error: redactedErrorMsg }), node.id);
 
           const todoId = crypto.randomUUID();
-          const insertTodo = db.prepare("INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+          const insertTodo = db.prepare("INSERT INTO os_todos (id, dag_node_id, source_module, context_payload, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
           // Escalations use confidence 0.0 to guarantee hitting Deference UI threshold
-          insertTodo.run(todoId, node.id, 'HIGH', errorMsg, 'LLM_RETRY_OR_FIX', 'open', Date.now(), 0.0);
+          insertTodo.run(todoId, node.id, 'CoreExec', JSON.stringify({ error: errorMsg, runId: run.id, taskId: node.id }), 'HIGH', errorMsg, 'LLM_RETRY_OR_FIX', 'open', Date.now(), 0.0);
 
           scoutEmitter.emit('update', { type: 'TASK_STATUS', runId: run.id, taskId: node.id, status: 'parked', error: errorMsg });
           triggerDispatch();

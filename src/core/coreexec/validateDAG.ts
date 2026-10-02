@@ -83,80 +83,39 @@ export function escalateBlockedDAGToOsTodos(
   workflowId: string,
   validationError: string,
   origin: 'scheduler' | 'approve-route' = 'scheduler',
-): { todoId: string; sentinelTaskId: string; runId: string } {
-  const sentinelTaskId = `blocked-task-${crypto.randomUUID()}`;
-  const runId = `blocked-run-${crypto.randomUUID()}`;
+  projectId?: string
+): { todoId: string } {
   const todoId = crypto.randomUUID();
   const now = Date.now();
-
-  // Single transaction so a partial insert can never leave a dangling FK.
-  // Each escalation gets its own project row so cleanup jobs and the
-  // NotificationCenter can target a single sentinel block reliably — otherwise
-  // every escalation would share one fixed-id row and the most-recent write
-  // would overwrite every previous block's DAG context.
-  const sentinelProjectId = `blocked-project-${crypto.randomUUID()}`;
-  const insertBlocked = db.transaction(() => {
-    db.prepare(
-      `INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)`,
-    ).run(sentinelProjectId, '__BLOCKED_BY_VALIDATION__', now);
-
-    db.prepare(
-      `INSERT INTO workflow_runs
-         (id, project_id, dag_layout, status, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(
-      runId,
-      sentinelProjectId,
-      JSON.stringify({
-        blocked_by_validation: true,
-        reason: validationError,
-        origin_workflow_id: workflowId,
-        origin,
-      }),
-      'blocked-by-validation',
-      now,
-    );
-
-    db.prepare(
-      `INSERT INTO tasks (id, run_id, status, claim_lease, output_data)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).run(
-      sentinelTaskId,
-      runId,
-      'blocked-by-validation',
-      null,
-      JSON.stringify({ validation_error: validationError, origin_workflow_id: workflowId }),
-    );
-
-    db.prepare(
-      `INSERT INTO os_todos
-         (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      todoId,
-      sentinelTaskId,
-      'HIGH',
-      validationError,
-      'LLM_RETRY_OR_FIX',
-      'open',
-      now,
-      // Deterministic structural validation failure, not an AI judgment call —
-      // always below the 0.70 threshold, always routed to human review.
-      0.0,
-    );
+  const contextPayload = JSON.stringify({
+    origin_workflow_id: workflowId,
+    origin,
   });
-  insertBlocked();
+
+  db.prepare(
+    `INSERT INTO os_todos
+       (id, project_id, source_module, context_payload, severity, escalation_reason, required_action_type, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    todoId,
+    projectId || null,
+    origin === 'scheduler' ? 'CoreExecScheduler' : 'CoreExecApprove',
+    contextPayload,
+    'HIGH',
+    validationError,
+    'LLM_RETRY_OR_FIX',
+    'open',
+    now
+  );
 
   scoutEmitter.emit('update', {
     type: 'TODO_ESCALATED',
     todoId,
     workflowId,
-    sentinelTaskId,
-    runId,
     origin,
     reason: validationError,
     timestamp: now,
   });
 
-  return { todoId, sentinelTaskId, runId };
+  return { todoId };
 }

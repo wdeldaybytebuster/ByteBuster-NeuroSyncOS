@@ -1,17 +1,19 @@
 import { EventEmitter } from 'events';
-import { executeRun } from '../coreexec/engine';
 import { db } from '../basevault/db';
+import { scoutEmitter } from './sse';
 import crypto from 'crypto';
 import * as si from 'systeminformation';
-import { systemConfig } from '../../server/routes/system';
+import { systemConfig } from '../coreexec/settings';
 import { ScoutResearch } from './research';
 import { log } from '../observability/logger';
 
 export class IdleDetector extends EventEmitter {
   private lastHeartbeat: number;
   private idleThresholdMs: number;
+  private indexingFlushThresholdMs: number = 30 * 1000; // 30 seconds
   private checkInterval: NodeJS.Timeout | null = null;
   private isIdle: boolean = false;
+  private isIndexingIdle: boolean = false;
   private originalMaxWorkers?: number;
 
   constructor(idleThresholdMinutes: number = 10) {
@@ -47,7 +49,14 @@ export class IdleDetector extends EventEmitter {
         this.isIdle = false;
         this.emit('active');
       }
-    }, 60000); // check every minute
+
+      if (now - this.lastHeartbeat > this.indexingFlushThresholdMs && !this.isIndexingIdle) {
+        this.isIndexingIdle = true;
+        this.emit('indexing_idle');
+      } else if (now - this.lastHeartbeat <= this.indexingFlushThresholdMs && this.isIndexingIdle) {
+        this.isIndexingIdle = false;
+      }
+    }, 10000); // check every 10 seconds
   }
 
   public stop() {
@@ -67,8 +76,30 @@ export class IdleDetector extends EventEmitter {
 
 export const idleDetector = new IdleDetector(10); // 10 minutes
 
+import { GitNexusParser } from './parser';
+import { DBSync } from './db-sync';
+import { readFileSync, readdirSync, statSync } from 'fs';
+import path from 'path';
+
+function scanDirectory(dir: string, fileList: string[] = []): string[] {
+  try {
+    const files = readdirSync(dir);
+    for (const file of files) {
+      const stat = statSync(path.join(dir, file));
+      if (stat.isDirectory()) {
+        scanDirectory(path.join(dir, file), fileList);
+      } else if (file.endsWith('.ts') || file.endsWith('.tsx')) {
+        fileList.push(path.join(dir, file));
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return fileList;
+}
+
 // When idle, trigger the built-in system maintenance DAG
-idleDetector.on('idle', () => {
+idleDetector.on('idle', async () => {
   log.info('[ScoutDaemon] System is idle. Triggering autonomous maintenance...');
   try {
     const runId = crypto.randomUUID();
@@ -80,21 +111,6 @@ idleDetector.on('idle', () => {
       ]
     };
 
-    // `workflow_runs.project_id` has `FOREIGN KEY(project_id) REFERENCES
-    // projects(id)` with `foreign_keys = ON` (src/core/basevault/db.ts). The
-    // literal 'system-maintenance' project id used below was never actually
-    // created anywhere in this codebase, so this insert failed with
-    // "FOREIGN KEY constraint failed" on every single idle trigger, not just
-    // some edge case (observed in server logs, tracker doc 2026-07-03).
-    // Fix: follow the same sentinel-row convention already established in
-    // `src/server/routes/todos.ts` (promote) and `src/core/coreexec/validateDAG.ts`
-    // (escalateBlockedDAGToOsTodos) — ensure the referenced parent row genuinely
-    // exists before inserting the child row that references it. Unlike those
-    // call sites (which mint a fresh UUID sentinel per call), this one reuses
-    // the same well-known 'system-maintenance' id across every idle trigger, so
-    // `INSERT OR IGNORE` is the correct one-time-creation form: the first idle
-    // trigger ever creates it, every subsequent trigger is a no-op against the
-    // now-existing row.
     db.transaction(() => {
       db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
         'system-maintenance', 'System Maintenance', Date.now()
@@ -110,9 +126,19 @@ idleDetector.on('idle', () => {
       }
     })();
 
-    executeRun(runId).catch(err => log.error('[ScoutDaemon] Maintenance failed:', err));
+    // ScoutDaemon boundary: ONLY stage a pending run in BaseVault.
+    // CoreExec's dispatchLoop watchdog (5s interval) picks it up organically.
+    // ScoutDaemon must NEVER call executeRun directly — that crosses the
+    // Watcher→Orchestrator module boundary.
+    db.prepare("UPDATE workflow_runs SET status='pending' WHERE id=?").run(runId);
+    scoutEmitter.emit('update', {
+      type: 'MAINTENANCE_STAGED',
+      runId,
+      timestamp: Date.now(),
+    });
+    log.info(`[ScoutDaemon] Maintenance run ${runId} staged for CoreExec pickup.`);
   } catch (err) {
-    log.error('[ScoutDaemon] Failed to trigger maintenance:', err);
+    log.error('[ScoutDaemon] Failed to stage maintenance run:', err);
   }
 
   // During idle, review pending scout drafts and log their count
@@ -123,5 +149,87 @@ idleDetector.on('idle', () => {
     }
   } catch (err) {
     log.error('[ScoutDaemon] Failed to check scout drafts:', err);
+  }
+  
+  // AST Indexing background task
+  try {
+    log.info('[ScoutDaemon] Beginning AST indexing of local codebase...');
+    const srcDir = path.resolve(__dirname, '../../');
+    const files = scanDirectory(srcDir);
+    const parser = new GitNexusParser();
+    const dbSync = new DBSync(db);
+    
+    let allSymbols: any[] = [];
+    for (const file of files) {
+      try {
+        const content = readFileSync(file, 'utf8');
+        const symbols = await parser.parseCodebase(content);
+        symbols.forEach(s => s.file_path = file);
+        allSymbols.push(...symbols);
+      } catch (e) {
+        // log.error(`[ScoutDaemon] Error parsing ${file}:`, e);
+      }
+    }
+    
+    if (allSymbols.length > 0) {
+      await dbSync.insertSymbols(allSymbols);
+      log.info(`[ScoutDaemon] AST indexing complete. Synced ${allSymbols.length} symbols across ${files.length} files.`);
+    }
+  } catch (err) {
+    log.error('[ScoutDaemon] AST Indexing failed:', err);
+  }
+});
+
+export const indexingQueue: string[] = [];
+
+export function queueForIndexing(filePath: string) {
+  if (!indexingQueue.includes(filePath)) {
+    indexingQueue.push(filePath);
+  }
+}
+
+idleDetector.on('indexing_idle', () => {
+  if (indexingQueue.length === 0) return;
+  log.info(`[ScoutDaemon] System idle for 30s. Flushing ${indexingQueue.length} files to indexing queue in CoreExec...`);
+  
+  const filesToProcess = [...indexingQueue];
+  indexingQueue.length = 0; // Clear queue
+  
+  try {
+    const runId = crypto.randomUUID();
+    const dagLayout = {
+      nodes: [
+        { 
+          id: crypto.randomUUID(), 
+          plugin: 'okf_indexer',
+          dependencies: [],
+          params: { files: filesToProcess }
+        }
+      ]
+    };
+
+    db.transaction(() => {
+      db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+        'system-maintenance', 'System Maintenance', Date.now()
+      );
+
+      db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at, track) VALUES (?, ?, ?, ?, ?, ?)').run(
+        runId, 'system-maintenance', JSON.stringify(dagLayout), 'pending', Date.now(), 'track2'
+      );
+
+      const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
+      for (const node of dagLayout.nodes) {
+        insertTask.run(node.id, runId, 'unclaimed');
+      }
+    })();
+
+    scoutEmitter.emit('update', {
+      type: 'INDEXING_STAGED',
+      runId,
+      timestamp: Date.now(),
+    });
+    log.info(`[ScoutDaemon] Indexing run ${runId} staged for CoreExec pickup (Track 2).`);
+  } catch (err) {
+    log.error('[ScoutDaemon] Failed to stage indexing run:', err);
   }
 });

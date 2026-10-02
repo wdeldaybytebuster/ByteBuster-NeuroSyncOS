@@ -30,21 +30,7 @@ function seedWorkflow(name: string, dagTemplate: string): { id: string } {
 
 function cleanupWorkflow(id: string) {
   db.prepare('DELETE FROM workflows WHERE id = ?').run(id);
-  // §3.4 FK fix — dag_node_id is now a real tasks.id (e.g. blocked-task-<uuid>).
-  // Resolve sentinel tasks via their `output_data` JSON (origin_workflow_id) then cascade-delete.
-  const sentinelTasks = db
-    .prepare(
-      `SELECT t.id AS task_id, t.run_id AS run_id
-       FROM tasks t
-       WHERE t.status = 'blocked-by-validation'
-         AND t.output_data LIKE ?`,
-    )
-    .all(`%"origin_workflow_id":"${id}"%`) as Array<{ task_id: string; run_id: string }>;
-  for (const row of sentinelTasks) {
-    db.prepare('DELETE FROM os_todos WHERE dag_node_id = ?').run(row.task_id);
-    db.prepare('DELETE FROM tasks WHERE id = ?').run(row.task_id);
-    db.prepare('DELETE FROM workflow_runs WHERE id = ?').run(row.run_id);
-  }
+  db.prepare('DELETE FROM os_todos WHERE context_payload LIKE ?').run(`%"origin_workflow_id":"${id}"%`);
 }
 
 describe('refreshJobs() — §3.4 DB-bypass validator gate', () => {
@@ -57,11 +43,9 @@ describe('refreshJobs() — §3.4 DB-bypass validator gate', () => {
       refreshJobs();
       const todo = (db
         .prepare(
-          `SELECT o.* FROM os_todos o
-           JOIN tasks t ON t.id = o.dag_node_id
-           WHERE t.status = 'blocked-by-validation'
-             AND t.output_data LIKE ?
-           ORDER BY o.created_at DESC LIMIT 1`,
+          `SELECT * FROM os_todos
+           WHERE context_payload LIKE ?
+           ORDER BY created_at DESC LIMIT 1`,
         )
         .get(`%"origin_workflow_id":"${id}"%`) as any);
       expect(todo).toBeTruthy();
@@ -80,11 +64,9 @@ describe('refreshJobs() — §3.4 DB-bypass validator gate', () => {
       refreshJobs();
       const todo = (db
         .prepare(
-          `SELECT o.* FROM os_todos o
-           JOIN tasks t ON t.id = o.dag_node_id
-           WHERE t.status = 'blocked-by-validation'
-             AND t.output_data LIKE ?
-           ORDER BY o.created_at DESC LIMIT 1`,
+          `SELECT * FROM os_todos
+           WHERE context_payload LIKE ?
+           ORDER BY created_at DESC LIMIT 1`,
         )
         .get(`%"origin_workflow_id":"${id}"%`) as any);
       expect(todo).toBeTruthy();
@@ -105,11 +87,9 @@ describe('refreshJobs() — §3.4 DB-bypass validator gate', () => {
       refreshJobs();
       const todo = (db
         .prepare(
-          `SELECT o.* FROM os_todos o
-           JOIN tasks t ON t.id = o.dag_node_id
-           WHERE t.status = 'blocked-by-validation'
-             AND t.output_data LIKE ?
-           ORDER BY o.created_at DESC LIMIT 1`,
+          `SELECT * FROM os_todos
+           WHERE context_payload LIKE ?
+           ORDER BY created_at DESC LIMIT 1`,
         )
         .get(`%"origin_workflow_id":"${id}"%`) as any);
       expect(todo).toBeTruthy();
@@ -130,11 +110,9 @@ describe('refreshJobs() — §3.4 DB-bypass validator gate', () => {
       refreshJobs();
       const todo = (db
         .prepare(
-          `SELECT o.* FROM os_todos o
-           JOIN tasks t ON t.id = o.dag_node_id
-           WHERE t.status = 'blocked-by-validation'
-             AND t.output_data LIKE ?
-           ORDER BY o.created_at DESC LIMIT 1`,
+          `SELECT * FROM os_todos
+           WHERE context_payload LIKE ?
+           ORDER BY created_at DESC LIMIT 1`,
         )
         .get(`%"origin_workflow_id":"${id}"%`) as any);
       expect(todo).toBeTruthy();
@@ -149,13 +127,10 @@ describe('refreshJobs() — §3.4 DB-bypass validator gate', () => {
     try {
       refreshJobs();
       refreshJobs();
-      // §3.4 FK fix — count by joining tasks.output_data back to origin workflow id.
       const count = (db
         .prepare(
-          `SELECT COUNT(*) AS n FROM os_todos o
-           JOIN tasks t ON t.id = o.dag_node_id
-           WHERE t.status = 'blocked-by-validation'
-             AND t.output_data LIKE ?`,
+          `SELECT COUNT(*) AS n FROM os_todos
+           WHERE context_payload LIKE ?`,
         )
         .get(`%"origin_workflow_id":"${id}"%`) as any).n;
       expect(count).toBeGreaterThanOrEqual(2);

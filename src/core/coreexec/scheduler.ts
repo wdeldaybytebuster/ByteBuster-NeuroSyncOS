@@ -149,6 +149,7 @@ async function triggerWorkflow(wf: any) {
     const runId = crypto.randomUUID();
     const dagLayout = JSON.parse(wf.dag_template);
 
+    // Track1 (Track A): Scheduled user workflows take high priority
     db.prepare(
       "INSERT INTO workflow_runs (id, project_id, dag_layout, status, track, created_at) VALUES (?, ?, ?, ?, 'track1', ?)",
     ).run(runId, wf.project_id, wf.dag_template, 'pending', Date.now());
@@ -160,8 +161,9 @@ async function triggerWorkflow(wf: any) {
 
     log.info(`[CoreExec] Triggered scheduled workflow run: ${runId}`);
 
-    // Background execution
-    executeRun(runId).catch((err) => log.error(`[CoreExec] Cron Run ${runId} failed:`, err));
+    // Rely strictly on engine.ts to pluck them from the queue
+    const { triggerDispatch } = require('./engine');
+    triggerDispatch();
   } catch (error) {
     log.error(`[CoreExec] Failed to trigger workflow ${wf.id}:`, error);
   }

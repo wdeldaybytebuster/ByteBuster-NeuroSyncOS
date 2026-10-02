@@ -26,7 +26,7 @@ export interface WorkerInput {
  */
 export interface WorkerOutput {
   status: 'success' | 'error';
-  action: 'shell' | 'scrape' | 'generic' | 'legacy';
+  action: 'shell' | 'scrape' | 'verify' | 'generic' | 'legacy';
   taskId: string | undefined;
   stdout: string | undefined;
   stderr: string | undefined;
@@ -111,6 +111,61 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
           // node) must never fail just because the project has no root path,
           // since it never touches the filesystem at all.
           switch (directive.action) {
+            case 'verify': {
+              // §4.0 — Adversarial Verification Gate (Axiom 4: Deterministic Reality).
+              // Reads the immediately prior completed task's output_data from DB,
+              // then checks required keys declared in the payload. Zero LLM calls.
+              // If verification fails, returns an error envelope so CoreExec
+              // parks this node as 'blocked-by-validation' for human review.
+              let priorOutput: Record<string, unknown> = {};
+              try {
+                const { db: workerDb, initDB: workerInitDB } = require('../basevault/db');
+                workerInitDB();
+                // Find the most recently completed sibling task in this run.
+                const priorTask = workerDb.prepare(`
+                  SELECT t.output_data FROM tasks t
+                  JOIN workflow_runs r ON t.run_id = r.id
+                  JOIN tasks self_t ON self_t.run_id = r.id AND self_t.id = ?
+                  WHERE t.status = 'completed' AND t.id != ?
+                  ORDER BY t.rowid DESC LIMIT 1
+                `).get(taskId, taskId) as { output_data: string | null } | undefined;
+                if (priorTask?.output_data) {
+                  priorOutput = JSON.parse(priorTask.output_data);
+                }
+              } catch {
+                // Non-fatal: if we can't read prior output, treat as empty object.
+              }
+
+              // Payload is a comma-separated list of required keys to assert.
+              // e.g.: "status,message" — both keys must be present and non-null.
+              const requiredKeys = directive.payload
+                .split(',')
+                .map((k: string) => k.trim())
+                .filter(Boolean);
+
+              const missingKeys = requiredKeys.filter(
+                (k: string) => priorOutput[k] === undefined || priorOutput[k] === null
+              );
+
+              if (missingKeys.length > 0) {
+                return errEnvelope(
+                  `§VERIFY FAILED: prior node output missing required keys: [${missingKeys.join(', ')}]. ` +
+                  `Actual keys present: [${Object.keys(priorOutput).join(', ')}]`,
+                  taskId,
+                  'verify',
+                );
+              }
+
+              return {
+                status: 'success', action: 'verify',
+                taskId,
+                stdout: undefined, stderr: undefined,
+                markdown: undefined, pageMetadata: undefined,
+                message: `§VERIFY PASSED: all required keys [${requiredKeys.join(', ')}] present in prior output.`,
+                prompt, data: undefined, error: undefined,
+                reason: directive.reason,
+              };
+            }
             case 'shell': {
               const sandbox = new CommandSandbox(projectId);
               const { stdout, stderr } = await sandbox.execute(directive.payload);

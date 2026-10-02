@@ -22,3 +22,12 @@
   - Automated tests validated (123 sandbox escape tests passing). 
   - Identified target Beta-Stable gaps matching the implementation backlog.
 - **Next Up**: Implementing `project_root_path` in SQLite schema and setting up background memory consolidation loops (`worker_threads`).
+
+===
+## Future Roadmap: Cross-Platform Distribution (Installers)
+- **Goal**: Package NeuroSync Sovereign OS into native, standalone installers (e.g., `.exe` for Windows, `.dmg`/`.app` for macOS, AppImage/Snap for Linux).
+- **Objective**: 
+  - Completely abstract away Node.js, `npm run build`, and dependency management for the end-user.
+  - Automatically bundle all core dependencies (SQLite bindings, `sqlite-vec`, `node-pty`, Bubblewrap dependencies, and Node runtime).
+  - Provide a 1-click install experience regardless of the underlying host operating system.
+- **Potential Tech Stack to Evaluate**: Tauri, Electron, or Node.js native compilation (like `pkg` or `sea` - Single Executable Applications) combined with cross-platform build pipelines (GitHub Actions).

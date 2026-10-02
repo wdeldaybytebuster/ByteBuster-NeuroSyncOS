@@ -13,21 +13,9 @@ import { SensitiveDataRedactor } from '../../core/basevault/redactor';
 import { log } from '../../core/observability/logger';
 import { activeGovernor } from './llm';
 import { isBwrapAvailable } from '../../core/portgrid/terminal-session';
-import { getConfiguredMaxConcurrent } from '../../core/coreexec/settings';
+import { getConfiguredMaxConcurrent, systemConfig, HARDWARE_SAFE_MAX_WORKERS } from '../../core/coreexec/settings';
 
 export const systemRouter = new Hono();
-
-const HARDWARE_SAFE_MAX_WORKERS = Math.max(1, os.cpus().length - 1);
-
-// In-memory config state. `maxWorkers` is CoreExec's real live concurrency
-// gate (engine.ts's dispatch loop reads it every tick). Initialized from
-// UnifiedMasterDashboard's persisted `max_concurrent` setting when present
-// (Set-up view, Control A) so a saved preference survives a restart instead
-// of always resetting to the hardware-safe default; falls back to that
-// default exactly as before when unset.
-export const systemConfig = {
-  maxWorkers: getConfiguredMaxConcurrent(HARDWARE_SAFE_MAX_WORKERS),
-};
 
 /**
  * One-shot system telemetry snapshot — the exact payload shape the SSE loop
@@ -555,6 +543,21 @@ systemRouter.post('/proposals/stage', async (c) => {
     // Accept either `projectId` or `project_id`; nullable ("Global" scope is ok).
     const projectId = body.projectId ?? body.project_id ?? null;
     if (!proposal) return c.json({ success: false, error: 'proposal is required' }, 400);
+
+    // Hard rejection for SA-01 to SA-06 violations
+    if (proposal.nodes && Array.isArray(proposal.nodes)) {
+      for (const node of proposal.nodes) {
+        if (['shell', 'bash', 'exec'].includes(node.type)) {
+          log.error(`[AgentStop] Rejected proposal containing banned node type: ${node.type}`);
+          return c.json({ success: false, error: `Category A Safety Violation: Node type '${node.type}' is strictly prohibited (SA-01/SA-06).`, telemetry: 'AgentStop_Triggered' }, 400);
+        }
+        const paramsStr = JSON.stringify(node.parameters || {});
+        if (/INSERT\s+INTO/i.test(paramsStr) || /UPDATE\s+[a-z_]+/i.test(paramsStr)) {
+          log.error(`[AgentStop] Rejected proposal containing banned SQL operations (INSERT/UPDATE).`);
+          return c.json({ success: false, error: 'Category A Safety Violation: Raw SQL writes (INSERT/UPDATE) are strictly prohibited (SA-01/SA-06).', telemetry: 'AgentStop_Triggered' }, 400);
+        }
+      }
+    }
 
     // Real model-confidence if the caller supplied a valid one; else conservative default.
     const confidenceValue =

@@ -78,22 +78,36 @@ export class CerebroVectorStore {
    * If embedding is null, it relies entirely on the Keyword Fallback Engine for retrieval.
    * projectId null/undefined = GLOBAL/USER-tier memory, visible to every project.
    */
-  public static insert(content: string, type: string, embedding?: Float32Array, projectId?: string | null): string {
+  public static insert(content: string, type: string, embedding?: Float32Array, projectId?: string | null, isAutoIngested: boolean = false): string {
     const id = crypto.randomUUID();
     const now = Date.now();
 
-    // 1. Insert Meta
-    db.prepare(`
-      INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, content, type, projectId ?? null, now, 0, now);
-
-    // 2. Insert Vector if provided
-    if (embedding) {
+    if (isAutoIngested) {
       db.prepare(`
-        INSERT INTO cerebro_memories_vec (id, embedding)
-        VALUES (?, ?)
-      `).run(id, embedding);
+        INSERT INTO memory_quarantine (id, content, type, project_id, last_accessed_at, access_count, created_at, taint_flag)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, content, type, projectId ?? null, now, 0, now, 1);
+
+      if (embedding) {
+        db.prepare(`
+          INSERT INTO memory_quarantine_vec (id, embedding)
+          VALUES (?, vec_quantize_binary(?))
+        `).run(id, embedding);
+      }
+    } else {
+      // 1. Insert Meta
+      db.prepare(`
+        INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, content, type, projectId ?? null, now, 0, now);
+
+      // 2. Insert Vector if provided
+      if (embedding) {
+        db.prepare(`
+          INSERT INTO cerebro_memories_vec (id, embedding)
+          VALUES (?, vec_quantize_binary(?))
+        `).run(id, embedding);
+      }
     }
 
     return id;
@@ -121,7 +135,7 @@ export class CerebroVectorStore {
       SELECT m.id, m.content, m.type, m.project_id, m.last_accessed_at, m.access_count, m.created_at, v.distance
       FROM cerebro_memories_vec v
       JOIN cerebro_memories_meta m ON v.id = m.id
-      WHERE v.embedding MATCH ? AND k = ?
+      WHERE v.embedding MATCH vec_quantize_binary(?) AND k = ?
       ${filterSQL}
       ${scopeSQL}
       ORDER BY v.distance ASC

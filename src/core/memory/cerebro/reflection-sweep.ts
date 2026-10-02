@@ -76,10 +76,4 @@ export async function runReflectionSweep(input: CerebroWorkerInput) {
     cleanupVecStmt.run();
   }
 
-  // Decay access counts slightly over time to simulate "forgetting" unused facts
-  const decayStmt = db.prepare(`
-    UPDATE cerebro_memories_meta 
-    SET access_count = max(0, access_count - 1)
-  `);
-  decayStmt.run();
 }

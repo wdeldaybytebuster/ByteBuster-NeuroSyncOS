@@ -44,6 +44,20 @@ const REASONING_RETRY_CAP = 8000;
 export class OpenAICompatibleProvider implements LLMProvider {
   id: string;
 
+  /**
+   * Capability matrix for this adapter.
+   * Text-only by default; subclasses (e.g. OpenRouterProvider) may override
+   * with model-specific values once they resolve the active model.
+   * Structured output is supported via the `response_format` field in the
+   * OpenAI-compatible request schema.
+   */
+  readonly capabilities = {
+    supportsVision: false,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+  };
+
   constructor(protected config: OpenAICompatibleConfig, customId?: string) {
     this.id = customId || 'openai-compatible';
   }

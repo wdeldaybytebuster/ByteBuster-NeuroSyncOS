@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { isMainThread } from 'worker_threads';
 
 import type { Database as BetterSqlite3Database } from 'better-sqlite3';
@@ -37,6 +37,8 @@ db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
+
+db.function('sha256', (text: string) => createHash('sha256').update(text || '').digest('hex'));
 
 // Schema Initialization Function
 export function initDB() {
@@ -76,18 +78,24 @@ export function initDB() {
       status TEXT NOT NULL,
       claim_lease INTEGER,
       output_data TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      started_at INTEGER,
       FOREIGN KEY(run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
     );
     
     CREATE TABLE IF NOT EXISTS os_todos (
       id TEXT PRIMARY KEY,
-      dag_node_id TEXT NOT NULL,
+      dag_node_id TEXT,
+      project_id TEXT,
+      source_module TEXT NOT NULL DEFAULT 'CoreExec',
+      context_payload TEXT,
       severity TEXT NOT NULL,
       escalation_reason TEXT NOT NULL,
       required_action_type TEXT NOT NULL,
       status TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      FOREIGN KEY(dag_node_id) REFERENCES tasks(id) ON DELETE CASCADE
+      resolved_at INTEGER,
+      resolved_by TEXT
     );
 
     -- Optimize task querying by status and run_id
@@ -108,8 +116,65 @@ export function initDB() {
 
     CREATE VIRTUAL TABLE IF NOT EXISTS cerebro_memories_vec USING vec0(
       id TEXT PRIMARY KEY,
-      embedding float[1536]
+      embedding bit[1536]
     );
+
+    CREATE TABLE IF NOT EXISTS memory_quarantine (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      type TEXT NOT NULL,
+      project_id TEXT,
+      last_accessed_at INTEGER NOT NULL,
+      access_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      taint_flag INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_quarantine_vec USING vec0(
+      id TEXT PRIMARY KEY,
+      embedding bit[1536]
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_audit_log (
+      id TEXT PRIMARY KEY,
+      memory_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      previous_content TEXT,
+      new_content TEXT,
+      changed_at INTEGER NOT NULL,
+      previous_hash TEXT
+    );
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_update 
+    AFTER UPDATE ON cerebro_memories_meta
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'UPDATE',
+        OLD.content,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_delete 
+    AFTER DELETE ON cerebro_memories_meta
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        OLD.id,
+        'DELETE',
+        OLD.content,
+        NULL,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
 
     CREATE TABLE IF NOT EXISTS cerebro_learning_approvals (
       id TEXT PRIMARY KEY,
@@ -251,6 +316,51 @@ export function initDB() {
       created_at INTEGER NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS scout_symbols (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      file_path TEXT NOT NULL,
+      symbol_type TEXT NOT NULL,
+      symbol_name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    -- ── Axiom 6: Genesis Hardware Profile (Immutable Ledger) ─────────────────
+    -- Written ONCE by ScoutDaemon's hardware-profiler at first-run setup.
+    -- 'tier' is the synthesized classification: constrained | standard | high-performance.
+    -- Never modified after initial write; re-profiling inserts a new row with a
+    -- new id — it never overwrites the historical record.
+    CREATE TABLE IF NOT EXISTS hardware_profiles (
+      id TEXT PRIMARY KEY,
+      profiled_at INTEGER NOT NULL,
+      cpu_cores INTEGER NOT NULL,
+      cpu_physical_cores INTEGER NOT NULL,
+      cpu_has_hyperthreading INTEGER NOT NULL DEFAULT 0,
+      cpu_brand TEXT,
+      ram_total_mb INTEGER NOT NULL,
+      storage_type TEXT NOT NULL DEFAULT 'unknown',
+      os_platform TEXT NOT NULL,
+      os_distro TEXT,
+      virtualization TEXT NOT NULL DEFAULT 'none',
+      gpu_type TEXT NOT NULL DEFAULT 'none',
+      gpu_vram_mb INTEGER NOT NULL DEFAULT 0,
+      tier TEXT NOT NULL CHECK(tier IN ('constrained', 'standard', 'high-performance'))
+    );
+
+    -- ── Axiom 6: Derived Environment Rules ───────────────────────────────────
+    -- Key/value pairs synthesized from hardware_profiles by the profiler.
+    -- CoreExec reads these at boot to inject taskset, thread caps, heap limits.
+    -- RouteSwitch reads 'local_llm_enabled' before attempting local SLM calls.
+    CREATE TABLE IF NOT EXISTS environment_rules (
+      id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL REFERENCES hardware_profiles(id) ON DELETE CASCADE,
+      rule_key TEXT NOT NULL,
+      rule_value TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_environment_rules_profile ON environment_rules(profile_id);
 
     -- Indexes for graph traversal performance
     CREATE INDEX IF NOT EXISTS idx_okf_nodes_tier ON okf_nodes(tier, project_id);
@@ -396,6 +506,42 @@ export function initDB() {
   }
 
   migratePendingProposalBlob();
+
+  // ── FIX-4 (Axiom 1): Low-I/O Context Event Log ───────────────────────────
+  // Semantic events (routing decisions, UI interactions, workflow summaries)
+  // are coalesced and written here in batches (max 1 flush per 30s per project)
+  // rather than as a real-time event bus that would saturate eMMC 5.1 NAND.
+  // Cerebro reads recent events per project during interview phase to hydrate
+  // prior context without re-scanning the full OKF knowledge graph.
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS context_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        type TEXT NOT NULL,
+        summary_text TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_context_events_project ON context_events(project_id, created_at DESC);
+    `);
+  } catch (e: any) {
+    if (!e.message?.includes('already exists')) {
+      console.error('[FIX-4] Error creating context_events table:', e);
+    }
+  }
+
+  // ── FIX-3 (Axiom 4): Verify Node Type Tracking ───────────────────────────
+  // Adds node_type to tasks so 'verify' step nodes are distinguishable from
+  // 'action' nodes in the dispatch loop and in PortGrid approval UI.
+  // NULL = legacy action node (fully backwards-compatible).
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN node_type TEXT;`);
+  } catch (e: any) {
+    if (!e.message?.includes('duplicate column name')) {
+      console.error('[FIX-3] Error adding node_type column to tasks:', e);
+    }
+  }
 }
 
 /**
