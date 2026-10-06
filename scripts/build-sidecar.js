@@ -24,7 +24,51 @@ if (!fs.existsSync(RESOURCES_BIN_DIR)) {
   fs.mkdirSync(RESOURCES_BIN_DIR, { recursive: true });
 }
 
+// 0. Pre-bundle the TypeScript server entry into a single CommonJS file.
+//
+// pkg cannot consume TypeScript: it snapshots the .ts sources verbatim and the
+// resulting binary aborts on first import with
+// "SyntaxError: Cannot use import statement outside a module". Bundling to JS
+// first gives pkg a real JavaScript entry point.
+//
+// Native addons are marked external so they stay real `require()` calls: pkg
+// then walks them from node_modules into the snapshot instead of esbuild
+// trying (and failing) to inline a .node binary.
+//
+// esbuild `--target` matches the Node runtime pkg actually embeds: pkg 5.8.1's
+// newest available base binary is node18, so a node20 target here would emit
+// syntax the shipped runtime cannot parse.
+const SERVER_BUNDLE = path.join(ROOT_DIR, 'dist', 'server.cjs');
+const ESBUILD_EXTERNALS = [
+  'better-sqlite3',
+  'node-pty',
+  'argon2',
+  'sqlite-vec',
+  'node-llama-cpp',
+  'poolifier',
+  'esbuild',
+].map((pkgName) => `--external:${pkgName}`).join(' ');
+
+console.log('[Sidecar Build] Pre-bundling src/server/index.ts with esbuild...');
+try {
+  execSync(
+    `npx esbuild src/server/index.ts --bundle --platform=node --target=node18 --format=cjs ` +
+    `--outfile="${SERVER_BUNDLE}" ${ESBUILD_EXTERNALS}`,
+    { cwd: ROOT_DIR, stdio: 'inherit' }
+  );
+  console.log(`[Sidecar Build] Bundled server entry -> ${path.relative(ROOT_DIR, SERVER_BUNDLE)}`);
+} catch (e) {
+  console.error('[Sidecar Build] esbuild pre-bundle failed:', e.message);
+  process.exit(1);
+}
+
 // 1. Run pkg to generate binaries
+//
+// pkg is invoked in directory mode (`.`) on purpose: the package.json `pkg`
+// config (native-addon assets) is only resolved this way. Passing the bundle
+// file directly silently drops the assets, and the binary then dies at runtime
+// with "Could not locate the bindings file". `package.json.bin` points at the
+// bundled JS entry produced above.
 console.log('[Sidecar Build] Compiling Node.js binary with pkg...');
 try {
   // Map standard pkg targets to Tauri target triples
