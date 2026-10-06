@@ -15,20 +15,22 @@ export const safeMaxThreads = 2;
 
 function resolveWorkerFile(): string {
   if (path.extname(__filename) !== '.ts') {
-    // Packaged: prefer the bundle shipped in the pkg snapshot beside the server
-    // bundle, then a copy staged as a real Tauri bundle resource (see
-    // resolveWorkerFile in src/core/coreexec/worker-pool.ts for the rationale).
-    const snapshotBundle = path.join(__dirname, WORKER_BUNDLE);
-    if (fs.existsSync(snapshotBundle)) {
-      return snapshotBundle;
-    }
-
+    // Packaged: prefer a worker bundle staged as a real Tauri resource.
+    // worker_threads needs a physical filesystem path, not pkg's virtual
+    // /snapshot/ path. The host sets NEUROSYNC_RESOURCE_DIR in lib.rs.
     const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
     if (resourceDir && resourceDir.length > 0) {
       const stagedBundle = path.join(resourceDir, 'resources', 'bin', WORKER_BUNDLE);
       if (fs.existsSync(stagedBundle)) {
         return stagedBundle;
       }
+    }
+
+    // Fallback to the adjacent pkg snapshot bundle for local package probes
+    // or runtimes that support worker_threads from the snapshot.
+    const snapshotBundle = path.join(__dirname, WORKER_BUNDLE);
+    if (fs.existsSync(snapshotBundle)) {
+      return snapshotBundle;
     }
 
     return snapshotBundle;
