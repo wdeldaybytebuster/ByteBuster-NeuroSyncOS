@@ -29,7 +29,7 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* TOP NAVIGATION BAR */}
-      <header className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-white/5 bg-void/80 backdrop-blur-md z-40">
+      <header className="min-h-[4rem] py-2 shrink-0 flex flex-wrap gap-2 items-center justify-between px-4 border-b border-white/5 bg-void/80 backdrop-blur-md z-40">
         {/* Left: Hamburger + Logo (hero) + Brand + Module Name */}
         <div className="flex items-center gap-4">
           <button onClick={() => setLeftBarOpen(!leftBarOpen)} className="w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all" aria-label="Toggle module navigation">
@@ -90,9 +90,9 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
       </header>
 
       {/* BODY: Left Bar + Center + Right Bar (flex layout — center shrinks when bars open) */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* LEFT BAR: Module Router */}
-        <aside className={`shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-r border-white/5 shadow-2xl flex flex-col ${leftBarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
+        <aside className={`absolute md:relative shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-r border-white/5 shadow-2xl flex flex-col z-50 ${leftBarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
           <div className="p-4 border-b border-white/5 flex items-center justify-between min-w-[16rem]">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Modules</span>
             <button onClick={() => setLeftBarOpen(false)} className="w-6 h-6 rounded flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10"><X size={14} /></button>
@@ -108,7 +108,7 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
         </main>
 
         {/* RIGHT BAR: Project Switcher */}
-        <aside className={`shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-l border-white/5 shadow-2xl flex flex-col ${rightBarOpen ? 'w-72' : 'w-0 border-l-0'}`}>
+        <aside className={`absolute md:relative right-0 shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-l border-white/5 shadow-2xl flex flex-col z-50 ${rightBarOpen ? 'w-72' : 'w-0 border-l-0'}`}>
           <div className="p-4 border-b border-white/5 flex items-center justify-between min-w-[18rem]">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Context</span>
             <button onClick={() => setRightBarOpen(false)} className="w-6 h-6 rounded flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10"><X size={14} /></button>

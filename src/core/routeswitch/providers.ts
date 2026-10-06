@@ -75,6 +75,7 @@ export interface LLMProvider {
     schema?: any,
     streamHooks?: GenerationStreamHooks,
   ): Promise<string>;
+  generateEmbedding?(text: string): Promise<Float32Array>;
 }
 
 export { MockProvider } from './adapters/mock-provider';

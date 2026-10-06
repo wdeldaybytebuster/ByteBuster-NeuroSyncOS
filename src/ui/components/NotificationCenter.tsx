@@ -26,8 +26,10 @@ export function NotificationCenter() {
       if (data.success) {
         setTodos(data.todos);
       }
-    } catch (err) {
-      console.error('Failed to fetch OS Todos', err);
+    } catch (err: any) {
+      if (!(err instanceof TypeError || err.message === 'Failed to fetch')) {
+        console.error('Failed to fetch OS Todos', err);
+      }
     } finally {
       setLoading(false);
     }
@@ -50,8 +52,10 @@ export function NotificationCenter() {
       });
       // Refresh list
       fetchTodos();
-    } catch (err) {
-      console.error('Failed to resolve todo', err);
+    } catch (err: any) {
+      if (!(err instanceof TypeError || err.message === 'Failed to fetch')) {
+        console.error('Failed to resolve todo', err);
+      }
     }
   };
 

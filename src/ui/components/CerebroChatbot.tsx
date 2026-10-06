@@ -32,24 +32,70 @@ export function CerebroChatbot() {
     setMessages(prev => [...prev, { role: 'user', text: msg }]);
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
     try {
-      const res = await fetch(`${API}/api/cerebro/chat`, {
+      const res = await fetch('http://localhost:3001/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, history: messages.slice(-6), projectId: activeProjectId }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer freellmapi-cfada39761d420964a7bde605a09e71079beacc2a0fab1b8'
+        },
+        body: JSON.stringify({
+          model: 'Auto',
+          messages: [
+            { role: 'system', content: 'You are Cerebro, the system guide for NeuroSync. Keep responses brief.' },
+            ...messages.slice(-6).map(m => ({ role: m.role, content: m.text })),
+            { role: 'user', content: msg }
+          ],
+          stream: true
+        }),
+        signal: controller.signal
       });
-      const data = await res.json();
-      if (data.success) {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          text: data.reply,
-          suggestedNav: data.suggestedNavigation,
-        }]);
-      } else {
-        setMessages(prev => [...prev, { role: 'assistant', text: data.error || 'Sorry, I encountered an error.' }]);
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        if (res.status === 429) throw new Error('Too Many Requests (429)');
+        if (res.status >= 500) throw new Error(`Server Error (${res.status})`);
+        throw new Error(`Network error: ${res.status} ${res.statusText}`);
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Network error. Please check that the backend server is running on port 3743.' }]);
+      
+      setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
+      
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+              try {
+                const parsed = JSON.parse(line.substring(6));
+                const delta = parsed.choices?.[0]?.delta?.content || '';
+                fullResponse += delta;
+                setMessages(prev => {
+                  const copy = [...prev];
+                  copy[copy.length - 1]!.text = fullResponse;
+                  return copy;
+                });
+              } catch (e) {}
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      const isTimeout = err.name === 'AbortError';
+      const simple = isTimeout 
+        ? "Request timed out. Please check your local LLM connection." 
+        : `Network error communicating with the local LLM endpoint. (${err.message})`;
+      setMessages(prev => [...prev, { role: 'assistant', text: simple }]);
     }
     setLoading(false);
   };

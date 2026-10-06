@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Minimize2, Maximize2 } from 'lucide-react';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
 
 export interface DAGProposalPayload {
   id: string;
@@ -14,6 +15,8 @@ interface ScopeLogicChatProps {
 
 export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
   const { isDeveloperMode } = useDeveloperMode();
+  const hardwareTier = useHardwareTier();
+  const isConstrained = hardwareTier === 'constrained';
   const [input,     setInput]     = useState('');
   const [chatLog,   setChatLog]   = useState<{role: string, content: string}[]>([]);
   const [loading,   setLoading]   = useState(false);
@@ -33,31 +36,84 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
     setInput('');
     setLoading(true);
 
-    try {
-      const res = await fetch('http://localhost:3743/api/scopelogic/prompt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg })
-      });
-      const data = await res.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-      if (data.response) {
-        setChatLog(prev => [...prev, { role: 'system', content: data.response }]);
-      } else if (data.reply) {
-        setChatLog(prev => [...prev, { role: 'system', content: data.reply }]);
+    try {
+      const res = await fetch('http://localhost:3001/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer freellmapi-cfada39761d420964a7bde605a09e71079beacc2a0fab1b8'
+        },
+        body: JSON.stringify({
+          model: 'Auto',
+          messages: [
+            { role: 'system', content: 'You are ScopeLogic. Output DAG proposals inside ```json. The JSON should have a "nodes" array.' },
+            ...chatLog.map(m => ({ role: m.role, content: m.content })),
+            { role: 'user', content: userMsg }
+          ],
+          stream: true
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        if (res.status === 429) throw new Error('Too Many Requests (429)');
+        if (res.status >= 500) throw new Error(`Server Error (${res.status})`);
+        throw new Error(`Network error: ${res.status} ${res.statusText}`);
       }
 
-      if (data.dagProposal) {
-        setComplete(true);
-        setChatLog(prev => [...prev, {
-          role: 'system',
-          content: `✅ DAG Proposal Generated: ${data.dagProposal.nodes.length} tasks ready for review on the canvas.`
-        }]);
-        onProposal?.(data.dagProposal);
+      setChatLog(prev => [...prev, { role: 'system', content: '' }]);
+
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+              try {
+                const parsed = JSON.parse(line.substring(6));
+                const delta = parsed.choices?.[0]?.delta?.content || '';
+                fullResponse += delta;
+                setChatLog(prev => {
+                  const copy = [...prev];
+                  copy[copy.length - 1]!.content = fullResponse;
+                  return copy;
+                });
+              } catch (e) {}
+            }
+          }
+        }
+      }
+
+      if (fullResponse.includes('```json') || fullResponse.includes('nodes')) {
+        try {
+          const fenceMatch = fullResponse.match(/```(?:json)?\s*([\s\S]*?)```/);
+          const jsonStr = fenceMatch ? fenceMatch[1]! : fullResponse;
+          const parsed = JSON.parse(jsonStr);
+          if (parsed.nodes) {
+             const proposal = { id: crypto.randomUUID(), status: 'draft', nodes: parsed.nodes };
+             setComplete(true);
+             onProposal?.(proposal);
+          }
+        } catch(e) {}
       }
 
     } catch (err: any) {
-      const simple = "Something went wrong sending that message. Please try again.";
+      clearTimeout(timeoutId);
+      const isTimeout = err.name === 'AbortError';
+      const simple = isTimeout 
+        ? "Request timed out. Please check your local LLM connection." 
+        : "Something went wrong sending that message. Please try again.";
+        
       setChatLog(prev => [...prev, {
         role: 'system',
         content: isDeveloperMode ? `${simple} (Developer Mode: ${err.message})` : simple
@@ -70,7 +126,7 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
   // §1.1 — Compact chip view; restores the full panel on click.
   if (minimized) {
     return (
-      <div className="glass-panel animate-fade-in" style={{
+      <div className={`${isConstrained ? 'solid-panel' : 'glass-panel'} animate-fade-in`} style={{
         padding: '8px 10px',
         display: 'flex',
         alignItems: 'center',
@@ -94,7 +150,7 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
   }
 
   return (
-    <div className="glass-panel p-4 flex flex-col gap-4 animate-fade-in max-w-md w-full h-[400px]">
+    <div className={`${isConstrained ? 'solid-panel' : 'glass-panel'} p-4 flex flex-col gap-4 animate-fade-in max-w-md w-full h-[400px]`}>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-accent">💬 ScopeLogic Interview</h2>
         <button

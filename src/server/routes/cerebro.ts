@@ -35,7 +35,7 @@ export const cerebroRouter = new Hono();
 cerebroRouter.get('/health', (c) => {
   try {
     const vectorCountRow = db
-      .prepare('SELECT COUNT(*) AS n FROM cerebro_memories_meta')
+      .prepare('SELECT COUNT(*) AS n FROM cerebro_memories_vec')
       .get() as { n: number } | undefined;
     const lastTouchRow = db
       .prepare('SELECT MAX(last_accessed_at) AS ts FROM cerebro_memories_meta')
@@ -112,7 +112,7 @@ cerebroRouter.post('/vector-search', async (c) => {
 cerebroRouter.get('/learning-approvals', (c) => {
   try {
     const queue = db.prepare(`
-      SELECT id, fact, confidence, status, source_run_id, created_at, conflict_with_id, conflict_reasoning
+      SELECT id, fact, confidence, status, created_at, conflict_with_id, conflict_reasoning, source_tool
       FROM cerebro_learning_approvals
       WHERE status = 'pending'
       ORDER BY created_at ASC
@@ -131,24 +131,21 @@ cerebroRouter.post('/learning-approvals/:id/approve', async (c) => {
 
     if (!approval) return c.json({ success: false, error: 'Not found' }, 404);
 
-    // If this approval was flagged as conflicting with (updating/contradicting)
-    // an existing memory, the new fact SUPERSEDES the old one: delete the old
-    // row from both cerebro_memories_meta and cerebro_memories_vec (mirrors the
-    // two-table delete pattern used by prune-confirm above) before inserting
-    // the new fact, rather than leaving both sitting side-by-side.
     const memId = crypto.randomUUID();
     const approve = db.transaction(() => {
+      // Insert new fact into memory
+      db.prepare(`
+        INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at, source_tool)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(memId, approval.fact, 'fact', Date.now(), 0, Date.now(), approval.source_tool || null);
+
+      // If resolving a conflict, remove the old superseded memory
       if (approval.conflict_with_id) {
         db.prepare('DELETE FROM cerebro_memories_meta WHERE id = ?').run(approval.conflict_with_id);
         db.prepare('DELETE FROM cerebro_memories_vec WHERE id = ?').run(approval.conflict_with_id);
       }
 
-      db.prepare(`
-        INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(memId, approval.fact, 'fact', Date.now(), 0, Date.now());
-
-      // Mark as approved
+      // Mark the approval as resolved
       db.prepare(`UPDATE cerebro_learning_approvals SET status = 'approved' WHERE id = ?`).run(id);
     });
     approve();

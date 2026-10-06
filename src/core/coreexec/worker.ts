@@ -3,7 +3,7 @@ import { CommandSandbox } from '../portgrid/sandbox';
 import { StealthScraper } from './scraping';
 import { classifyDirective, NodeDirective } from './dispatch';
 import { checkActionPermission } from './permission-gate';
-
+import { RouteSwitchEngine } from '../routeswitch/engine';
 /**
  * Single-shape worker input. Backward-compat is preserved by `kind: 'legacy'`
  * whose `data` field carries the legacy stub payload. `kind: 'dag' | undefined`
@@ -17,6 +17,187 @@ export interface WorkerInput {
   prompt?: string;
   directive?: NodeDirective;
   data?: unknown;
+  plugin?: string;
+  params?: any;
+}
+
+export async function executePlugin(
+  input: WorkerInput, 
+  projectId: string | null,
+  workerDb: any,
+  CerebroVectorStore: any
+): Promise<WorkerOutput | null> {
+  const taskId = input.taskId ?? 'unknown';
+  const pluginName = input.plugin;
+  if (!pluginName) return null;
+
+  if (pluginName === 'gitnexus_mapper') {
+    const { execFile } = require('child_process');
+    const { promisify } = require('util');
+    const execFileAsync = promisify(execFile);
+    const crypto = require('crypto');
+    
+    let cwd = process.cwd();
+    if (projectId) {
+      const projRes = workerDb.prepare(`SELECT workspace_path, project_root_path FROM projects WHERE id = ?`).get(projectId) as { workspace_path: string | null, project_root_path: string | null } | undefined;
+      if (projRes) {
+        cwd = projRes.workspace_path ?? projRes.project_root_path ?? cwd;
+      }
+    }
+    
+    const query = input.params?.query ?? '';
+    const { stdout, stderr } = await execFileAsync('npx', ['gitnexus', 'query', '--json', query], { cwd });
+    
+    if (stderr && !stdout) {
+      return { status: 'error', action: 'generic', error: `GitNexus CLI failed: ${stderr}`, taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
+    }
+    
+    const routeSwitch = new RouteSwitchEngine();
+    const mockEmbedding = await routeSwitch.generateEmbedding(stdout);
+    
+    // Inserting into Cerebro Vector Store (uses vec_quantize_binary internally)
+    CerebroVectorStore.insert(stdout, 'gitnexus_ast', mockEmbedding, projectId);
+    
+    return {
+       status: 'success', action: 'generic',
+       taskId, stdout: 'GitNexus AST captured and embedded.', stderr: undefined,
+       markdown: undefined, pageMetadata: undefined, message: 'GitNexus AST captured and embedded.',
+       prompt: undefined, data: undefined, error: undefined, reason: 'plugin execution'
+    };
+  } else if (pluginName === 'okf_indexer') {
+    const url = input.params?.url;
+    let content = input.params?.mockContent;
+    const defaultSourceTool = input.params?.sourceTool;
+    const files = input.params?.files;
+    
+    const crypto = require('crypto');
+    const fs = require('fs');
+
+    let processedCount = 0;
+
+    if (files && Array.isArray(files)) {
+      for (const file of files) {
+        try {
+          const fileContent = fs.readFileSync(file, 'utf8');
+          
+          let inferredSourceTool = defaultSourceTool;
+          if (!inferredSourceTool) {
+             if (file.includes('.gemini/antigravity-ide')) {
+                inferredSourceTool = 'Antigravity';
+             } else if (file.includes('hermes')) {
+                inferredSourceTool = 'Hermes';
+             } else if (file.includes('qwen')) {
+                inferredSourceTool = 'Qwen Studio';
+             } else if (file.includes('deepseek')) {
+                inferredSourceTool = 'Deepseek Web';
+             }
+          }
+
+          const memoryId = CerebroVectorStore.insert(fileContent, 'external_document', undefined, projectId, true, inferredSourceTool);
+          
+          const todoId = crypto.randomUUID();
+          workerDb.prepare(`
+             INSERT INTO os_todos (
+                id, project_id, source_module, context_payload, 
+                severity, escalation_reason, required_action_type, status, created_at
+             ) VALUES (?, ?, 'CoreExec', ?, 'medium', 'Quarantined OKF Ingestion (File)', 'REVIEW', 'pending', ?)
+          `).run(todoId, projectId, JSON.stringify({ action: 'REVIEW_QUARANTINE', file, memoryId }), Date.now());
+          processedCount++;
+        } catch (e) {
+          // ignore read errors
+        }
+      }
+      return {
+         status: 'success', action: 'generic',
+         taskId, stdout: `Indexed ${processedCount} files.`, stderr: undefined,
+         markdown: undefined, pageMetadata: undefined, message: `Indexed ${processedCount} files.`,
+         prompt: undefined, data: undefined, error: undefined, reason: 'plugin execution'
+      };
+    }
+
+    if (!content && url) {
+       try {
+          const response = await fetch(url);
+          content = await response.text();
+       } catch (e: any) {
+          return { status: 'error', action: 'generic', error: `Failed to fetch URL: ${e.message}`, taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
+       }
+    }
+
+    if (!content) {
+       return { status: 'error', action: 'generic', error: 'No content provided to OKF Indexer.', taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
+    }
+
+    // Insert directly to memory_quarantine (isAutoIngested = true)
+    const memoryId = CerebroVectorStore.insert(content, 'external_document', undefined, projectId, true, defaultSourceTool);
+
+    // ToDo Escalation: fetching external data creates an os_todos ticket for user review
+    const todoId = crypto.randomUUID();
+    workerDb.prepare(`
+       INSERT INTO os_todos (
+          id, project_id, source_module, context_payload, 
+          severity, escalation_reason, required_action_type, status, created_at
+       ) VALUES (?, ?, 'CoreExec', ?, 'medium', 'Quarantined OKF Ingestion', 'REVIEW', 'pending', ?)
+    `).run(todoId, projectId, JSON.stringify({ action: 'REVIEW_QUARANTINE', url, memoryId }), Date.now());
+
+    return {
+       status: 'success', action: 'generic',
+       taskId, stdout: 'External content fetched and quarantined.', stderr: undefined,
+       markdown: undefined, pageMetadata: undefined, message: 'Content quarantined.',
+       prompt: undefined, data: undefined, error: undefined, reason: 'plugin execution'
+    };
+  } else if (pluginName === 'schema_patcher') {
+    const errorTrace = input.params?.errorTrace;
+    
+    if (!errorTrace) {
+      return { status: 'error', action: 'generic', error: 'No error trace provided to Schema Patcher.', taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
+    }
+
+    const crypto = require('crypto');
+    const fs = require('fs');
+    const path = require('path');
+
+    let cwd = process.cwd();
+    if (projectId) {
+      const projRes = workerDb.prepare(`SELECT workspace_path, project_root_path FROM projects WHERE id = ?`).get(projectId) as { workspace_path: string | null, project_root_path: string | null } | undefined;
+      if (projRes) {
+        cwd = projRes.workspace_path ?? projRes.project_root_path ?? cwd;
+      }
+    }
+
+    const routeSwitch = new RouteSwitchEngine();
+    const prompt = `Draft a schema patch repair script for the following schema drift delta:\n${errorTrace.delta}\nAPI Name: ${errorTrace.apiName}\nError: ${errorTrace.error}`;
+    
+    // Draft a repair script using RouteSwitchEngine
+    const generation = await routeSwitch.execute({
+      prompt,
+      estimatedTokens: 1000,
+      scope: 'agent'
+    });
+    
+    const draftPatch = generation.content;
+    const patchFileName = `schema_patch_${crypto.randomUUID()}.js`;
+    const patchFile = path.join(cwd, patchFileName);
+    fs.writeFileSync(patchFile, draftPatch, 'utf-8');
+
+    // Queue os_todos ticket for user review
+    const todoId = crypto.randomUUID();
+    workerDb.prepare(`
+       INSERT INTO os_todos (
+          id, project_id, source_module, context_payload, 
+          severity, escalation_reason, required_action_type, status, created_at
+       ) VALUES (?, ?, 'CoreExec', ?, 'high', 'Schema Drift Circuit Breaker Tripped', 'REVIEW', 'pending', ?)
+    `).run(todoId, projectId, JSON.stringify({ action: 'REVIEW_SCHEMA_PATCH', errorTrace, draftPatch, patchFile }), Date.now());
+
+    return {
+       status: 'success', action: 'generic',
+       taskId, stdout: 'Schema patch drafted and queued for review.', stderr: undefined,
+       markdown: undefined, pageMetadata: undefined, message: 'Patch queued.',
+       prompt: undefined, data: undefined, error: undefined, reason: 'plugin execution'
+    };
+  }
+  
+  return null;
 }
 
 /**
@@ -87,6 +268,13 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
             }
           } catch (err) {
             console.error('Failed to resolve project_id for task', taskId, err);
+          }
+
+          if (input.plugin) {
+            const { CerebroVectorStore } = require('../memory/cerebro/vector');
+            const { db: workerDb } = require('../basevault/db');
+            const result = await executePlugin(input, projectId ?? null, workerDb, CerebroVectorStore);
+            if (result) return result;
           }
 
           // ── Permission enforcement (Phase 5) ─────────────────────────────

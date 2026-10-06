@@ -1,6 +1,6 @@
 // Single source of truth for module naming across the nav (ModuleRouter) and
-// the top bar (AppShell). Hobbyist Mode (default) shows the plain-English
-// `simple` name; Developer Mode shows the technical `dev` name.
+// the top bar (AppShell). Developer Mode (default) shows the technical
+// `dev` name. Hobbyist Mode (opt-in) shows the plain-English `simple` name.
 export interface ModuleLabelPair {
   simple: string;
   dev: string;

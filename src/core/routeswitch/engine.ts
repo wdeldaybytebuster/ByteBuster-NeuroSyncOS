@@ -431,4 +431,11 @@ export class RouteSwitchEngine {
       isCouncilMode: isCouncilTriggered
     };
   }
+
+  public async generateEmbedding(text: string): Promise<Float32Array> {
+    if (this.provider.generateEmbedding) {
+      return this.provider.generateEmbedding(text);
+    }
+    throw new Error(`Provider ${this.provider.id} does not support generateEmbedding`);
+  }
 }

@@ -7,6 +7,6 @@ export default defineConfig({
     // default is fine on a fast dev machine but too tight on slower/shared
     // CI hardware.
     testTimeout: 20000,
-    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', '.claude/**'],
+    exclude: ['node_modules', 'dist', '.idea', '.git', '.cache', '.claude/**', 'e2e/**'],
   },
 });

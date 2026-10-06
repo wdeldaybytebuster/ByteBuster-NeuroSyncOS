@@ -190,8 +190,8 @@ function DashboardView() {
                   <div className="text-[10px] text-gray-500 font-mono">{d.type} • conf: {d.confidence.toFixed(2)} • {new Date(d.createdAt).toLocaleDateString()}</div>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
-                  <button onClick={async () => { await fetch(`${API}/api/okf/scout-drafts/${d.id}/promote`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); }} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Promote</button>
-                  <button onClick={async () => { await fetch(`${API}/api/okf/scout-drafts/${d.id}/reject`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); }} className="px-2 py-1 rounded text-[9px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
+                  <button onClick={async () => { try { await fetch(`${API}/api/okf/scout-drafts/${d.id}/promote`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Promote</button>
+                  <button onClick={async () => { try { await fetch(`${API}/api/okf/scout-drafts/${d.id}/reject`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
                 </div>
               </div>
             ))}
@@ -405,7 +405,7 @@ function SetupView() {
           <ModeLabel simple="Instantly shuts down the background watcher and frees up your computer. Your workflows and other work are not affected." dev="Forcefully terminates the ScoutDaemon process (SIGKILL). Because it runs as a separate OS process, this instantly sheds CPU load without disrupting CoreExec or active workflows." />
         </p>
 
-        <div className="flex items-center justify-between p-4 rounded-lg border transition-all" style={{ backgroundColor: killSwitchActive ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.3)', borderColor: killSwitchActive ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.05)' }}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-lg border transition-all" style={{ backgroundColor: killSwitchActive ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.3)', borderColor: killSwitchActive ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.05)' }}>
           <div>
             <span className="text-sm font-bold block" style={{ color: killSwitchActive ? '#ef4444' : 'white' }}>
               {killSwitchActive ? 'DAEMON TERMINATED' : 'Daemon Running'}

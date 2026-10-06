@@ -7,7 +7,22 @@ export const todosRouter = new Hono();
 
 todosRouter.get('/', async (c) => {
   try {
-    const todos = db.prepare('SELECT * FROM os_todos WHERE status = ? ORDER BY created_at DESC').all('open');
+    const todos = db.prepare("SELECT * FROM os_todos WHERE status IN ('open', 'pending') ORDER BY created_at DESC").all() as any[];
+    
+    for (const todo of todos) {
+      if (todo.context_payload) {
+        try {
+          const payload = JSON.parse(todo.context_payload);
+          if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+            const qRow = db.prepare('SELECT source_tool FROM memory_quarantine WHERE id = ?').get(payload.memoryId) as any;
+            if (qRow && qRow.source_tool) {
+              todo.source_tool = qRow.source_tool;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    
     return c.json({ success: true, todos });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -28,20 +43,46 @@ todosRouter.post('/:id/resolve', async (c) => {
       if (info.changes === 0) throw new Error('To-Do not found');
 
       // 2. Find the associated task
-      const todo = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
-      if (todo && todo.dag_node_id) {
-        // 3. Update task status back to unclaimed so the engine will re-queue it
-        // We inject the resolutionData into the task's output_data so the worker has context on retry
-        const redactedResolution = SensitiveDataRedactor.redactObject(resolutionData, DataTier.INTERNAL);
-        const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
-        updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
+      const todo = db.prepare('SELECT dag_node_id, context_payload FROM os_todos WHERE id = ?').get(todoId) as any;
+      if (todo) {
+        if (todo.context_payload) {
+          try {
+            const payload = JSON.parse(todo.context_payload);
+            if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+              const qRow = db.prepare('SELECT * FROM memory_quarantine WHERE id = ?').get(payload.memoryId) as any;
+              if (qRow) {
+                db.prepare(`
+                  INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at, source_tool)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(qRow.id, qRow.content, qRow.type, qRow.project_id, qRow.last_accessed_at, qRow.access_count, qRow.created_at, qRow.source_tool);
+                
+                const qVec = db.prepare('SELECT embedding FROM memory_quarantine_vec WHERE id = ?').get(payload.memoryId) as any;
+                if (qVec) {
+                  db.prepare(`
+                    INSERT INTO cerebro_memories_vec (id, embedding)
+                    VALUES (?, ?)
+                  `).run(payload.memoryId, qVec.embedding);
+                }
+                db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+              }
+            }
+          } catch (e) {}
+        }
         
-        // 4. Update the parent workflow_run status from 'parked' to 'running'
-        const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
-        if (task) {
-          db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
-          // Resume the executeRun loop now that it is no longer parked
-          executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after To-Do resolution:`, err));
+        if (todo.dag_node_id) {
+          // 3. Update task status back to unclaimed so the engine will re-queue it
+          // We inject the resolutionData into the task's output_data so the worker has context on retry
+          const redactedResolution = SensitiveDataRedactor.redactObject(resolutionData, DataTier.INTERNAL);
+          const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
+          updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
+          
+          // 4. Update the parent workflow_run status from 'parked' to 'running'
+          const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
+          if (task) {
+            db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+            // Resume the executeRun loop now that it is no longer parked
+            executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after To-Do resolution:`, err));
+          }
         }
       }
     })();
@@ -144,6 +185,30 @@ todosRouter.post('/resolve-bulk', async (c) => {
             continue;
           }
 
+          if (todo.context_payload) {
+            try {
+              const payload = JSON.parse(todo.context_payload);
+              if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+                const qRow = db.prepare('SELECT * FROM memory_quarantine WHERE id = ?').get(payload.memoryId) as any;
+                if (qRow) {
+                  db.prepare(`
+                    INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at, source_tool)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  `).run(qRow.id, qRow.content, qRow.type, qRow.project_id, qRow.last_accessed_at, qRow.access_count, qRow.created_at, qRow.source_tool);
+                  
+                  const qVec = db.prepare('SELECT embedding FROM memory_quarantine_vec WHERE id = ?').get(payload.memoryId) as any;
+                  if (qVec) {
+                    db.prepare(`
+                      INSERT INTO cerebro_memories_vec (id, embedding)
+                      VALUES (?, ?)
+                    `).run(payload.memoryId, qVec.embedding);
+                  }
+                  db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+                }
+              }
+            } catch (e) {}
+          }
+
           if (todo.dag_node_id) {
             const redactedResolution = SensitiveDataRedactor.redactObject('approved', DataTier.INTERNAL);
             const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
@@ -177,8 +242,19 @@ todosRouter.post('/reject', async (c) => {
   const { todoId } = body;
 
   try {
+    const todo = db.prepare('SELECT context_payload FROM os_todos WHERE id = ?').get(todoId) as any;
     const info = db.prepare("UPDATE os_todos SET status = 'rejected' WHERE id = ?").run(todoId);
     if (info.changes === 0) return c.json({ success: false, error: 'To-Do not found' }, 404);
+    
+    if (todo && todo.context_payload) {
+      try {
+        const payload = JSON.parse(todo.context_payload);
+        if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+          db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+        }
+      } catch (e) {}
+    }
+
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -201,11 +277,20 @@ todosRouter.post('/reject-bulk', async (c) => {
 
     db.transaction(() => {
       for (const todoId of todoIds) {
+        const todo = db.prepare('SELECT context_payload FROM os_todos WHERE id = ?').get(todoId) as any;
         const info = db.prepare("UPDATE os_todos SET status = 'rejected' WHERE id = ?").run(todoId);
         if (info.changes === 0) {
           failed.push({ id: todoId, error: 'To-Do not found' });
         } else {
           rejected.push(todoId);
+          if (todo && todo.context_payload) {
+            try {
+              const payload = JSON.parse(todo.context_payload);
+              if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+                db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+              }
+            } catch (e) {}
+          }
         }
       }
     })();

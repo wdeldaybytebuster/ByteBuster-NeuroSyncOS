@@ -8,6 +8,15 @@ export const ProjectSchema = z.object({
 });
 export type Project = z.infer<typeof ProjectSchema>;
 
+export const SyncEventLogSchema = z.object({
+  id: z.number().int(),
+  table_name: z.string(),
+  action: z.enum(['INSERT', 'UPDATE', 'DELETE']),
+  timestamp: z.number().int(),
+  payload: z.string(), // JSON string
+});
+export type SyncEventLog = z.infer<typeof SyncEventLogSchema>;
+
 // §3.3 — 'blocked-by-validation' is a sentinel status written by
 // escalateBlockedDAGToOsTodos (§3.4) into the FK-satisfying placeholder
 // workflow_runs row. It must be a first-class enum member so that
