@@ -262,4 +262,47 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     return content;
   }
+
+  async generateEmbedding(text: string): Promise<Float32Array> {
+    const effectiveConfig = await this._resolveEffectiveConfig();
+    const url = effectiveConfig.baseUrl.endsWith('/')
+      ? `${effectiveConfig.baseUrl}v1/embeddings`
+      : `${effectiveConfig.baseUrl}/v1/embeddings`;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...effectiveConfig.extraHeaders,
+    };
+    if (effectiveConfig.apiKey) {
+      const apiKey = effectiveConfig.apiKey.startsWith('enc:') 
+        ? decrypt(effectiveConfig.apiKey) 
+        : effectiveConfig.apiKey;
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    const body = {
+      input: text,
+      model: effectiveConfig.modelId, // or a specific embedding model if configured, but for now we use modelId
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'unknown error');
+      throw new Error(`Embedding API error ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json() as any;
+    const embedding = data?.data?.[0]?.embedding;
+
+    if (!embedding || !Array.isArray(embedding)) {
+      throw new Error('Embedding API returned invalid or no embedding data');
+    }
+
+    return new Float32Array(embedding);
+  }
 }

@@ -25,7 +25,7 @@ export function RouteSwitchConfig() {
           setModels(data.models);
         }
       })
-      .catch(console.error);
+      .catch((err: any) => { if (!(err instanceof TypeError || err.message === 'Failed to fetch')) console.error(err); });
 
     // Fetch existing settings
     fetch('/api/system/settings')
@@ -37,7 +37,7 @@ export function RouteSwitchConfig() {
           if (data.settings.rs_fallback2) setFallback2(data.settings.rs_fallback2);
         }
       })
-      .catch(console.error);
+      .catch((err: any) => { if (!(err instanceof TypeError || err.message === 'Failed to fetch')) console.error(err); });
   }, []);
 
   const handleSave = async () => {

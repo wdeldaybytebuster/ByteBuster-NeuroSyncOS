@@ -43,6 +43,8 @@ describe('cerebroRouter /health', () => {
       INSERT OR REPLACE INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id2, 'reflection probe 2', 'episodic', now - 1000, 1, now - 1000);
+    db.prepare('INSERT OR REPLACE INTO cerebro_memories_vec (id, embedding) VALUES (?, vec_quantize_binary(?))').run(id1, new Float32Array(1536));
+    db.prepare('INSERT OR REPLACE INTO cerebro_memories_vec (id, embedding) VALUES (?, vec_quantize_binary(?))').run(id2, new Float32Array(1536));
 
     try {
       const baseCount = ((db.prepare('SELECT COUNT(*) AS n FROM cerebro_memories_meta').get() as any).n) - 2;
@@ -54,6 +56,7 @@ describe('cerebroRouter /health', () => {
       expect(body.status).toBe('nominal');             // touched <1h ago
     } finally {
       db.prepare('DELETE FROM cerebro_memories_meta WHERE id IN (?, ?)').run(id1, id2);
+      db.prepare('DELETE FROM cerebro_memories_vec WHERE id IN (?, ?)').run(id1, id2);
     }
   });
 

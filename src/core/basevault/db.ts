@@ -111,7 +111,8 @@ export function initDB() {
       project_id TEXT,
       last_accessed_at INTEGER NOT NULL,
       access_count INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      source_tool TEXT
     );
 
     CREATE VIRTUAL TABLE IF NOT EXISTS cerebro_memories_vec USING vec0(
@@ -127,7 +128,8 @@ export function initDB() {
       last_accessed_at INTEGER NOT NULL,
       access_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
-      taint_flag INTEGER NOT NULL DEFAULT 1
+      taint_flag INTEGER NOT NULL DEFAULT 1,
+      source_tool TEXT
     );
 
     CREATE VIRTUAL TABLE IF NOT EXISTS memory_quarantine_vec USING vec0(
@@ -182,7 +184,8 @@ export function initDB() {
       confidence REAL NOT NULL,
       status TEXT NOT NULL,
       source_run_id TEXT,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      source_tool TEXT
     );
 
     -- Cerebro prune history: one row per manual prune action. Powers the
@@ -426,6 +429,31 @@ export function initDB() {
     // Free Mode Governor paid-provider lock: opt-in per-provider "this costs
     // real money" flag. DEFAULT 0 (free) for every row — including all existing
     // rows — is deliberate: nothing is silently reclassified by provider type.
+    db.exec(`ALTER TABLE llm_providers ADD COLUMN require_paid_tier INTEGER NOT NULL DEFAULT 0;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding require_paid_tier column to llm_providers:', e);
+    }
+  }
+
+  try {
+    // Add source_tool for cross-agent attribution
+    db.exec(`ALTER TABLE cerebro_memories_meta ADD COLUMN source_tool TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding source_tool column to cerebro_memories_meta:', e);
+    }
+  }
+
+  try {
+    // Add source_tool for cross-agent attribution
+    db.exec(`ALTER TABLE memory_quarantine ADD COLUMN source_tool TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding source_tool column to memory_quarantine:', e);
+    }
+  }
+  try {
     // The global lock (system_settings.free_mode_unlocked) only skips a provider
     // once a user explicitly marks it paid, so a currently-working free proxy
     // setup can never be blocked by shipping this migration.
@@ -540,6 +568,88 @@ export function initDB() {
   } catch (e: any) {
     if (!e.message?.includes('duplicate column name')) {
       console.error('[FIX-3] Error adding node_type column to tasks:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN source_tool TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding source_tool column to cerebro_learning_approvals:', e);
+    }
+  }
+
+  // Delta Sync Event Log
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_event_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        action TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        payload TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS sync_lock (is_syncing INTEGER);
+      INSERT OR IGNORE INTO sync_lock (rowid, is_syncing) VALUES (1, 0);
+
+      DROP TRIGGER IF EXISTS sync_projects_insert;
+      CREATE TRIGGER sync_projects_insert AFTER INSERT ON projects
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('projects', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'name', NEW.name, 'created_at', NEW.created_at));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_projects_update;
+      CREATE TRIGGER sync_projects_update AFTER UPDATE ON projects
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('projects', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'name', NEW.name, 'created_at', NEW.created_at));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_workflow_runs_insert;
+      CREATE TRIGGER sync_workflow_runs_insert AFTER INSERT ON workflow_runs
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('workflow_runs', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_workflow_runs_update;
+      CREATE TRIGGER sync_workflow_runs_update AFTER UPDATE ON workflow_runs
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('workflow_runs', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_tasks_insert;
+      CREATE TRIGGER sync_tasks_insert AFTER INSERT ON tasks
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('tasks', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'run_id', NEW.run_id, 'status', NEW.status));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_tasks_update;
+      CREATE TRIGGER sync_tasks_update AFTER UPDATE ON tasks
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('tasks', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'run_id', NEW.run_id, 'status', NEW.status));
+      END;
+    `);
+  } catch (e: any) {
+    console.error('Error creating sync_event_log table:', e);
+  }
+
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN started_at INTEGER;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding started_at column to tasks:', e);
     }
   }
 }

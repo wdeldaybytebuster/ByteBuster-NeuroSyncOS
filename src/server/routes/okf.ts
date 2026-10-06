@@ -312,12 +312,29 @@ okfRouter.post('/convert-document', async (c) => {
 });
 
 // 11. POST /api/okf/sync — Manual trigger for OKF indexing
+import { flushIndexingQueue } from '../../core/scoutdaemon/idle';
+
 okfRouter.post('/sync', async (c) => {
   try {
-    const body = await c.req.json();
-    const parsed = ProjectIdSchema.safeParse(body?.projectId);
+    // Attempt to parse body, but don't fail if empty (for lightweight ping)
+    let body: any = {};
+    try {
+      body = await c.req.json();
+    } catch (e) {
+      // Empty body is fine, we just flush the queue
+    }
+
+    const rawProjectId = body?.projectId;
+    
+    // If no projectId is provided, just flush the active queue and return
+    if (!rawProjectId) {
+      flushIndexingQueue();
+      return c.json({ success: true, message: 'Queue flushed.' });
+    }
+
+    const parsed = ProjectIdSchema.safeParse(rawProjectId);
     if (!parsed.success) {
-      return c.json({ success: false, error: 'Invalid or missing projectId in request body.' }, 400);
+      return c.json({ success: false, error: 'Invalid projectId in request body.' }, 400);
     }
     const projectId = parsed.data;
 

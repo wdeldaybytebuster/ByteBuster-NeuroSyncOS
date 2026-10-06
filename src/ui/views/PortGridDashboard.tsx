@@ -40,7 +40,7 @@ function DAGNode({ data }: any) {
 const nodeTypes = { dag: DAGNode };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-interface OsTodo { id: string; severity: string; escalation_reason: string; required_action_type: string; status: string; confidence: number; }
+interface OsTodo { id: string; severity: string; escalation_reason: string; required_action_type: string; status: string; confidence: number; source_tool?: string | null; }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────
 function DashboardView() {
@@ -432,13 +432,18 @@ function DashboardView() {
                 ? `DAG PROPOSAL • confidence ${item.confidence.toFixed(2)}`
                 : `${todo?.severity ?? ''} • ${todo?.required_action_type ?? ''} • confidence ${item.confidence.toFixed(2)}`;
               return (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-amber-500/20">
+                <div key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg bg-black/30 border border-amber-500/20">
                   <div className="flex items-center gap-3">
                     {item.kind === 'proposal'
                       ? <Sparkles size={14} className="text-amber-400" />
                       : <AlertTriangle size={14} className="text-amber-400" />}
                     <div>
-                      <div className="text-xs font-bold text-white">{item.description}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs font-bold text-white">{item.description}</div>
+                        {todo?.source_tool && (
+                          <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border ${todo.source_tool === 'Deepseek Web' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : todo.source_tool === 'Qwen Studio' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : todo.source_tool === 'Hermes' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`}>{todo.source_tool}</span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-gray-500 font-mono">{subtitle}</div>
                     </div>
                   </div>

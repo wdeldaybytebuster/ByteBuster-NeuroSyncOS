@@ -50,8 +50,10 @@ export function GovernorUI() {
         body: JSON.stringify({ maxWorkers: targetWorkers })
       });
       setShowWarning(false);
-    } catch (err) {
-      console.error('Failed to update governor limit', err);
+    } catch (err: any) {
+      if (!(err instanceof TypeError || err.message === 'Failed to fetch')) {
+        console.error('Failed to update governor limit', err);
+      }
     }
   };
 

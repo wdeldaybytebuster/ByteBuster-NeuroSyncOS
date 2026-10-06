@@ -7,6 +7,7 @@ export interface CerebroWorkerInput {
   historyToProcess?: string[];
   extractedFacts?: string[];
   classifications?: { fact: string, existingContent: string, classification: 'duplicate' | 'update' | 'unrelated' }[];
+  source_tool?: string;
 }
 
 export async function runReflectionSweep(input: CerebroWorkerInput) {
@@ -28,14 +29,14 @@ export async function runReflectionSweep(input: CerebroWorkerInput) {
           const conflictId = existing[0]!.id;
           const conflictReasoning = `Possibly contradicts or updates an existing memory: "${existing[0]!.content}"`;
           db.prepare(`
-            INSERT INTO cerebro_learning_approvals (id, fact, confidence, status, source_run_id, created_at, conflict_with_id, conflict_reasoning)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(crypto.randomUUID(), fact, 0.6, 'pending', null, Date.now(), conflictId, conflictReasoning);
+            INSERT INTO cerebro_learning_approvals (id, fact, confidence, status, source_run_id, created_at, conflict_with_id, conflict_reasoning, source_tool)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(crypto.randomUUID(), fact, 0.6, 'pending', null, Date.now(), conflictId, conflictReasoning, input.source_tool || null);
         }
       }
 
       if (!skip) {
-        CerebroVectorStore.insert(fact, 'preference');
+        CerebroVectorStore.insert(fact, 'preference', undefined, null, false, input.source_tool);
       }
     }
   }

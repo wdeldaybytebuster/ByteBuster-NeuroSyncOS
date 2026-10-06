@@ -15,7 +15,7 @@ const ACCENT_GOLD = '#D4AF37';
 const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(45,212,191,0.08)] hover:shadow-[0_0_30px_rgba(45,212,191,0.2)] hover:border-[rgba(45,212,191,0.25)]`;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-interface LearningApproval { id: string; fact: string; confidence: number; status: string; source_run_id: string | null; created_at: number; conflictWithId?: string | null; conflictReasoning?: string | null; }
+interface LearningApproval { id: string; fact: string; confidence: number; status: string; source_run_id: string | null; created_at: number; conflictWithId?: string | null; conflictReasoning?: string | null; source_tool?: string | null; }
 interface MemoryNode { id: string; content: string; type: string; last_accessed_at: number; access_count: number; created_at: number; }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ function DashboardView() {
           ...a,
           conflictWithId: a.conflict_with_id ?? null,
           conflictReasoning: a.conflict_reasoning ?? null,
+          source_tool: a.source_tool ?? null,
         })));
       }
     }).catch(() => {});
@@ -147,7 +148,12 @@ function DashboardView() {
               <div key={a.id} className="p-3 rounded-lg bg-black/30 border border-white/5 hover:border-blue-500/20 transition-all">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs text-white font-semibold leading-relaxed">{a.fact}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-white font-semibold leading-relaxed">{a.fact}</div>
+                      {a.source_tool && (
+                        <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${a.source_tool === 'Deepseek Web' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : a.source_tool === 'Qwen Studio' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : a.source_tool === 'Hermes' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`}>{a.source_tool}</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3 mt-2">
                       <span className="text-[9px] font-mono text-gray-500">Confidence: <span style={{ color: a.confidence > 0.9 ? '#00FF41' : a.confidence > 0.7 ? '#fbbf24' : '#ef4444' }}>{(a.confidence * 100).toFixed(0)}%</span></span>
                       {a.source_run_id && <span className="text-[9px] font-mono text-gray-600">Source: {a.source_run_id.substring(0, 8)}...</span>}
@@ -232,7 +238,7 @@ function DashboardView() {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
+          <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
             <Trash2 size={12} /> <ModeLabel simple="Refresh Memory Scores" dev="Trigger Consolidation Sweep" />
           </button>
           <button onClick={() => { fetch(`${API}/api/cerebro/pin-high-confidence`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">

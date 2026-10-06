@@ -21,6 +21,7 @@ import { ApprovalCockpit } from './components/ApprovalCockpit';
 import { NodeOutputInspector } from './components/NodeOutputInspector';
 import { isReservedDAGPrompt } from '../core/system-reserved';
 import { Statusline } from './components/Statusline';
+import { useHardwareTier } from '../core/scoutdaemon/hardware-context';
 
 // ── Custom Node ────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,8 @@ const dagIcons = ['cpu', 'database', 'network'] as const;
 
 
 export default function App() {
+  const hardwareTier = useHardwareTier();
+  const isConstrained = hardwareTier === 'constrained';
   const [currentProposal, setCurrentProposal] = useState<DAGProposalPayload | null>(null);
   const [runStatus,       setRunStatus]        = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [activeRunId,     setActiveRunId]      = useState<string | null>(null);
@@ -361,13 +364,15 @@ export default function App() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const rootClasses = isConstrained ? 'hardware-constrained disable-animations' : '';
+
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className={rootClasses} style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
       {/* Top Navigation Bar */}
-      <div className="glass-panel" style={{
-        margin: '16px', padding: '16px 24px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10
+      <div className={isConstrained ? 'solid-panel' : 'glass-panel'} style={{
+        margin: '8px md:16px', padding: '16px 24px',
+        display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', zIndex: 10, gap: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <img src={portGridLogo} alt="PortGrid Logo" style={{ height: '40px', width: 'auto', borderRadius: '8px' }} />
@@ -377,21 +382,21 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Statusline />
-          {runStatus === 'done' && (
-            <button className="btn-secondary" onClick={handleReset}>
-              🔄 New Session
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <Statusline />
+            {runStatus === 'done' && (
+              <button className="btn-secondary whitespace-nowrap" onClick={handleReset}>
+                🔄 New Session
+              </button>
+            )}
+            <button className="btn-icon shrink-0" onClick={() => setIsSettingsOpen(true)} aria-label="Settings">
+              <Settings size={18} />
             </button>
-          )}
-          <button className="btn-icon" onClick={() => setIsSettingsOpen(true)} aria-label="Settings">
-            <Settings size={18} />
-          </button>
-          <button className="btn-icon" onClick={toggleTheme} aria-label="Toggle Theme">
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
-          
-          <div style={{ marginLeft: '16px', position: 'relative', zIndex: 100 }}>
+            <button className="btn-icon shrink-0" onClick={toggleTheme} aria-label="Toggle Theme">
+              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+            
+            <div style={{ marginLeft: '16px', position: 'relative', zIndex: 100 }}>
             {currentProposal ? (
               <ApprovalCockpit 
                 proposal={currentProposal}
@@ -409,12 +414,12 @@ export default function App() {
       <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
 
         {/* Left Sidebar: Chat */}
-        <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="hidden md:flex" style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, flexDirection: 'column', gap: '14px' }}>
           <ScopeLogicChat key={chatKey} onProposal={handleProposal} />
         </div>
 
         {/* Right Sidebar: Run History */}
-        <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
+        <div className="hidden md:block" style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
           <RunHistory onSelectRun={handleSelectRun} activeRunId={activeRunId} />
         </div>
 

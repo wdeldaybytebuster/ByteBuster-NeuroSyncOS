@@ -3,7 +3,6 @@ import { db } from '../basevault/db';
 import { scoutEmitter } from './sse';
 import crypto from 'crypto';
 import * as si from 'systeminformation';
-import { systemConfig } from '../coreexec/settings';
 import { ScoutResearch } from './research';
 import { log } from '../observability/logger';
 
@@ -31,11 +30,18 @@ export class IdleDetector extends EventEmitter {
         if (temp.main > 85) {
           log.warn('[ScoutDaemon] Thermal spike detected. Yielding foreground via maxWorkers=0.');
           // Save original config if not already yielding
-          if (!this.originalMaxWorkers) this.originalMaxWorkers = systemConfig.maxWorkers;
-          systemConfig.maxWorkers = 0; // Suspend coreexec engine
+          if (this.originalMaxWorkers === undefined) {
+            try {
+              const row = db.prepare("SELECT rule_value FROM environment_rules WHERE rule_key = 'max_workers' ORDER BY created_at DESC LIMIT 1").get() as { rule_value: string } | undefined;
+              this.originalMaxWorkers = row && row.rule_value ? parseInt(row.rule_value, 10) : 3;
+            } catch (err) {
+              this.originalMaxWorkers = 3;
+            }
+          }
+          db.prepare("INSERT INTO environment_rules (id, rule_key, rule_value, created_at) VALUES (?, ?, ?, ?)").run(crypto.randomUUID(), 'max_workers', '0', Date.now());
         } else if (this.originalMaxWorkers !== undefined && temp.main < 75) {
           log.info('[ScoutDaemon] Thermals recovered. Restoring worker config.');
-          systemConfig.maxWorkers = this.originalMaxWorkers;
+          db.prepare("INSERT INTO environment_rules (id, rule_key, rule_value, created_at) VALUES (?, ?, ?, ?)").run(crypto.randomUUID(), 'max_workers', this.originalMaxWorkers.toString(), Date.now());
           delete this.originalMaxWorkers;
         }
       } catch (err) {
@@ -188,9 +194,9 @@ export function queueForIndexing(filePath: string) {
   }
 }
 
-idleDetector.on('indexing_idle', () => {
+export function flushIndexingQueue() {
   if (indexingQueue.length === 0) return;
-  log.info(`[ScoutDaemon] System idle for 30s. Flushing ${indexingQueue.length} files to indexing queue in CoreExec...`);
+  log.info(`[ScoutDaemon] Flushing ${indexingQueue.length} files to indexing queue in CoreExec...`);
   
   const filesToProcess = [...indexingQueue];
   indexingQueue.length = 0; // Clear queue
@@ -231,5 +237,12 @@ idleDetector.on('indexing_idle', () => {
     log.info(`[ScoutDaemon] Indexing run ${runId} staged for CoreExec pickup (Track 2).`);
   } catch (err) {
     log.error('[ScoutDaemon] Failed to stage indexing run:', err);
+  }
+}
+
+idleDetector.on('indexing_idle', () => {
+  if (indexingQueue.length > 0) {
+    log.info(`[ScoutDaemon] System idle for 30s.`);
+    flushIndexingQueue();
   }
 });

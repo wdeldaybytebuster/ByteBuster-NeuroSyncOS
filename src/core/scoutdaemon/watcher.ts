@@ -60,7 +60,7 @@ export function startWatcher(projectId: string, rootPath: string): void {
     depth: 6,
     persistent: false,
     ignored: [
-      /(^|[/\\])\../,
+      /(^|[/\\])\.(?!(gemini|neurosync)([/\\]|$))/,
       /node_modules/,
       /\.git/,
       /dist\//,

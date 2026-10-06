@@ -89,7 +89,7 @@ function getEnvironmentMaxWorkers(): number {
     const row = db.prepare("SELECT rule_value FROM environment_rules WHERE rule_key = 'max_workers' ORDER BY created_at DESC LIMIT 1").get() as { rule_value: string } | undefined;
     if (row && row.rule_value) {
       const parsed = parseInt(row.rule_value, 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+      if (!isNaN(parsed) && parsed >= 0) return parsed;
     }
   } catch (err) {
     // Ignore db errors, use fallback
@@ -135,6 +135,7 @@ async function dispatchLoop() {
 
   let hasClaimedTasksGlobal = false;
   let trackANeedsSlots = false;
+  let inFlightTasks = workerPool.info.executingTasks;
 
   for (const run of runs) {
     const isTrackA = (run.track || 'track2') === 'track1';
@@ -205,7 +206,7 @@ async function dispatchLoop() {
     }
 
     const envMaxWorkers = getEnvironmentMaxWorkers();
-    const availableSlots = Math.max(0, envMaxWorkers - workerPool.info.executingTasks);
+    const availableSlots = Math.max(0, envMaxWorkers - inFlightTasks);
     if (availableSlots === 0) {
       if (isTrackA) trackANeedsSlots = true;
       hasClaimedTasksGlobal = true;
@@ -223,6 +224,7 @@ async function dispatchLoop() {
       const claimed = claimTask(node.id, Date.now() + timeoutMs);
       if (!claimed) continue;
       
+      inFlightTasks++;
       hasClaimedTasksGlobal = true;
       scoutEmitter.emit('update', { type: 'TASK_STATUS', runId: run.id, taskId: node.id, status: 'claimed' });
       
@@ -277,6 +279,8 @@ async function dispatchLoop() {
               taskId: node.id,
               prompt,
               directive,
+              plugin: (node as any).plugin,
+              params: (node as any).params
             }) as WorkerOutput;
 
             if (result && typeof result === 'object' && result.status === 'error') {

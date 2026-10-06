@@ -59,7 +59,7 @@ function DashboardView() {
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
           <Activity size={16} style={{ color: ACCENT }} /> <ModeLabel simple="System At A Glance (Live)" dev="System KPI Strip (Live)" />
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Workers</div>
             <div className="text-xl font-bold font-mono text-cyan-400">{kpi.workers}</div>
@@ -100,7 +100,7 @@ function DashboardView() {
             <Brain size={16} className="text-teal-400" /> <ModeLabel simple="AI Memory Health" dev="Cerebro Health & Habituation" />
           </h2>
 
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
               <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Vectors</div>
               <div className="text-lg font-bold font-mono text-teal-400">{cerebro.vectorCount}</div>
@@ -115,7 +115,7 @@ function DashboardView() {
             </div>
           </div>
 
-          <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }); }} className="w-full px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-xs font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2">
+          <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }).catch(() => {}); }} className="w-full px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-xs font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2">
             <Trash2 size={12} /> <ModeLabel simple="Refresh Memory Scores" dev="Trigger Memory Consolidation Sweep" />
           </button>
         </section>
@@ -190,7 +190,7 @@ function SetupView() {
             <div className="flex justify-between text-[10px] text-gray-500 font-mono mt-1"><span>1s (Aggressive)</span><span>30s (Battery saver)</span></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-gray-300 font-bold">Max Concurrent Tasks</span>
@@ -218,7 +218,7 @@ function SetupView() {
 
         <div>
           <label className="text-xs font-bold text-gray-300 block mb-2">Log Level</label>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             {['debug', 'info', 'warn', 'error', 'silent'].map(level => (
               <button key={level} onClick={() => setLogLevel(level)} className={`flex-1 px-3 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all border ${logLevel === level ? 'text-black border-transparent shadow-md' : 'text-gray-400 border-white/10 hover:border-white/20 hover:text-white'}`} style={logLevel === level ? { backgroundColor: ACCENT } : {}}>
                 {level}
@@ -238,7 +238,7 @@ function SetupView() {
           {/* Theme selector */}
           <div>
             <label className="text-xs font-bold text-gray-300 block mb-2">Color Theme</label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button onClick={() => setTheme('dark')} className={`flex-1 px-3 py-2.5 rounded-lg text-xs font-bold transition-all border flex items-center justify-center gap-2 ${theme === 'dark' ? 'bg-white/10 border-white/20 text-white' : 'border-white/5 text-gray-400 hover:text-white'}`}>
                 <Moon size={14} /> Sovereign Black
               </button>
