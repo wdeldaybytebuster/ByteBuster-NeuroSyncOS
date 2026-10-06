@@ -42,6 +42,15 @@ const PLATFORM_SUBDIR = {
   win32:  `win-${ARCH}`,
 }[PLATFORM];
 
+// sqlite-vec names its platform packages with `windows`, not Node's `win32`:
+// `sqlite-vec-windows-x64`. The staged directory uses PLATFORM_SUBDIR (win-x64)
+// and the package keeps its published name, which is what db.ts expects.
+const SQLITE_VEC_OS = {
+  linux:  'linux',
+  darwin: 'darwin',
+  win32:  'windows',
+}[PLATFORM];
+
 if (!PLATFORM_SUBDIR) {
   console.error(`[Tauri Sidecar] Unsupported platform/arch: ${PLATFORM}/${ARCH}`);
   process.exit(1);
@@ -90,6 +99,21 @@ const NATIVE_DEPS = [
     src: path.join(ROOT_DIR, 'node_modules', 'argon2', 'lib', 'binding', 'napi-v3', 'argon2.node'),
     dest: path.join(STAGED_DIR, 'argon2.node'),
   },
+  {
+    // sqlite-vec native extension (vec0.so / .dylib / .dll).
+    //
+    // sqlite-vec resolves `sqlite-vec-<os>-<arch>` at runtime and hands the
+    // resolved path to SQLite's C-level load_extension, i.e. to the OS loader.
+    // Inside a pkg-packaged sidecar that path points into the virtual snapshot,
+    // which dlopen cannot open, so the packaged runtime loads this staged copy
+    // instead (see resolveExternalVecExtension in src/core/basevault/db.ts).
+    // Staged under its published package name so require-style resolution of
+    // `sqlite-vec-<os>-<arch>/vec0.<ext>` also finds it on a real path.
+    pkg: `sqlite-vec-${SQLITE_VEC_OS}-${ARCH}`,
+    srcDir: path.join(ROOT_DIR, 'node_modules', `sqlite-vec-${SQLITE_VEC_OS}-${ARCH}`),
+    destDir: path.join(STAGED_DIR, `sqlite-vec-${SQLITE_VEC_OS}-${ARCH}`),
+    copyDir: true,
+  },
 ];
 
 // ── Ensure staging directory exists ───────────────────────────────────────────
@@ -111,10 +135,10 @@ for (const dep of NATIVE_DEPS) {
         fs.rmSync(dep.destDir, { recursive: true, force: true });
       }
       fs.cpSync(dep.srcDir, dep.destDir, { recursive: true });
-      console.log(`[Tauri Sidecar] Staged sqlite-vec/  -> ${path.relative(TAURI_DIR, dep.destDir)}`);
+      console.log(`[Tauri Sidecar] Staged ${dep.pkg}/  -> ${path.relative(TAURI_DIR, dep.destDir)}`);
       staged++;
     } catch (err) {
-      console.warn(`[Tauri Sidecar] WARNING: could not stage sqlite-vec: ${err.message}`);
+      console.warn(`[Tauri Sidecar] WARNING: could not stage ${dep.pkg}: ${err.message}`);
       missing++;
     }
     continue;

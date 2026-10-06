@@ -35,9 +35,11 @@ if (!fs.existsSync(RESOURCES_BIN_DIR)) {
 // then walks them from node_modules into the snapshot instead of esbuild
 // trying (and failing) to inline a .node binary.
 //
-// esbuild `--target` matches the Node runtime pkg actually embeds: pkg 5.8.1's
-// newest available base binary is node18, so a node20 target here would emit
-// syntax the shipped runtime cannot parse.
+// esbuild `--target` matches the Node runtime pkg actually embeds. This is not
+// cosmetic: the embedded runtime's NODE_MODULE_VERSION must equal the ABI the
+// native addons in node_modules were compiled for, or better-sqlite3 aborts
+// with ERR_DLOPEN_FAILED. The workspace toolchain is Node 20, so both the
+// esbuild target and the pkg targets below are node20.
 const SERVER_BUNDLE = path.join(ROOT_DIR, 'dist', 'server.cjs');
 const ESBUILD_EXTERNALS = [
   'better-sqlite3',
@@ -52,7 +54,7 @@ const ESBUILD_EXTERNALS = [
 console.log('[Sidecar Build] Pre-bundling src/server/index.ts with esbuild...');
 try {
   execSync(
-    `npx esbuild src/server/index.ts --bundle --platform=node --target=node18 --format=cjs ` +
+    `npx esbuild src/server/index.ts --bundle --platform=node --target=node20 --format=cjs ` +
     `--outfile="${SERVER_BUNDLE}" ${ESBUILD_EXTERNALS}`,
     { cwd: ROOT_DIR, stdio: 'inherit' }
   );
@@ -72,7 +74,7 @@ try {
 console.log('[Sidecar Build] Compiling Node.js binary with pkg...');
 try {
   // Map standard pkg targets to Tauri target triples
-  execSync('npx pkg . --target node18-linux-x64,node18-macos-x64,node18-win-x64 --out-path src-tauri/binaries', {
+  execSync('npx pkg . --target node20-linux-x64,node20-macos-x64,node20-win-x64 --out-path src-tauri/binaries', {
     cwd: ROOT_DIR,
     stdio: 'inherit'
   });
