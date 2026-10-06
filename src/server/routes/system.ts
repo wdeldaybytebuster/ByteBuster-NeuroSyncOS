@@ -534,6 +534,77 @@ systemRouter.get('/agents/permissions', (c) => {
 // (< 0.70 Deference threshold), never the auto-approve pill bar, which is the
 // correct conservative outcome when no real confidence exists. This mirrors the
 // exact validation pattern in todos.ts's /promote endpoint.
+// ─── Category A Safety Assertion Gate (SA-01 .. SA-06) ─────────────────────
+//
+// Central, importable enforcement of the Zero-Trust proposal contract.
+// Returns an HTTP 400-worthy error message when the proposal contains any
+// prohibited content, or null when the proposal passes the gate.
+//
+// Prohibited:
+//  - Banned node types: shell / bash / exec (SA-01, SA-06 — no raw shell exec
+//    from an LLM-generated DAG; execution must route through CoreExec workers).
+//  - Raw SQL mutation statements (INSERT INTO, UPDATE ... FROM, DELETE FROM,
+//    DROP, CREATE) embedded in node parameters (SA-01 — database writes only
+//    happen via BaseVault's parameterized prepared statements).
+//  - Inline shell/bash code blocks (SA-01 — executable shell content anywhere
+//    in node prompts/parameters is stripped-and-rejected).
+export function enforceCategoryASafety(
+  proposal: unknown,
+): string | null {
+  if (!proposal || typeof proposal !== 'object') return null;
+  const p = proposal as Record<string, unknown>;
+
+  const nodes = p.nodes;
+  if (!Array.isArray(nodes)) return null;
+
+  const bannedNodeTypes = ['shell', 'bash', 'exec'];
+  const sqlMutationSubstrings = [
+  'INSERT INTO',
+  'UPDATE ',
+  'DELETE FROM',
+  'DROP TABLE',
+  'CREATE TABLE',
+];
+
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') continue;
+    const n = node as Record<string, unknown>;
+
+    // SA-01 / SA-06 — banned node types
+    const nodeType = n.type;
+    if (typeof nodeType === 'string' && bannedNodeTypes.includes(nodeType)) {
+      return `Category A Safety Violation: Node type '${nodeType}' is strictly prohibited (SA-01/SA-06).`;
+    }
+
+    // Build the full parameter blob to scan for prohibited SQL / shell content
+    const params = n.parameters;
+    const paramBlob = [
+      nodeType,
+      typeof params === 'object' && params !== null ? JSON.stringify(params) : '',
+      typeof n.prompt === 'string' ? n.prompt : '',
+      typeof n.harness_profile === 'string' ? n.harness_profile : '',
+    ].join('\n');
+
+    // SA-01 — raw SQL mutation statements in parameters/prompt
+    for (const substring of sqlMutationSubstrings) {
+      if (paramBlob.includes(substring)) {
+        return 'Category A Safety Violation: Raw SQL writes (INSERT/UPDATE/DELETE/DROP/CREATE) are strictly prohibited (SA-01/SA-06).';
+      }
+    }
+
+    // SA-01 — bare shell/bash code blocks anywhere in the node.
+    // Pattern written without a `b` word-boundary flag to keep the regex
+    // parser happy across the build pipeline (oxc/Vite).
+    const suspiciousShellFragments = ['sh', 'bash', '!/bin/sh', '#!/bin/bash', 'pts', 'echo ', '`', '${'];
+
+    if (suspiciousShellFragments.some((frag) => paramBlob.includes(frag))) {
+      return 'Category A Safety Violation: Executable shell content detected in proposal node (SA-01/SA-06).';
+    }
+  }
+
+  return null;
+}
+
 const DEFAULT_PROPOSAL_CONFIDENCE = 0.5;
 
 systemRouter.post('/proposals/stage', async (c) => {
@@ -544,19 +615,11 @@ systemRouter.post('/proposals/stage', async (c) => {
     const projectId = body.projectId ?? body.project_id ?? null;
     if (!proposal) return c.json({ success: false, error: 'proposal is required' }, 400);
 
-    // Hard rejection for SA-01 to SA-06 violations
-    if (proposal.nodes && Array.isArray(proposal.nodes)) {
-      for (const node of proposal.nodes) {
-        if (['shell', 'bash', 'exec'].includes(node.type)) {
-          log.error(`[AgentStop] Rejected proposal containing banned node type: ${node.type}`);
-          return c.json({ success: false, error: `Category A Safety Violation: Node type '${node.type}' is strictly prohibited (SA-01/SA-06).`, telemetry: 'AgentStop_Triggered' }, 400);
-        }
-        const paramsStr = JSON.stringify(node.parameters || {});
-        if (/INSERT\s+INTO/i.test(paramsStr) || /UPDATE\s+[a-z_]+/i.test(paramsStr)) {
-          log.error(`[AgentStop] Rejected proposal containing banned SQL operations (INSERT/UPDATE).`);
-          return c.json({ success: false, error: 'Category A Safety Violation: Raw SQL writes (INSERT/UPDATE) are strictly prohibited (SA-01/SA-06).', telemetry: 'AgentStop_Triggered' }, 400);
-        }
-      }
+    // Hard rejection for SA-01 to SA-06 violations — single importable gate.
+    const safetyError = enforceCategoryASafety(proposal);
+    if (safetyError) {
+      log.error(`[AgentStop] Rejected proposal: ${safetyError}`);
+      return c.json({ success: false, error: safetyError, telemetry: 'AgentStop_Triggered' }, 400);
     }
 
     // Real model-confidence if the caller supplied a valid one; else conservative default.

@@ -13,19 +13,21 @@ export const llmRouter = new Hono();
 export let activeEngine: RouteSwitchEngine | null = null;
 export let activeGovernor: FreeModeGovernor | null = null;
 
-export const injectLLMEngine = (engine: RouteSwitchEngine, governor: FreeModeGovernor) => {
-  activeEngine = engine;
-  activeGovernor = governor;
-};
-
-// Current active configuration state
-let currentConfig = {
+// Current active configuration state — mutated by both /api/llm/config and
+// /api/routeswitch/provider so the GET /api/llm/config endpoint always reflects
+// the live provider, even when the switch happened via the routeswitch endpoint.
+export let currentConfig = {
   provider: 'openai-compatible',
   baseUrl: 'http://localhost:1234/v1',
   modelId: 'Auto',
   apiKey: '',
   modelPath: './local_models/',
   councilRisk: 70
+};
+
+export const injectLLMEngine = (engine: RouteSwitchEngine, governor: FreeModeGovernor) => {
+  activeEngine = engine;
+  activeGovernor = governor;
 };
 
 llmRouter.get('/config', (c) => {
@@ -61,6 +63,8 @@ llmRouter.post('/config', async (c) => {
   }
 
   const body = await c.req.json();
+  // currentConfig may already have been mutated by /api/routeswitch/provider;
+  // spread body on top so /api/llm/config remains the canonical update path.
   currentConfig = { ...currentConfig, ...body };
 
   try {

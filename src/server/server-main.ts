@@ -4,7 +4,7 @@ import { cors } from 'hono/cors';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
 import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
 import { instantiateProvider } from '../core/routeswitch/provider-factory';
-import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from '../core/coreexec/engine';
+import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns, type CoreExecGenerationRequest } from '../core/coreexec/engine';
 import { db, initDB } from '../core/basevault/db';
 import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
 import { scoutRouter } from '../core/scoutdaemon/sse';
@@ -390,15 +390,22 @@ app.route('/api/scopelogic', scopelogicRouter);
 // (a natural-language work item like "summarize the findings" that maps to no
 // shell command or URL) gets a REAL LLM completion on the main thread instead of
 // the worker pool's old canned "metadata echo" no-op. Own `scopeId`
-// ('coreexec-generic-task') so operators can route generic task execution
-// independently of the ScopeLogic interview or Cerebro chat; it falls back to the
+// (`coreexec-<harness>`) so operators can route each harness independently
+// of the ScopeLogic interview or Cerebro chat; it falls back to the
 // plain `agent`-scope rule (then global) when no specific rule is registered.
 // estimatedTokens 1000: a generic task response is real work output (analysis /
 // summary / draft) — larger than Cerebro's 150-token chat reply, smaller than
 // ScopeLogic's 2000-token DAG-schema generation. Text-generation only; the result
 // is stored for a human to read, never executed.
-const _coreExecGenerateFn = async (prompt: string) => {
-  const result = await routeSwitch.execute({ prompt, estimatedTokens: 1000, scope: 'agent', scopeId: 'coreexec-generic-task' });
+const _coreExecGenerateFn = async ({ prompt, harnessProfile }: CoreExecGenerationRequest) => {
+  const isolatedPrompt = ['[ISOLATED_SINGLE_TURN_REQUEST]', prompt].join('\n\n');
+  const result = await routeSwitch.execute({
+    prompt: isolatedPrompt,
+    estimatedTokens: 1000,
+    scope: 'agent',
+    scopeId: `coreexec-${harnessProfile}`,
+    useKnowledgeContext: false,
+  });
   return result.content;
 };
 injectCoreExecGenerateFn(_coreExecGenerateFn);
@@ -421,8 +428,17 @@ app.post('/api/routeswitch/provider', async (c) => {
   try {
     const { type, config } = await c.req.json();
 
-    routeSwitch.setProvider(instantiateProvider(type, config || {}, config?.apiKey));
+    const provider = instantiateProvider(type, config || {}, config?.apiKey);
+    routeSwitch.setProvider(provider);
 
+    // Keep the llm.ts currentConfig in sync so GET /api/llm/config reflects
+    // the live provider even when the switch happened via this endpoint.
+    const { activeEngine, currentConfig: llmCurrentConfig } = require('./routes/llm');
+    if (llmCurrentConfig) {
+      llmCurrentConfig.provider = type;
+      if (config) llmCurrentConfig.config = { ...llmCurrentConfig.config, ...config };
+      if (config?.apiKey !== undefined) llmCurrentConfig.apiKey = config.apiKey;
+    }
 
     return c.json({ success: true, message: `Switched provider to ${type}` });
   } catch (err: any) {

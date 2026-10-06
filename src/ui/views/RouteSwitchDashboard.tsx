@@ -380,6 +380,7 @@ function SetupView() {
 
   const handleEditProvider = (p: ProviderEntry) => {
     setEditingId(p.id); setFormName(p.name); setFormType(p.type);
+    if (p.type === 'freellmapi') { setFormApiKey(p.config.apiKey || ''); setFormModelId(p.config.modelId || 'auto'); }
     if (p.type === 'openai-compatible') { setFormBaseUrl(p.config.baseUrl || ''); setFormModelId(p.config.modelId || 'Auto'); }
     if (p.type === 'llama-cpp') { setFormModelPath(p.config.modelPath || ''); }
     if (p.type === 'opencode' || p.type === 'openrouter') { setFormModelId(p.config.modelId || ''); }
@@ -449,8 +450,7 @@ function SetupView() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <Key size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Your AI Services" dev="Provider Registry" /> <HelpTip text="A 'provider' is whatever runs the AI for you — an app on your own computer (like LM Studio) or an online service you have a key for. Your keys are stored encrypted." />
-          </h2>
-          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('opencode'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId(''); setFormModelPath('./local_models/'); setFormApiKey(''); setFormIsPaidTier(false); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
+          </h2>              <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('freellmapi'); setFormBaseUrl(''); setFormModelId('auto'); setFormModelPath(''); setFormApiKey(''); setFormIsPaidTier(false); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
         </div>
         <p className="text-xs text-gray-400 mb-4">Named LLM endpoint entries. API keys are encrypted at rest. Create multiple entries of the same type for different models or services.</p>
 
@@ -499,6 +499,7 @@ function SetupView() {
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Type</label>
                 <select value={formType} onChange={e => setFormType(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50">
+                  <option value="freellmapi">FreeLLMAPI (self-hosted proxy)</option>
                   <option value="opencode">OpenCode Zen</option>
                   <option value="openrouter">OpenRouter</option>
                   <option value="llama-cpp">Local GGUF (llama.cpp)</option>
@@ -521,6 +522,21 @@ function SetupView() {
                   <input type="text" value={formModelPath} onChange={e => setFormModelPath(e.target.value)} placeholder="./local_models/your-model.gguf" className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
                   <button onClick={() => setShowModelBrowser(true)} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all text-[10px] font-bold">Browse</button>
                 </div>
+              </div>
+            )}
+            {formType === 'freellmapi' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">API Key</label>
+                  <input type="password" value={formApiKey} onChange={e => setFormApiKey(e.target.value)} placeholder={editingId ? '(unchanged)' : 'freellmapi-...'} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Model ID (optional)</label>
+                  <input type="text" value={formModelId} onChange={e => setFormModelId(e.target.value)} placeholder="auto = router picks best free model" className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+                <p className="text-[10px] text-gray-500 md:col-span-2">
+                  Base URL is baked in ({formType === 'freellmapi' ? 'http://localhost:3001/v1' : 'auto'}). Get a unified key from your FreeLLMAPI dashboard's Keys page. The router auto-fails over across free providers.
+                </p>
               </div>
             )}
             {(formType === 'opencode' || formType === 'openrouter') && (
