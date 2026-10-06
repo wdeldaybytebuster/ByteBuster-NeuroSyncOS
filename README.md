@@ -7,16 +7,24 @@ database, not a third-party cloud service.
 
 ## What's here
 
-The system is organized into six modules, each with its own dashboard:
+The system is organized into eight modules, each with its own dashboard:
 
-- **PortGrid** -- capability/tool governance and the workflow approval queue
+- **PortGrid** -- capability/tool governance, the workflow approval queue, and an
+  embedded project terminal
 - **ScopeLogic** -- guided interview engine that turns a request into a DAG proposal
-- **RouteSwitch** -- LLM provider registry, fallback chains, and routing rules
-- **BaseVault** -- the SQLite data layer, backups, and redaction settings
-- **CoreExec** -- the DAG workflow engine, scheduler, and cron jobs
+- **RouteSwitch** -- LLM provider registry (API keys persisted in SQLite), fallback
+  chains, free-tier-aware routing, and a Council Mode arbitration/confidence log
+- **BaseVault** -- the SQLite data layer, backup/restore, redaction settings, and
+  project storage with background sync
+- **CoreExec** -- the DAG workflow engine, scheduler, crash recovery, and cron jobs
 - **ScoutDaemon** -- idle-time background research and hardware monitoring
+- **Cerebro** -- conversational memory with decaying vector search and a
+  learning-approvals (human-in-the-loop) pipeline
+- **CEPH** -- a unified observability layer (logs, metrics, traces, health) that
+  consolidates the dashboard and the API behind one abstraction
 
-Backend: Node.js, [Hono](https://hono.dev/), `better-sqlite3` (WAL mode).
+Backend: Node.js 22, [Hono](https://hono.dev/), `better-sqlite3` (WAL mode),
+`sqlite-vec` for local embedding search, and workers via `poolifier`.
 Frontend: React + Vite.
 
 ## Prerequisites
@@ -35,6 +43,16 @@ npm run dev:server
 # Terminal 2: UI dev server (http://localhost:3742)
 npm run dev:ui
 ```
+
+The server boots a [FreeLLMAPI](https://github.com/williamdeldaymarketing/freellmapi)-compatible
+provider setup by default: an OpenAI-compatible base URL and API key live in the
+RouteSwitch provider registry and persist in the local SQLite database, so the UI's
+RouteSwitch Set-up screen can configure and test providers without needing env vars.
+
+The UI isbuilt to use the 2026 Unified MCP standard. When deployed as a Tauri
+bundle it ships its own 32-bit sidecar wrapper; the remainder of the stack -- 
+server, UI dev server, tests -- all run plain under Node.js on a desktop or an edge
+host.
 
 ## Testing
 
