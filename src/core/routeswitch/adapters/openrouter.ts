@@ -1,5 +1,5 @@
 import { OpenAICompatibleProvider } from './openai-compatible';
-import { GenerationStreamHooks } from '../providers';
+import { GenerationStreamHooks, ProviderCapabilities } from '../providers';
 import { ZenDiscoveryService } from '../discovery';
 
 export interface OpenRouterProviderConfig {
@@ -24,6 +24,25 @@ const OPENROUTER_EXTRA_HEADERS = {
  * internally, unlike the generic "OpenAI Compatible" type.
  */
 export class OpenRouterProvider extends OpenAICompatibleProvider {
+  /**
+   * Explicit capability override: real OpenRouter models commonly support
+   * vision + structured output + large context; declared here rather than
+   * inferred from the provider id (P8-4).
+   *
+   * Declared as a `readonly` field with every capability stated in full, rather
+   * than assigned from the constructor: `capabilities` is declared `readonly`
+   * on `OpenAICompatibleProvider`, so a subclass constructor assignment is a
+   * compile error (TS2540). Values are the previously merged result of the
+   * parent defaults plus the OpenRouter overrides.
+   */
+  readonly capabilities: ProviderCapabilities = {
+    supportsVision: true,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    contextWindowTokens: 128000,
+    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+  };
+
   constructor(config: OpenRouterProviderConfig, customId?: string) {
     super({
       baseUrl: OPENROUTER_BASE_URL,
