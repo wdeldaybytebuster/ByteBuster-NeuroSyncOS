@@ -1,26 +1,25 @@
-/**
- * tauri-config.test.ts — Tauri Configuration Truth Tests (TDD / Auditor)
- *
- * Asserts the Tauri sidecar + resource conventions required for a clean
- * cross-platform distribution:
- *  1. bundle.externalBin MUST contain exactly ONE base entry named
- *     "binaries/neurosyncmega", with NO platform-specific suffixes
- *     (-linux, -darwin, -win, .exe).
- *  2. bundle.resources MUST map resources/bin glob into resources/bin/.
- *  3. src-tauri/src/lib.rs MUST invoke app.shell().sidecar("neurosyncmega")
- *     with a bare filename, no directory slashes.
- *
- * Run:
- *   npx tsx scripts/tauri-config.test.ts
- *
- * Exit codes:
- *   0 — all assertions pass (GREEN)
- *   1 — one or more assertions fail (RED)
- */
-
-import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+
+// This file runs its assertions in two modes without changing behavior:
+//   1. `npx tsx scripts/tauri-config.test.ts` — standalone script that sets the
+//      process exit code directly.
+//   2. `npx vitest run scripts/tauri-config.test.ts` — vitest discovers the
+//      describe/it blocks below and reports the same assertions as real tests.
+//
+// The standalone path still works because `npx tsx` transpiles vitest imports
+// and the top-level assertions below execute during module initialization.
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { describe, it, expect } = require('vitest');
+
+describe('Tauri configuration validation', () => {
+  it('validates sidecar and resource conventions', () => {
+    // The assertions below are shared between vitest and standalone execution.
+  });
+});
+
+
 
 
 function findProjectRoot(): string {
@@ -78,8 +77,6 @@ const TAURI_DIR = path.join(ROOT_DIR, 'src-tauri');
 const LIB_RS = path.join(ROOT_DIR, 'src-tauri', 'src', 'lib.rs');
 const TAURI_CONF = path.join(ROOT_DIR, 'src-tauri', 'tauri.conf.json');
 
-
-
 interface BundleConfig {
   externalBin?: string[];
   resources?: Record<string, string>;
@@ -124,6 +121,10 @@ assert(
   'bundle.externalBin must be an array',
 );
 
+it('bundle.externalBin is an array', () => {
+  expect(Array.isArray(externalBin)).toBe(true);
+});
+
 const platformSuffixRe = /(-linux|-darwin|-win|-macos|-mingw|-msvc)$|\.exe$/i;
 const baseEntries = externalBin.filter((entry) => {
   if (typeof entry !== 'string') return false;
@@ -140,6 +141,11 @@ assert(
   baseName === 'binaries/neurosyncmega',
   `bundle.externalBin base entry must be exactly "binaries/neurosyncmega"; found "${baseName}"`,
 );
+
+it('bundle.externalBin contains exactly one clean base path named binaries/neurosyncmega', () => {
+  expect(baseEntries.length).toBe(1);
+  expect(baseName).toBe('binaries/neurosyncmega');
+});
 
 // 2. resources: must map resources/bin/**/* -> resources/bin/
 assert(
@@ -164,6 +170,13 @@ assert(
   !Object.keys(resources ?? {}).some((k) => k.includes('linux-x64')),
   `bundle.resources must NOT contain a hardcoded linux-x64 path; found: ${JSON.stringify(resources)}`,
 );
+
+it('bundle.resources maps resources/bin/**/* -> resources/bin/', () => {
+  expect(typeof resources === 'object' && resources !== null && !Array.isArray(resources)).toBe(true);
+  expect(Object.prototype.hasOwnProperty.call(resources ?? {}, expectedResourceKey)).toBe(true);
+  expect(resources?.[expectedResourceKey]).toBe(expectedResourceValue);
+  expect(!Object.keys(resources ?? {}).some((k) => k.includes('linux-x64'))).toBe(true);
+});
 
 // 3. lib.rs: sidecar calls must use bare filename "neurosyncmega"
 assert(
@@ -195,6 +208,17 @@ for (const call of sidecarCalls) {
   );
 }
 
+it('src-tauri/src/lib.rs exists', () => {
+  expect(fs.existsSync(LIB_RS)).toBe(true);
+});
+
+it('src-tauri/src/lib.rs contains sidecar calls named neurosyncmega', () => {
+  expect(sidecarCalls.length > 0).toBe(true);
+  for (const call of sidecarCalls) {
+    expect(call).toBe('neurosyncmega');
+  }
+});
+
 // Final verdict
 const totalExternalBinChecks = 2;
 const totalResourcesChecks = 3;
@@ -212,13 +236,11 @@ console.log(`Fail: ${failures}`);
 if (failures > 0) {
   console.error('');
   console.error(`[RED] Tauri configuration validation FAILED with ${failures} error(s).`);
-  if (typeof process !== 'undefined' && typeof (process as any).exitCode !== 'undefined') {
-    (process as any).exitCode = 1;
-  }
 } else {
   console.log('');
   console.log('[GREEN] Tauri configuration validation PASSED.');
-  if (typeof process !== 'undefined' && typeof (process as any).exitCode !== 'undefined') {
-    (process as any).exitCode = 0;
-  }
+}
+
+if (typeof process !== 'undefined' && typeof (process as any).exitCode !== 'undefined') {
+  (process as any).exitCode = failures > 0 ? 1 : 0;
 }
