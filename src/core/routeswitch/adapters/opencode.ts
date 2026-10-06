@@ -19,23 +19,17 @@ const OPENCODE_ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
  */
 export class OpenCodeProvider extends OpenAICompatibleProvider {
   /**
-   * Explicit capability override for OpenCode Zen's curated gateway (P8-4).
+   * Capability matrix for OpenCode Zen's curated gateway (P8-4).
    *
-   * Declared as a `readonly` field with every capability stated in full, rather
-   * than assigned from the constructor: `capabilities` is declared `readonly`
-   * on `OpenAICompatibleProvider`, so a subclass constructor assignment is a
-   * compile error (TS2540). Overriding via a field declaration keeps the
-   * property read-only while still declaring all values known at construction
-   * time. Values are the previously merged result of the parent defaults plus
-   * the OpenCode Zen overrides (vision + structured output + 128k context).
+   * Declared here, on the subclass, mirroring `LlamaCppProvider`: assigning to
+   * the `readonly capabilities` property inherited from
+   * `OpenAICompatibleProvider` is a compile error (TS2540), but a subclass that
+   * re-declares the field may assign it inside its own constructor. Every field
+   * is stated in full rather than inferred from the provider id — the resolved
+   * values are the previous parent-default + override merge (vision, structured
+   * output and a 128k context window).
    */
-  readonly capabilities: ProviderCapabilities = {
-    supportsVision: true,
-    supportsFunctionCalling: false,
-    supportsStructuredOutput: true,
-    contextWindowTokens: 128000,
-    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
-  };
+  readonly capabilities: ProviderCapabilities;
 
   constructor(config: OpenCodeProviderConfig, customId?: string) {
     super({
@@ -43,6 +37,17 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
       ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
       modelId: config.modelId || 'auto',
     }, customId || 'opencode');
+
+    // Explicit capability override (P8-4). Stated in full rather than spread
+    // from `this.capabilities`: with `useDefineForClassFields` the re-declared
+    // field shadows the parent's default before this line runs.
+    this.capabilities = {
+      supportsVision: true,
+      supportsFunctionCalling: false,
+      supportsStructuredOutput: true,
+      contextWindowTokens: 128000,
+      inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+    };
   }
 
   // HEURISTIC FALLBACK: `streamHooks` ignored — see OpenAICompatibleProvider.generate.

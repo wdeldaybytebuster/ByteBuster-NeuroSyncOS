@@ -25,23 +25,16 @@ const OPENROUTER_EXTRA_HEADERS = {
  */
 export class OpenRouterProvider extends OpenAICompatibleProvider {
   /**
-   * Explicit capability override: real OpenRouter models commonly support
-   * vision + structured output + large context; declared here rather than
-   * inferred from the provider id (P8-4).
+   * Capability matrix for this adapter (P8-4). Real OpenRouter models commonly
+   * support vision + structured output + large context; declared here rather
+   * than inferred from the provider id.
    *
-   * Declared as a `readonly` field with every capability stated in full, rather
-   * than assigned from the constructor: `capabilities` is declared `readonly`
-   * on `OpenAICompatibleProvider`, so a subclass constructor assignment is a
-   * compile error (TS2540). Values are the previously merged result of the
-   * parent defaults plus the OpenRouter overrides.
+   * Declared on the subclass, mirroring `LlamaCppProvider`: assigning to the
+   * `readonly capabilities` property inherited from `OpenAICompatibleProvider`
+   * is a compile error (TS2540), but a subclass that re-declares the field may
+   * assign it inside its own constructor.
    */
-  readonly capabilities: ProviderCapabilities = {
-    supportsVision: true,
-    supportsFunctionCalling: false,
-    supportsStructuredOutput: true,
-    contextWindowTokens: 128000,
-    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
-  };
+  readonly capabilities: ProviderCapabilities;
 
   constructor(config: OpenRouterProviderConfig, customId?: string) {
     super({
@@ -50,6 +43,17 @@ export class OpenRouterProvider extends OpenAICompatibleProvider {
       modelId: config.modelId || 'auto',
       extraHeaders: OPENROUTER_EXTRA_HEADERS,
     }, customId || 'openrouter');
+
+    // Explicit capability override (P8-4). Stated in full rather than spread
+    // from `this.capabilities`: with `useDefineForClassFields` the re-declared
+    // field shadows the parent's default before this line runs.
+    this.capabilities = {
+      supportsVision: true,
+      supportsFunctionCalling: false,
+      supportsStructuredOutput: true,
+      contextWindowTokens: 128000,
+      inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+    };
   }
 
   // HEURISTIC FALLBACK: `streamHooks` ignored — see OpenAICompatibleProvider.generate.
