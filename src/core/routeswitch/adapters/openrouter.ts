@@ -34,7 +34,12 @@ export class OpenRouterProvider extends OpenAICompatibleProvider {
    * is a compile error (TS2540), but a subclass that re-declares the field may
    * assign it inside its own constructor.
    */
-  readonly capabilities: ProviderCapabilities;
+  readonly capabilities: Required<Pick<ProviderCapabilities, 'supportsVision' | 'supportsFunctionCalling' | 'supportsStructuredOutput' | 'inputTypes'>> & Partial<Pick<ProviderCapabilities, 'contextWindowTokens'>> = {
+    supportsVision: true,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+  };
 
   constructor(config: OpenRouterProviderConfig, customId?: string) {
     super({
@@ -45,8 +50,8 @@ export class OpenRouterProvider extends OpenAICompatibleProvider {
     }, customId || 'openrouter');
 
     // Explicit capability override (P8-4). Stated in full rather than spread
-    // from `this.capabilities`: with `useDefineForClassFields` the re-declared
-    // field shadows the parent's default before this line runs.
+    // from the parent default — assignment is now to the concreted subclass
+    // field declared above.
     this.capabilities = {
       supportsVision: true,
       supportsFunctionCalling: false,

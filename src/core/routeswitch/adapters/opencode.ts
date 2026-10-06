@@ -29,7 +29,12 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
    * values are the previous parent-default + override merge (vision, structured
    * output and a 128k context window).
    */
-  readonly capabilities: ProviderCapabilities;
+  readonly capabilities: Required<Pick<ProviderCapabilities, 'supportsVision' | 'supportsFunctionCalling' | 'supportsStructuredOutput' | 'inputTypes'>> & Partial<Pick<ProviderCapabilities, 'contextWindowTokens'>> = {
+    supportsVision: true,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+  };
 
   constructor(config: OpenCodeProviderConfig, customId?: string) {
     super({
@@ -39,8 +44,8 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
     }, customId || 'opencode');
 
     // Explicit capability override (P8-4). Stated in full rather than spread
-    // from `this.capabilities`: with `useDefineForClassFields` the re-declared
-    // field shadows the parent's default before this line runs.
+    // from the parent default — assignment is now to the concreted subclass
+    // field declared above.
     this.capabilities = {
       supportsVision: true,
       supportsFunctionCalling: false,
