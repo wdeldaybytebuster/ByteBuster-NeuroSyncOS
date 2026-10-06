@@ -79,3 +79,5 @@ export interface LLMProvider {
 }
 
 export { MockProvider } from './adapters/mock-provider';
+export { FreeLLMProvider, type FreeLLMProviderConfig } from './adapters/freellmapi';
+
