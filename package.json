@@ -103,6 +103,8 @@
   "pkg": {
     "scripts": "src/**/*.ts",
     "assets": [
+      "dist/worker.js",
+      "dist/worker-cerebro.js",
       "resources/bin/**/*",
       "node_modules/better-sqlite3/build/Release/*.node",
       "node_modules/node-pty/build/Release/*.node",

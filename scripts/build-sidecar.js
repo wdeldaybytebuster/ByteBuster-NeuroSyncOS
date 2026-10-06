@@ -40,6 +40,13 @@ if (!fs.existsSync(RESOURCES_BIN_DIR)) {
 // native addons in node_modules were compiled for, or better-sqlite3 aborts
 // with ERR_DLOPEN_FAILED. The workspace toolchain is Node 20, so both the
 // esbuild target and the pkg targets below are node20.
+// esbuild replaces `import.meta` with an empty object in the CommonJS output
+// format, so any bundled dependency that reads `import.meta.url` gets
+// `fileURLToPath(undefined)` and dies on load (node-cron does exactly this to
+// locate its daemon.js). Define it as a real file URL for the bundle instead.
+const IMPORT_META_SHIM = `var __importMetaUrl = require('url').pathToFileURL(__filename).href;`;
+const IMPORT_META_DEFINE = '--define:import.meta.url=__importMetaUrl';
+
 const SERVER_BUNDLE = path.join(ROOT_DIR, 'dist', 'server.cjs');
 const ESBUILD_EXTERNALS = [
   'better-sqlite3',
@@ -55,13 +62,57 @@ console.log('[Sidecar Build] Pre-bundling src/server/index.ts with esbuild...');
 try {
   execSync(
     `npx esbuild src/server/index.ts --bundle --platform=node --target=node20 --format=cjs ` +
-    `--outfile="${SERVER_BUNDLE}" ${ESBUILD_EXTERNALS}`,
+    `--outfile="${SERVER_BUNDLE}" --banner:js="${IMPORT_META_SHIM}" ${IMPORT_META_DEFINE} ${ESBUILD_EXTERNALS}`,
     { cwd: ROOT_DIR, stdio: 'inherit' }
   );
   console.log(`[Sidecar Build] Bundled server entry -> ${path.relative(ROOT_DIR, SERVER_BUNDLE)}`);
 } catch (e) {
   console.error('[Sidecar Build] esbuild pre-bundle failed:', e.message);
   process.exit(1);
+}
+
+// 0b. Pre-bundle the worker-thread entry points.
+//
+// The CoreExec and Cerebro pools spawn their workers with poolifier, i.e. with
+// `worker_threads` pointing at a FILE PATH. A path inside pkg's virtual
+// snapshot cannot be discovered by poolifier's own existsSync check, so the
+// worker bundles are emitted next to the server bundle in dist/ and shipped in
+// the snapshot via the package.json `pkg.assets` manifest. Their own npm
+// requires stay external so pkg resolves them exactly as it does for the
+// server.
+//
+// The names here must match the packaged branch of resolveWorkerFile() in
+// src/core/coreexec/worker-pool.ts and src/core/memory/cerebro/worker-pool.ts.
+const WORKER_ENTRIES = [
+  { entry: 'src/core/coreexec/worker.ts', name: 'worker.js' },
+  { entry: 'src/core/memory/cerebro/worker.ts', name: 'worker-cerebro.js' },
+];
+
+// Two destinations per worker, because worker_threads needs a real file in
+// both worlds:
+//   dist/                      — shipped inside the pkg snapshot, which is what
+//                                the packaged runtime resolves by default and
+//                                where its npm requires resolve through pkg.
+//   src-tauri/resources/bin/   — a real file on the host filesystem, staged by
+//                                Tauri as a bundle resource, used as a fallback
+//                                via NEUROSYNC_RESOURCE_DIR.
+const WORKER_OUTPUT_DIRS = ['dist', path.join('src-tauri', 'resources', 'bin')];
+
+for (const worker of WORKER_ENTRIES) {
+  for (const outDir of WORKER_OUTPUT_DIRS) {
+    const outfile = path.join(ROOT_DIR, outDir, worker.name);
+    console.log(`[Sidecar Build] Pre-bundling worker ${worker.entry} -> ${path.relative(ROOT_DIR, outfile)}...`);
+    try {
+      execSync(
+        `npx esbuild ${worker.entry} --bundle --platform=node --target=node20 --format=cjs ` +
+        `--packages=external --banner:js="${IMPORT_META_SHIM}" ${IMPORT_META_DEFINE} --outfile="${outfile}"`,
+        { cwd: ROOT_DIR, stdio: 'inherit' }
+      );
+    } catch (e) {
+      console.error(`[Sidecar Build] worker pre-bundle failed for ${worker.entry}:`, e.message);
+      process.exit(1);
+    }
+  }
 }
 
 // 1. Run pkg to generate binaries
