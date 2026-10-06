@@ -3,9 +3,10 @@ import { OpenAICompatibleProvider } from './adapters/openai-compatible';
 import { LlamaCppProvider } from './adapters/llama-cpp';
 import { OpenCodeProvider } from './adapters/opencode';
 import { OpenRouterProvider } from './adapters/openrouter';
+import { FreeLLMProvider } from './adapters/freellmapi';
 
 /** Provider types selectable in the Set-up UI's Provider Registry. */
-export const PROVIDER_TYPES = ['openai-compatible', 'llama-cpp', 'opencode', 'openrouter', 'mock'] as const;
+export const PROVIDER_TYPES = ['openai-compatible', 'llama-cpp', 'opencode', 'openrouter', 'freellmapi', 'mock'] as const;
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
 
 /**
@@ -27,6 +28,12 @@ export function instantiateProvider(
         { baseUrl: config.baseUrl, modelId: config.modelId || 'Auto', apiKey: apiKey || '' },
         customId
       );
+    case 'freellmapi':
+      return new FreeLLMProvider({
+        baseUrl: config.baseUrl || 'http://localhost:3001/v1',
+        ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
+        ...(config.modelId !== undefined ? { modelId: config.modelId } : {}),
+      });
     case 'llama-cpp':
       return new LlamaCppProvider(
         { modelPath: config.modelPath, contextSize: config.contextSize, gpuLayers: config.gpuLayers },
