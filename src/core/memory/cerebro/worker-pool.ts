@@ -1,6 +1,12 @@
 import { DynamicThreadPool } from 'poolifier';
 import * as os from 'os';
+import fs from 'fs';
 import path from 'path';
+
+// Name of the worker bundle produced by scripts/build-sidecar.js. Cerebro uses
+// its own name so it cannot collide with the CoreExec worker, which previously
+// resolved to the same `worker.js` path.
+const WORKER_BUNDLE = 'worker-cerebro.js';
 
 const cores = os.cpus().length;
 // Hard-cap the worker pool at 2 to strictly prevent OOM crashing on 8-core/6GB RAM devices
@@ -9,7 +15,23 @@ export const safeMaxThreads = 2;
 
 function resolveWorkerFile(): string {
   if (path.extname(__filename) !== '.ts') {
-    return path.join(__dirname, 'worker.js');
+    // Packaged: prefer the bundle shipped in the pkg snapshot beside the server
+    // bundle, then a copy staged as a real Tauri bundle resource (see
+    // resolveWorkerFile in src/core/coreexec/worker-pool.ts for the rationale).
+    const snapshotBundle = path.join(__dirname, WORKER_BUNDLE);
+    if (fs.existsSync(snapshotBundle)) {
+      return snapshotBundle;
+    }
+
+    const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
+    if (resourceDir && resourceDir.length > 0) {
+      const stagedBundle = path.join(resourceDir, 'resources', 'bin', WORKER_BUNDLE);
+      if (fs.existsSync(stagedBundle)) {
+        return stagedBundle;
+      }
+    }
+
+    return snapshotBundle;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires

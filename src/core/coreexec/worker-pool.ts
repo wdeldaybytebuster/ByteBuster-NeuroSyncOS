@@ -1,6 +1,10 @@
 import { DynamicThreadPool } from 'poolifier';
 import * as os from 'os';
+import fs from 'fs';
 import path from 'path';
+
+// Name of the worker bundle produced by scripts/build-sidecar.js.
+const WORKER_BUNDLE = 'worker.js';
 
 const cores = os.cpus().length;
 // Hard-cap the worker pool at 2 to strictly prevent OOM crashing on 8-core/6GB RAM devices
@@ -43,9 +47,33 @@ export const safeMaxThreads = 2;
  */
 function resolveWorkerFile(): string {
   if (path.extname(__filename) !== '.ts') {
-    // Already running from compiled JS (no separate backend build exists
-    // today, but keep this branch for a future real production build).
-    return path.join(__dirname, 'worker.js');
+    // Running from compiled JS (the packaged sidecar). Two candidate real
+    // files, both emitted by scripts/build-sidecar.js:
+    //
+    //  1. beside the server bundle — this is the pkg snapshot, and its npm
+    //     requires resolve through the same snapshot, which is why it is the
+    //     first choice;
+    //  2. staged as a Tauri bundle resource, reached via the resource dir the
+    //     host passes in (src-tauri/src/lib.rs sets NEUROSYNC_RESOURCE_DIR).
+    //
+    // worker_threads needs a path that poolifier's own existsSync accepts, so
+    // whichever is present wins.
+    const snapshotBundle = path.join(__dirname, WORKER_BUNDLE);
+    if (fs.existsSync(snapshotBundle)) {
+      return snapshotBundle;
+    }
+
+    const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
+    if (resourceDir && resourceDir.length > 0) {
+      const stagedBundle = path.join(resourceDir, 'resources', 'bin', WORKER_BUNDLE);
+      if (fs.existsSync(stagedBundle)) {
+        return stagedBundle;
+      }
+    }
+
+    // Return the expected location so poolifier's error names the path we
+    // actually looked for.
+    return snapshotBundle;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
