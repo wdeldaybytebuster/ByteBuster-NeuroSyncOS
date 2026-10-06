@@ -63,7 +63,14 @@ describe('Council Mode Triage & Consensus', () => {
     const after = (db.prepare('SELECT COUNT(*) AS n FROM council_decisions').get() as any).n;
     expect(after).toBe(before + 1);
 
-    const row = db.prepare('SELECT * FROM council_decisions ORDER BY created_at DESC LIMIT 1').get() as any;
+    // "Latest row" read with a deterministic tie-break: created_at has
+    // millisecond resolution (engine.ts writes Date.now()), and adjacent tests
+    // can insert within the same millisecond. Plain ORDER BY created_at DESC
+    // then returns an arbitrary tied row — observed failing in CI where this
+    // read returned the PREVIOUS test's row (provider_count 2 vs 3).
+    // rowid DESC makes the newest insert win. Same tie-break on every
+    // "latest row" read in this file.
+    const row = db.prepare('SELECT * FROM council_decisions ORDER BY created_at DESC, rowid DESC LIMIT 1').get() as any;
     expect(row.scope).toBe('cerebro');
     expect(row.scope_id).toBe('test-scope-id');
     expect(row.provider_count).toBe(3); // main + c1 + c2
@@ -235,7 +242,7 @@ describe('Council Mode — Free Mode Governor paid-provider lock', () => {
     // council_decisions provider_count reflects the FILTERED pool (2, not 3).
     const after = (db.prepare('SELECT COUNT(*) AS n FROM council_decisions').get() as any).n;
     expect(after).toBe(before + 1);
-    const row = db.prepare('SELECT * FROM council_decisions ORDER BY created_at DESC LIMIT 1').get() as any;
+    const row = db.prepare('SELECT * FROM council_decisions ORDER BY created_at DESC, rowid DESC LIMIT 1').get() as any;
     expect(row.provider_count).toBe(2);
   });
 
@@ -257,7 +264,7 @@ describe('Council Mode — Free Mode Governor paid-provider lock', () => {
     expect(main.calls).toBe(1);
     expect(c1.calls).toBe(1);
 
-    const row = db.prepare('SELECT * FROM council_decisions ORDER BY created_at DESC LIMIT 1').get() as any;
+    const row = db.prepare('SELECT * FROM council_decisions ORDER BY created_at DESC, rowid DESC LIMIT 1').get() as any;
     expect(row.provider_count).toBe(3);
   });
 
