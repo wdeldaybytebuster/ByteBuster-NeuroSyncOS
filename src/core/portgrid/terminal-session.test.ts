@@ -84,13 +84,35 @@ function pathValueOf(args: string[]): string {
 }
 
 describe('terminal-session — Node toolchain bin bind', () => {
+  // Host-agnostic fixture: a guaranteed-existing, readable directory OUTSIDE
+  // /usr, /etc and the project dir — the dirs buildBwrapArgs already covers and
+  // therefore de-dupes (bindRoIfPresent skips the extra --ro-bind for them).
+  // Using path.dirname(process.execPath) as this fixture is NOT portable: on a
+  // system-Node host that IS /usr/bin, so the de-dup swallows the bind under
+  // test and this suite passes in CI (node lives under /opt/hostedtoolcache/…)
+  // while failing locally. A temp dir exercises the bind on every host shape.
+  const scratch: string[] = [];
+  afterEach(() => {
+    for (const d of scratch.splice(0)) {
+      if (fs.existsSync(d)) fs.rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  function tempBinDir(): string {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ns-nodebin-'));
+    scratch.push(d);
+    return d;
+  }
+
   it('currentNodeBinDir() returns the dir of the running node binary', () => {
     expect(currentNodeBinDir()).toBe(path.dirname(process.execPath));
   });
 
   it('adds a READ-ONLY bind for an existing node bin dir and prepends it to PATH', () => {
-    // Use a real, guaranteed-existing directory so the readability check passes.
-    const bin = path.dirname(process.execPath);
+    // Use a real, guaranteed-existing directory (outside the already-bound
+    // /usr, /etc and project dirs) so the readability check passes and the
+    // de-dup rule cannot swallow the bind under test.
+    const bin = tempBinDir();
     const args = buildBwrapArgs('/tmp/proj', '/bin/bash', bin, null);
     const joined = args.join(' ');
     expect(joined).toContain(`--ro-bind ${bin} ${bin}`);
@@ -124,7 +146,7 @@ describe('terminal-session — Node toolchain bin bind', () => {
   });
 
   it('preserves every other containment property when the bind is added', () => {
-    const bin = path.dirname(process.execPath);
+    const bin = tempBinDir(); // same host-agnostic fixture — the bind is really added here
     const args = buildBwrapArgs('/tmp/proj', '/bin/bash', bin, null);
     expect(args).toContain('--clearenv');
     // Network is intentionally OPEN now — assert --unshare-net is ABSENT while

@@ -3,22 +3,49 @@ import path from 'path';
 
 // This file runs its assertions in two modes without changing behavior:
 //   1. `npx tsx scripts/tauri-config.test.ts` — standalone script that sets the
-//      process exit code directly.
+//      process exit code directly (0 GREEN / 1 RED).
 //   2. `npx vitest run scripts/tauri-config.test.ts` — vitest discovers the
 //      describe/it blocks below and reports the same assertions as real tests.
 //
-// The standalone path still works because `npx tsx` transpiles vitest imports
-// and the top-level assertions below execute during module initialization.
+// There is deliberately NO runtime vitest import here. package.json is
+// `"type": "commonjs"`, so `npx tsx` transpiles this file to CJS and ANY vitest
+// import (static `import ... from 'vitest'` included) becomes `require('vitest')`
+// — which throws "Vitest cannot be imported in a CommonJS module using require()"
+// because vitest's CJS entry refuses to load. Instead, vitest.config.ts sets
+// `test.globals: true`, which injects `describe`/`it`/`expect` as free globals
+// before this module loads. The fallbacks below simply no-op them under bare
+// tsx, where the top-level `assert()` calls execute during module initialization
+// and drive the exit code at the bottom of this file.
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { describe, it, expect } = require('vitest');
+type SuiteFn = (name: string, fn: () => void) => void;
+type TestFn = (name: string, fn: () => void | Promise<void>) => void;
+interface Expectation {
+  toBe(expected: unknown): void;
+}
+type ExpectFn = (actual: unknown) => Expectation;
+
+// Grab the vitest-injected globals when present (vitest run); fall back to
+// no-op stand-ins otherwise (bare tsx). Going through globalThis avoids a
+// ReferenceError on free `describe`/`it`/`expect` identifiers in environments
+// where they were never declared.
+const vitestGlobals = globalThis as unknown as {
+  describe?: SuiteFn;
+  it?: TestFn;
+  expect?: ExpectFn;
+};
+
+const describe: SuiteFn =
+  vitestGlobals.describe ?? ((_name, _fn) => { /* standalone: nothing to register */ });
+const it: TestFn =
+  vitestGlobals.it ?? ((_name, _fn) => { /* standalone: nothing to register */ });
+const expect: ExpectFn =
+  vitestGlobals.expect ?? (() => ({ toBe: () => { /* standalone: assert() covers this */ } }));
 
 describe('Tauri configuration validation', () => {
   it('validates sidecar and resource conventions', () => {
     // The assertions below are shared between vitest and standalone execution.
   });
 });
-
 
 
 
@@ -44,7 +71,10 @@ function findProjectRoot(): string {
 
 const ROOT_DIR = (() => {
   const candidates = [
-    __dirname,
+    // `__dirname` is the real script dir under bare tsx (CJS). Under vitest's
+    // ESM-style module runner it may be unavailable — `typeof` keeps that
+    // reference safe there without changing behavior where it exists.
+    ...(typeof __dirname === 'string' ? [__dirname] : []),
     process.cwd(),
     ...(typeof process.argv?.[1] === 'string' ? [path.resolve(process.argv[1])] : []),
   ];
@@ -241,6 +271,9 @@ if (failures > 0) {
   console.log('[GREEN] Tauri configuration validation PASSED.');
 }
 
-if (typeof process !== 'undefined' && typeof (process as any).exitCode !== 'undefined') {
-  (process as any).exitCode = failures > 0 ? 1 : 0;
-}
+// Standalone contract (see file top): exit 0 GREEN / 1 RED. The old guard here
+// checked `typeof process.exitCode !== 'undefined'`, which is false at startup
+// (Node initializes exitCode to undefined), so RED runs silently exited 0.
+// Setting it unconditionally is correct in both modes: under vitest this runs at
+// import time and vitest applies its own exit code after the run completes.
+process.exitCode = failures > 0 ? 1 : 0;
