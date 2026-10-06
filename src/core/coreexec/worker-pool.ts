@@ -47,22 +47,10 @@ export const safeMaxThreads = 2;
  */
 function resolveWorkerFile(): string {
   if (path.extname(__filename) !== '.ts') {
-    // Running from compiled JS (the packaged sidecar). Two candidate real
-    // files, both emitted by scripts/build-sidecar.js:
-    //
-    //  1. beside the server bundle — this is the pkg snapshot, and its npm
-    //     requires resolve through the same snapshot, which is why it is the
-    //     first choice;
-    //  2. staged as a Tauri bundle resource, reached via the resource dir the
-    //     host passes in (src-tauri/src/lib.rs sets NEUROSYNC_RESOURCE_DIR).
-    //
-    // worker_threads needs a path that poolifier's own existsSync accepts, so
-    // whichever is present wins.
-    const snapshotBundle = path.join(__dirname, WORKER_BUNDLE);
-    if (fs.existsSync(snapshotBundle)) {
-      return snapshotBundle;
-    }
-
+    // Running from compiled JS (the packaged sidecar). Prefer the worker
+    // bundle staged as a real Tauri resource: worker_threads and poolifier need
+    // a physical filesystem path, not pkg's virtual /snapshot/ path. The host
+    // sets NEUROSYNC_RESOURCE_DIR in src-tauri/src/lib.rs.
     const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
     if (resourceDir && resourceDir.length > 0) {
       const stagedBundle = path.join(resourceDir, 'resources', 'bin', WORKER_BUNDLE);
@@ -71,8 +59,16 @@ function resolveWorkerFile(): string {
       }
     }
 
-    // Return the expected location so poolifier's error names the path we
-    // actually looked for.
+    // Fallback to the adjacent bundle in the pkg snapshot. This keeps local
+    // packaged probes and future runtimes without an external resource layout
+    // working when pkg's worker-thread integration supports that path.
+    const snapshotBundle = path.join(__dirname, WORKER_BUNDLE);
+    if (fs.existsSync(snapshotBundle)) {
+      return snapshotBundle;
+    }
+
+    // Return the expected snapshot location so poolifier's error names the
+    // path we actually looked for.
     return snapshotBundle;
   }
 
