@@ -36,20 +36,16 @@ export function CerebroChatbot() {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
     try {
-      const res = await fetch('http://localhost:3001/v1/chat/completions', {
+      // Route through NeuroSync's backend Cerebro chat — never a raw LLM endpoint
+      // and never a hardcoded credential. The backend owns provider routing and the
+      // tri-modal context router.
+      const res = await fetch(`${API}/api/cerebro/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer freellmapi-cfada39761d420964a7bde605a09e71079beacc2a0fab1b8'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'Auto',
-          messages: [
-            { role: 'system', content: 'You are Cerebro, the system guide for NeuroSync. Keep responses brief.' },
-            ...messages.slice(-6).map(m => ({ role: m.role, content: m.text })),
-            { role: 'user', content: msg }
-          ],
-          stream: true
+          message: msg,
+          history: messages.slice(-6).map(m => ({ role: m.role, text: m.text })),
+          projectId: activeProjectId || null
         }),
         signal: controller.signal
       });
@@ -61,34 +57,11 @@ export function CerebroChatbot() {
         throw new Error(`Network error: ${res.status} ${res.statusText}`);
       }
       
-      setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
-      
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = '';
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
-              try {
-                const parsed = JSON.parse(line.substring(6));
-                const delta = parsed.choices?.[0]?.delta?.content || '';
-                fullResponse += delta;
-                setMessages(prev => {
-                  const copy = [...prev];
-                  copy[copy.length - 1]!.text = fullResponse;
-                  return copy;
-                });
-              } catch (e) {}
-            }
-          }
-        }
-      }
+      // The backend answers with a single JSON object (not an SSE stream).
+      const data = await res.json();
+      const reply = data.reply || 'Acknowledged.';
+      const suggestedNav = data.suggestedNavigation ?? null;
+      setMessages(prev => [...prev, { role: 'assistant', text: reply, suggestedNav }]);
     } catch (err: any) {
       clearTimeout(timeoutId);
       const isTimeout = err.name === 'AbortError';

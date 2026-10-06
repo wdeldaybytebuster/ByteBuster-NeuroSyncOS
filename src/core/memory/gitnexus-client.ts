@@ -261,3 +261,49 @@ export async function shutdownGitNexus(): Promise<void> {
 export function _getState(): ClientState {
   return state;
 }
+
+// ── One-shot `gitnexus query` CLI bridge ──────────────────────────────────
+// Used by CoreExec's `gitnexus_mapper` plugin. Kept here (not in worker.ts)
+// so all `child_process` usage stays inside the audit's CHILD_PROCESS_ALLOWLIST
+// and never leaks raw shell exec into the orchestrator (SA-01).
+
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+const execFileAsync = promisify(execFile);
+
+/**
+ * Run `gitnexus query --json <query>` against the local GitNexus index.
+ * Tries the global `gitnexus` binary first, falls back to `npx gitnexus@latest`
+ * on ENOENT (mirrors spawnEvalServer's invocation-resolution strategy).
+ * The args array is fixed-length and never shell-interpolated.
+ *
+ * Returns `{ stdout, stderr }` on success. Throws on non-zero exit or timeout.
+ */
+export async function runGitNexusQuery(
+  query: string,
+  cwd: string,
+): Promise<{ stdout: string; stderr: string }> {
+  if (isDisabled()) {
+    throw new Error('gitnexus_mapper: GitNexus CLI is disabled (VITEST or NEUROSYNC_GITNEXUS_DISABLED=1)');
+  }
+
+  const MAX_BUFFER = 10 * 1024 * 1024; // 10 MB — AST JSON payloads can be large
+  const QUERY_TIMEOUT_MS = 30000;
+
+  const attempt = (cmd: string, args: string[]) =>
+    execFileAsync(cmd, args, {
+      cwd,
+      timeout: QUERY_TIMEOUT_MS,
+      maxBuffer: MAX_BUFFER,
+    });
+
+  try {
+    return await attempt('gitnexus', ['query', '--json', query]);
+  } catch (err: any) {
+    // ENOENT on the global binary → try npx once.
+    if (err?.code === 'ENOENT') {
+      return attempt('npx', ['gitnexus@latest', 'query', '--json', query]);
+    }
+    throw err;
+  }
+}

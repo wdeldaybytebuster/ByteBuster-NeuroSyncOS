@@ -7,7 +7,10 @@ import { RouteSwitchEngine } from '../routeswitch/engine';
 
 vi.mock('../routeswitch/engine', () => {
   const RouteSwitchEngine = vi.fn();
-  RouteSwitchEngine.prototype.generate = vi.fn().mockResolvedValue({
+  // The schema_patcher plugin calls routeSwitch.execute(...) (the scoped
+  // RouteSwitchEngine API), so the test double must stub `execute` — not the
+  // lower-level `generate` it replaced.
+  RouteSwitchEngine.prototype.execute = vi.fn().mockResolvedValue({
     content: '// Auto-generated patch Draft\n// Applies delta: repository.owner.login -> repository.owner.name\nfunction parse(data) {\n  return data.repository.owner.name;\n}',
     provider: 'mock-provider',
     tokensUsed: 100

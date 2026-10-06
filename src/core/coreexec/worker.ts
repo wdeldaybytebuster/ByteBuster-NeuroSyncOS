@@ -4,6 +4,11 @@ import { StealthScraper } from './scraping';
 import { classifyDirective, NodeDirective } from './dispatch';
 import { checkActionPermission } from './permission-gate';
 import { RouteSwitchEngine } from '../routeswitch/engine';
+// SA-01: all gitnexus CLI invocation goes through this audited bridge
+// (CHILD_PROCESS_ALLOWLIST in scripts/audit-ground-rules.ts), never raw
+// child_process in the orchestrator. Static import so test doubles via
+// vi.mock() reliably intercept it.
+import { runGitNexusQuery } from '../memory/gitnexus-client';
 /**
  * Single-shape worker input. Backward-compat is preserved by `kind: 'legacy'`
  * whose `data` field carries the legacy stub payload. `kind: 'dag' | undefined`
@@ -32,9 +37,9 @@ export async function executePlugin(
   if (!pluginName) return null;
 
   if (pluginName === 'gitnexus_mapper') {
-    const { execFile } = require('child_process');
-    const { promisify } = require('util');
-    const execFileAsync = promisify(execFile);
+    // SA-01: Never invoke child_process directly here. The GitNexus CLI is
+    // bridged through gitnexus-client.ts (which is on the audit's approved
+    // CHILD_PROCESS_ALLOWLIST) so all shell exec stays in one audited surface.
     const crypto = require('crypto');
     
     let cwd = process.cwd();
@@ -46,7 +51,7 @@ export async function executePlugin(
     }
     
     const query = input.params?.query ?? '';
-    const { stdout, stderr } = await execFileAsync('npx', ['gitnexus', 'query', '--json', query], { cwd });
+    const { stdout, stderr } = await runGitNexusQuery(query, cwd);
     
     if (stderr && !stdout) {
       return { status: 'error', action: 'generic', error: `GitNexus CLI failed: ${stderr}`, taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
