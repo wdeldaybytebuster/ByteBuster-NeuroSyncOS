@@ -34,10 +34,10 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/sidecar"
+      "binaries/neurosyncmega"
     ],
     "resources": {
-      "bin/**/*": ""
+      "resources/bin/**/*": "resources/bin/"
     }
   }
 }

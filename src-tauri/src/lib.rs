@@ -15,7 +15,11 @@ pub fn run() {
         )?;
       }
       
-      let profiler_command = app.shell().sidecar("binaries/sidecar").unwrap()
+      // Launch the Node.js backend sidecar with the hardware tier/environment
+      // rules the Genesis Profiler wrote to BaseVault (Axiom 6).
+      // The sidecar is referenced by its bare base name only; Tauri resolves the
+      // target triple and platform extension (e.g. -linux, .exe) at build time.
+      let profiler_command = app.shell().sidecar("neurosyncmega").unwrap()
         .args(["--profile"]);
         
       let output = tauri::async_runtime::block_on(async move {
@@ -41,7 +45,7 @@ pub fn run() {
       let node_options = parsed["NODE_OPTIONS"].as_str().unwrap_or("--max-old-space-size=1024").to_string();
 
       // Spawn the main sidecar with enforced constraints
-      let sidecar_command = app.shell().sidecar("binaries/sidecar").unwrap()
+      let sidecar_command = app.shell().sidecar("neurosyncmega").unwrap()
           .env("UV_THREADPOOL_SIZE", uv_threadpool)
           .env("NODE_OPTIONS", node_options);
           

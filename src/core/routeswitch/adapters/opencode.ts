@@ -1,5 +1,5 @@
 import { OpenAICompatibleProvider } from './openai-compatible';
-import { GenerationStreamHooks } from '../providers';
+import { GenerationStreamHooks, ProviderCapabilities } from '../providers';
 import { OpenCodeDiscoveryService } from '../discovery';
 
 export interface OpenCodeProviderConfig {
@@ -18,6 +18,25 @@ const OPENCODE_ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
  * user to know and enter a base URL themselves.
  */
 export class OpenCodeProvider extends OpenAICompatibleProvider {
+  /**
+   * Explicit capability override for OpenCode Zen's curated gateway (P8-4).
+   *
+   * Declared as a `readonly` field with every capability stated in full, rather
+   * than assigned from the constructor: `capabilities` is declared `readonly`
+   * on `OpenAICompatibleProvider`, so a subclass constructor assignment is a
+   * compile error (TS2540). Overriding via a field declaration keeps the
+   * property read-only while still declaring all values known at construction
+   * time. Values are the previously merged result of the parent defaults plus
+   * the OpenCode Zen overrides (vision + structured output + 128k context).
+   */
+  readonly capabilities: ProviderCapabilities = {
+    supportsVision: true,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    contextWindowTokens: 128000,
+    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+  };
+
   constructor(config: OpenCodeProviderConfig, customId?: string) {
     super({
       baseUrl: OPENCODE_ZEN_BASE_URL,

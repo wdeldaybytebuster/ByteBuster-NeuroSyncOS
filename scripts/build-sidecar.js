@@ -5,7 +5,7 @@ const path = require('path');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const TAURI_DIR = path.join(ROOT_DIR, 'src-tauri');
 const BINARIES_DIR = path.join(TAURI_DIR, 'binaries');
-const RESOURCES_BIN_DIR = path.join(TAURI_DIR, 'bin');
+const RESOURCES_BIN_DIR = path.join(TAURI_DIR, 'resources', 'bin');
 
 const NATIVE_DEPS = [
   { pkg: 'better-sqlite3', file: 'better_sqlite3.node', srcDir: 'build/Release' },
@@ -39,12 +39,15 @@ try {
 
 // Tauri expects sidecar binaries to have the target triple suffix.
 // pkg outputs files like: neurosyncmega-linux, neurosyncmega-macos, neurosyncmega-win.exe
-// We need to rename them to: sidecar-x86_64-unknown-linux-gnu, sidecar-x86_64-apple-darwin, sidecar-x86_64-pc-windows-msvc.exe
+// bundle.externalBin declares the base path "binaries/neurosyncmega", so the CLI
+// resolves the on-disk artifact as <base>-<target-triple>. We must therefore emit:
+// neurosyncmega-x86_64-unknown-linux-gnu, neurosyncmega-x86_64-apple-darwin,
+// neurosyncmega-x86_64-pc-windows-msvc.exe
 
 const renameMap = {
-  'neurosyncmega-linux': 'sidecar-x86_64-unknown-linux-gnu',
-  'neurosyncmega-macos': 'sidecar-x86_64-apple-darwin',
-  'neurosyncmega-win.exe': 'sidecar-x86_64-pc-windows-msvc.exe'
+  'neurosyncmega-linux': 'neurosyncmega-x86_64-unknown-linux-gnu',
+  'neurosyncmega-macos': 'neurosyncmega-x86_64-apple-darwin',
+  'neurosyncmega-win.exe': 'neurosyncmega-x86_64-pc-windows-msvc.exe'
 };
 
 for (const [src, dest] of Object.entries(renameMap)) {
