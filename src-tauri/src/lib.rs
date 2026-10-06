@@ -1,3 +1,4 @@
+use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
 
@@ -15,12 +16,24 @@ pub fn run() {
         )?;
       }
       
+      // The packaged sidecar cannot load native extensions (sqlite-vec's vec0
+      // shared object) from pkg's virtual snapshot, because SQLite hands the
+      // path straight to the OS loader. Give it the real bundle resource
+      // directory so BaseVault can resolve the staged extension — see
+      // resolveExternalVecExtension in src/core/basevault/db.ts.
+      let resource_dir = app
+        .path()
+        .resource_dir()
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
       // Launch the Node.js backend sidecar with the hardware tier/environment
       // rules the Genesis Profiler wrote to BaseVault (Axiom 6).
       // The sidecar is referenced by its bare base name only; Tauri resolves the
       // target triple and platform extension (e.g. -linux, .exe) at build time.
       let profiler_command = app.shell().sidecar("neurosyncmega").unwrap()
-        .args(["--profile"]);
+        .args(["--profile"])
+        .env("NEUROSYNC_RESOURCE_DIR", resource_dir.clone());
         
       let output = tauri::async_runtime::block_on(async move {
         profiler_command.output().await
@@ -47,7 +60,8 @@ pub fn run() {
       // Spawn the main sidecar with enforced constraints
       let sidecar_command = app.shell().sidecar("neurosyncmega").unwrap()
           .env("UV_THREADPOOL_SIZE", uv_threadpool)
-          .env("NODE_OPTIONS", node_options);
+          .env("NODE_OPTIONS", node_options)
+          .env("NEUROSYNC_RESOURCE_DIR", resource_dir);
           
       let (mut rx, mut _child) = sidecar_command.spawn().expect("Failed to spawn sidecar");
 

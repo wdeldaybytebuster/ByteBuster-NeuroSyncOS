@@ -30,7 +30,75 @@ export const db: BetterSqlite3Database = new Database(dbPath, {
 });
 
 // Load Vector Search Extension
-sqliteVec.load(db);
+//
+// sqlite-vec resolves its native extension (`vec0.so` / `.dylib` / `.dll`) from
+// the `sqlite-vec-<os>-<arch>` package and hands the path to SQLite's C-level
+// load_extension, i.e. straight to the OS loader. Inside a pkg-packaged sidecar
+// that resolved path points into the virtual snapshot, which dlopen cannot open
+// (pkg only virtualizes Node's own `.node` loader), so the packaged runtime
+// loads the copy staged as a real Tauri resource instead — see
+// scripts/build-tauri-sidecar.js, which stages
+// `resources/bin/<platform>-<arch>/sqlite-vec-<os>-<arch>/vec0.<ext>`.
+//
+// Dev and test runs keep resolving through node_modules exactly as before.
+function resolveExternalVecExtension(): string | null {
+  const platform = process.platform;
+  const arch = process.arch;
+  const platformDir = `${platform === 'win32' ? 'win' : platform}-${arch}`;
+  const vecOs = platform === 'win32' ? 'windows' : platform;
+  const fileName =
+    platform === 'win32' ? 'vec0.dll'
+    : platform === 'darwin' ? 'vec0.dylib'
+    : 'vec0.so';
+  const relative = path.join('resources', 'bin', platformDir, `sqlite-vec-${vecOs}-${arch}`, fileName);
+
+  // Resource directory handed over by the Tauri host: lib.rs sets
+  // NEUROSYNC_RESOURCE_DIR on the sidecar spawn. This is the only candidate
+  // that is correct for every package format (deb/AppImage put resources in
+  // /usr/lib/<product> while the executable lives in /usr/bin).
+  const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
+
+  const candidates = [
+    // Explicit override, useful for CI and for `tauri dev` layouts.
+    process.env.NEUROSYNC_SQLITE_VEC_PATH,
+    resourceDir && resourceDir.length > 0 ? path.join(resourceDir, relative) : undefined,
+    // Tauri places bundle resources next to the sidecar executable...
+    path.join(path.dirname(process.execPath), relative),
+    // ...except on macOS, where resources live under ../Resources.
+    path.join(path.dirname(process.execPath), '..', 'Resources', relative),
+    // Local repo layout, so a staged tree works without packaging at all.
+    path.join(process.cwd(), 'src-tauri', relative),
+  ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0);
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // Unreadable candidate paths are simply skipped; the loop below still
+      // falls back to the bundled resolution path.
+    }
+  }
+  return null;
+}
+
+function loadVectorSearchExtension(): void {
+  const isPackaged = typeof (process as { pkg?: unknown }).pkg !== 'undefined';
+  if (isPackaged || process.env.NEUROSYNC_SQLITE_VEC_PATH) {
+    const external = resolveExternalVecExtension();
+    if (external) {
+      db.loadExtension(external);
+      console.log(`[BaseVault] Loaded sqlite-vec extension from ${external}`);
+      return;
+    }
+    console.warn(
+      '[BaseVault] Packaged runtime could not find a loadable sqlite-vec extension; ' +
+      'falling back to package resolution (vector search may be unavailable).'
+    );
+  }
+  sqliteVec.load(db);
+}
+
+loadVectorSearchExtension();
 
 // Enforce Write-Ahead Logging (WAL) for concurrent reads/writes and performance
 db.pragma('journal_mode = WAL');
