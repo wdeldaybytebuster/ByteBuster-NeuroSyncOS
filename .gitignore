@@ -19,8 +19,11 @@ cookies2.txt
 # Build output
 dist/
 
-# Worker thread bundle, regenerated at process boot (see worker-pool.ts)
-src/core/coreexec/worker.generated.cjs
+# Worker thread bundles, regenerated at process boot by esbuild (see the
+# worker-pool.ts generators under core/coreexec and core/memory/cerebro).
+# Glob covers EVERY generator location and enforces the "No Transient Artifact
+# Edits" rule — never commit or edit *.generated.cjs.
+*.generated.cjs
 
 # Data files (SQLite)
 .data/

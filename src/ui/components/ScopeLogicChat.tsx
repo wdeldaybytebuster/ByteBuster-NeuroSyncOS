@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Minimize2, Maximize2 } from 'lucide-react';
 import { useDeveloperMode } from './DeveloperModeContext';
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
+import { useNavigation } from '../layouts/OSLayout';
+
+const API = 'http://localhost:3743';
 
 export interface DAGProposalPayload {
   id: string;
@@ -16,6 +19,7 @@ interface ScopeLogicChatProps {
 export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
   const { isDeveloperMode } = useDeveloperMode();
   const hardwareTier = useHardwareTier();
+  const { activeProjectId } = useNavigation();
   const isConstrained = hardwareTier === 'constrained';
   const [input,     setInput]     = useState('');
   const [chatLog,   setChatLog]   = useState<{role: string, content: string}[]>([]);
@@ -40,21 +44,13 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
     try {
-      const res = await fetch('http://localhost:3001/v1/chat/completions', {
+      // Route through NeuroSync's own backend (ScopeLogic interview) — never a raw
+      // LLM endpoint and never a hardcoded credential. The backend owns prompt
+      // construction, provider routing (RouteSwitch), and per-project session state.
+      const res = await fetch(`${API}/api/scopelogic/prompt`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer freellmapi-cfada39761d420964a7bde605a09e71079beacc2a0fab1b8'
-        },
-        body: JSON.stringify({
-          model: 'Auto',
-          messages: [
-            { role: 'system', content: 'You are ScopeLogic. Output DAG proposals inside ```json. The JSON should have a "nodes" array.' },
-            ...chatLog.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: userMsg }
-          ],
-          stream: true
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg, projectId: activeProjectId || null }),
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -65,46 +61,18 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
         throw new Error(`Network error: ${res.status} ${res.statusText}`);
       }
 
-      setChatLog(prev => [...prev, { role: 'system', content: '' }]);
+      // The endpoint answers with a single JSON object (not an SSE stream).
+      const data = await res.json();
+      const reply = data.reply || data.response || data.message || 'Acknowledged.';
+      setChatLog(prev => [...prev, { role: 'system', content: reply }]);
 
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullResponse = '';
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ') && !line.includes('[DONE]')) {
-              try {
-                const parsed = JSON.parse(line.substring(6));
-                const delta = parsed.choices?.[0]?.delta?.content || '';
-                fullResponse += delta;
-                setChatLog(prev => {
-                  const copy = [...prev];
-                  copy[copy.length - 1]!.content = fullResponse;
-                  return copy;
-                });
-              } catch (e) {}
-            }
-          }
+      if (data.isComplete || data.ready || data.dagProposal) {
+        const prop = data.dagProposal || data.proposal;
+        if (prop && Array.isArray(prop.nodes)) {
+          const proposal = { id: prop.id ?? crypto.randomUUID(), status: 'draft', nodes: prop.nodes };
+          setComplete(true);
+          onProposal?.(proposal);
         }
-      }
-
-      if (fullResponse.includes('```json') || fullResponse.includes('nodes')) {
-        try {
-          const fenceMatch = fullResponse.match(/```(?:json)?\s*([\s\S]*?)```/);
-          const jsonStr = fenceMatch ? fenceMatch[1]! : fullResponse;
-          const parsed = JSON.parse(jsonStr);
-          if (parsed.nodes) {
-             const proposal = { id: crypto.randomUUID(), status: 'draft', nodes: parsed.nodes };
-             setComplete(true);
-             onProposal?.(proposal);
-          }
-        } catch(e) {}
       }
 
     } catch (err: any) {

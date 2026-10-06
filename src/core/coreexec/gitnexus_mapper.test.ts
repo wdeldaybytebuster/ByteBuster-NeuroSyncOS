@@ -13,26 +13,13 @@ vi.mock('../routeswitch/engine', () => {
   return { RouteSwitchEngine };
 });
 
-import child_process from 'child_process';
-
-vi.spyOn(child_process, 'execFile').mockImplementation((...args: any[]) => {
-  const cb = args.pop();
-  const cmd = args[0];
-  const cmdArgs = args[1];
-  
-  if (cmd === 'npx' && cmdArgs && cmdArgs[0] === 'gitnexus') {
-    if (typeof cb === 'function') {
-      cb(null, { stdout: 'Mocked AST payload from gitnexus', stderr: '' });
-    }
-    return {} as any;
-  }
-  
-  // Real implementation for other things or just fail
-  if (typeof cb === 'function') {
-    cb(new Error('Unexpected command'), '', '');
-  }
-  return {} as any;
-});
+// SA-01: the gitnexus_mapper plugin routes through runGitNexusQuery in
+// gitnexus-client.ts (not raw child_process). Mock that boundary so the test
+// exercises the plugin logic without spawning a real CLI or tripping the
+// VITEST-disabled guard in gitnexus-client.
+vi.mock('../memory/gitnexus-client', () => ({
+  runGitNexusQuery: vi.fn().mockResolvedValue({ stdout: 'Mocked AST payload from gitnexus', stderr: '' }),
+}));
 
 describe('Skill A: GitNexus Mapper Fix (TDD)', () => {
   const projectId = crypto.randomUUID();

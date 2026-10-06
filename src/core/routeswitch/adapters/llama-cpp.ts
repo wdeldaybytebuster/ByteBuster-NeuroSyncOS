@@ -7,7 +7,7 @@ import type {
   ChatWrapper,
   Token,
 } from 'node-llama-cpp';
-import { GenerationStreamHooks, LLMProvider } from '../providers';
+import { GenerationStreamHooks, LLMProvider, ProviderCapabilities } from '../providers';
 import { OKF_CONCEPT_EXTRACTION_GBNF } from '../../okf/generator';
 import { ScopeLogicGBNF } from '../../scopelogic/gbnf-grammar';
 import { consumeConfidenceStream } from '../confidence';
@@ -55,6 +55,20 @@ export class LlamaCppProvider implements LLMProvider {
    */
   readonly supportsStreamingConfidence = true;
 
+  /**
+   * Capability matrix for the local GGUF adapter (P8-4).
+   * Text-only: node-llama-cpp processes text tokens; image/audio/video
+   * inputs are not supported. Function calling is not surfaced. Structured
+   * output IS supported via GBNF grammar-constrained decoding (see
+   * `_resolveGrammar`), which guarantees syntactically valid JSON at the
+   * token level — stronger than the `response_format` hint the HTTP
+   * adapters offer. Assigned in the constructor so
+   * `contextWindowTokens` reflects the real configured context size
+   * (P8-4: declare all fields known at construction time — never infer
+   * from the provider ID).
+   */
+  readonly capabilities: ProviderCapabilities;
+
   // The model/context/session are expensive to create (loading a multi-GB
   // GGUF file can take seconds to minutes), so they're loaded once and
   // reused across generate() calls for the lifetime of this instance.
@@ -71,6 +85,13 @@ export class LlamaCppProvider implements LLMProvider {
 
   constructor(private config: LlamaCppConfig, customId?: string) {
     this.id = customId || 'llama-cpp';
+    this.capabilities = {
+      supportsVision: false,
+      supportsFunctionCalling: false,
+      supportsStructuredOutput: true,
+      contextWindowTokens: config.contextSize || 4096,
+      inputTypes: ['text'],
+    };
   }
 
   async generate(
