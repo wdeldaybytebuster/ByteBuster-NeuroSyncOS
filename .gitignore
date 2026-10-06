@@ -61,5 +61,6 @@ src/ui/*.py
 # Error logs
 ts-errors.txt
 
-# Tauri Binaries
+# Tauri Binaries and generated bundle resources
 src-tauri/binaries/
+src-tauri/resources/

@@ -1,5 +1,8 @@
 import { Worker } from 'worker_threads';
+import fs from 'fs';
 import path from 'path';
+
+const WORKER_BUNDLE = 'gitnexus-worker.js';
 
 export class GitNexusParser {
   private worker: Worker | null = null;
@@ -8,15 +11,29 @@ export class GitNexusParser {
     return new Promise((resolve, reject) => {
       // NOTE: experimentalRawTransfer is strictly disabled.
       
-      // Determine the extension to use (ts or js)
-      const workerExt = __filename.endsWith('.ts') ? '.ts' : '.js';
-      const workerPath = path.resolve(__dirname, `gitnexus-worker${workerExt}`);
-      
+      const isTypeScriptSource = path.extname(__filename) === '.ts';
       const workerOptions: any = {};
-      
-      // If we are running in a ts-node or similar environment for .ts files
-      if (workerExt === '.ts') {
+      let workerPath: string;
+
+      if (isTypeScriptSource) {
+        // Development/test source path. Keep existing ts-node support when a
+        // caller runs the source tree directly.
+        workerPath = path.resolve(__dirname, 'gitnexus-worker.ts');
         workerOptions.execArgv = ['--require', 'ts-node/register'];
+      } else {
+        // Packaged sidecar: worker_threads needs a real filesystem path, not
+        // pkg's virtual /snapshot/ filesystem. The Tauri host provides the
+        // resource directory; fall back to an adjacent bundled worker for
+        // non-Tauri compiled layouts.
+        const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
+        const stagedWorker = resourceDir && resourceDir.length > 0
+          ? path.join(resourceDir, 'resources', 'bin', WORKER_BUNDLE)
+          : undefined;
+        const adjacentWorker = path.resolve(__dirname, WORKER_BUNDLE);
+
+        workerPath = stagedWorker && fs.existsSync(stagedWorker)
+          ? stagedWorker
+          : adjacentWorker;
       }
 
       this.worker = new Worker(workerPath, workerOptions);
