@@ -105,6 +105,8 @@
     "assets": [
       "dist/worker.js",
       "dist/worker-cerebro.js",
+      "dist/gitnexus-worker.js",
+      "dist/daemon.cjs",
       "resources/bin/**/*",
       "node_modules/better-sqlite3/build/Release/*.node",
       "node_modules/node-pty/build/Release/*.node",

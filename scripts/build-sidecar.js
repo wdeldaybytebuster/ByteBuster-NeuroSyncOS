@@ -45,6 +45,18 @@ if (!fs.existsSync(RESOURCES_BIN_DIR)) {
 // `fileURLToPath(undefined)` and dies on load (node-cron does exactly this to
 // locate its daemon.js). Define it as a real file URL for the bundle instead.
 const IMPORT_META_SHIM = `var __importMetaUrl = require('url').pathToFileURL(__filename).href;`;
+const NODE_CRON_FORK_SHIM =
+  `var __nodeCronChildProcess = require('child_process'); ` +
+  `var __nodeCronOriginalFork = __nodeCronChildProcess.fork; ` +
+  `__nodeCronChildProcess.fork = function(modulePath, ...args) { ` +
+  `var resourceDir = process.env.NEUROSYNC_RESOURCE_DIR; ` +
+  `var isNodeCronDaemon = typeof modulePath === 'string' && ` +
+  `modulePath.includes('node-cron') && modulePath.endsWith('daemon.cjs'); ` +
+  `if (isNodeCronDaemon && resourceDir) { ` +
+  `var stagedDaemon = require('path').join(resourceDir, 'resources', 'bin', 'daemon.cjs'); ` +
+  `if (require('fs').existsSync(stagedDaemon)) modulePath = stagedDaemon; } ` +
+  `return __nodeCronOriginalFork.call(this, modulePath, ...args); };`;
+const SERVER_BANNER = `${IMPORT_META_SHIM};${NODE_CRON_FORK_SHIM}`;
 const IMPORT_META_DEFINE = '--define:import.meta.url=__importMetaUrl';
 
 const SERVER_BUNDLE = path.join(ROOT_DIR, 'dist', 'server.cjs');
@@ -55,6 +67,7 @@ const ESBUILD_EXTERNALS = [
   'sqlite-vec',
   'node-llama-cpp',
   'poolifier',
+  'node-cron',
   'esbuild',
 ].map((pkgName) => `--external:${pkgName}`).join(' ');
 
@@ -62,7 +75,7 @@ console.log('[Sidecar Build] Pre-bundling src/server/index.ts with esbuild...');
 try {
   execSync(
     `npx esbuild src/server/index.ts --bundle --platform=node --target=node20 --format=cjs ` +
-    `--outfile="${SERVER_BUNDLE}" --banner:js="${IMPORT_META_SHIM}" ${IMPORT_META_DEFINE} ${ESBUILD_EXTERNALS}`,
+    `--outfile="${SERVER_BUNDLE}" --banner:js="${SERVER_BANNER}" ${IMPORT_META_DEFINE} ${ESBUILD_EXTERNALS}`,
     { cwd: ROOT_DIR, stdio: 'inherit' }
   );
   console.log(`[Sidecar Build] Bundled server entry -> ${path.relative(ROOT_DIR, SERVER_BUNDLE)}`);
@@ -84,8 +97,11 @@ try {
 // The names here must match the packaged branch of resolveWorkerFile() in
 // src/core/coreexec/worker-pool.ts and src/core/memory/cerebro/worker-pool.ts.
 const WORKER_ENTRIES = [
-  { entry: 'src/core/coreexec/worker.ts', name: 'worker.js' },
-  { entry: 'src/core/memory/cerebro/worker.ts', name: 'worker-cerebro.js' },
+  { entry: 'src/core/coreexec/worker.ts', name: 'worker.js', externalPackages: true },
+  { entry: 'src/core/memory/cerebro/worker.ts', name: 'worker-cerebro.js', externalPackages: true },
+  // ScoutDaemon's parser worker is staged on the real filesystem, away from
+  // pkg's node_modules snapshot, so bundle its npm dependencies too.
+  { entry: 'src/core/scoutdaemon/gitnexus-worker.ts', name: 'gitnexus-worker.js', externalPackages: false },
 ];
 
 // Two destinations per worker, because worker_threads needs a real file in
@@ -103,15 +119,36 @@ for (const worker of WORKER_ENTRIES) {
     const outfile = path.join(ROOT_DIR, outDir, worker.name);
     console.log(`[Sidecar Build] Pre-bundling worker ${worker.entry} -> ${path.relative(ROOT_DIR, outfile)}...`);
     try {
+      const packageMode = worker.externalPackages ? '--packages=external ' : '';
       execSync(
         `npx esbuild ${worker.entry} --bundle --platform=node --target=node20 --format=cjs ` +
-        `--packages=external --banner:js="${IMPORT_META_SHIM}" ${IMPORT_META_DEFINE} --outfile="${outfile}"`,
+        `${packageMode}--banner:js="${IMPORT_META_SHIM}" ${IMPORT_META_DEFINE} --outfile="${outfile}"`,
         { cwd: ROOT_DIR, stdio: 'inherit' }
       );
     } catch (e) {
       console.error(`[Sidecar Build] worker pre-bundle failed for ${worker.entry}:`, e.message);
       process.exit(1);
     }
+  }
+}
+
+// node-cron's ESM daemon path is resolved relative to its module URL. In the
+// pkg snapshot that path is not a physical child-process entry, so create a
+// real, self-contained CommonJS daemon resource and include a copy in dist for
+// pkg's asset manifest. The server banner redirects only node-cron's daemon
+// forks to the real resource when Tauri supplies NEUROSYNC_RESOURCE_DIR.
+for (const outDir of ['dist', path.join('src-tauri', 'resources', 'bin')]) {
+  const outfile = path.join(ROOT_DIR, outDir, 'daemon.cjs');
+  console.log(`[Sidecar Build] Bundling node-cron daemon -> ${path.relative(ROOT_DIR, outfile)}...`);
+  try {
+    execSync(
+      `npx esbuild node_modules/node-cron/dist/daemon.cjs --bundle --platform=node --target=node20 ` +
+      `--format=cjs --outfile="${outfile}"`,
+      { cwd: ROOT_DIR, stdio: 'inherit' }
+    );
+  } catch (e) {
+    console.error('[Sidecar Build] node-cron daemon bundling failed:', e.message);
+    process.exit(1);
   }
 }
 
