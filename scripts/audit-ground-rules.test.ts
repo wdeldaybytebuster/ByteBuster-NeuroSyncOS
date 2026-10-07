@@ -215,24 +215,26 @@ describe('audit-ground-rules', () => {
         'export function bootstrapGlobalOKFSeed() {}\n',
       );
       fs.mkdirSync(path.join(repo, 'src/server'), { recursive: true });
+      // §4.3: the fixture pins the OWNER of the wiring — server-main.ts, NOT
+      // the index.ts bootstrapper (plan ARCHITECT-ci-gating-cleanup §4.1).
       fs.writeFileSync(
-        path.join(repo, 'src/server/index.ts'),
+        path.join(repo, 'src/server/server-main.ts'),
         "import { bootstrapGlobalOKFSeed } from '../core/okf/global-seed';\nbootstrapGlobalOKFSeed();\n",
       );
     }
 
-    it('passes when the seed dir has markdown and server/index.ts imports + calls it', () => {
+    it('passes when the seed dir has markdown and server/server-main.ts imports + calls it', () => {
       const repo = newTempRepo(tempDirs);
       writeWiredRepo(repo);
       const result = checkGlobalOKFSeedWired(repo);
       expect(result.passed).toBe(true);
     });
 
-    it('fails when server/index.ts imports bootstrapGlobalOKFSeed but never calls it', () => {
+    it('fails when server-main.ts imports bootstrapGlobalOKFSeed but never calls it', () => {
       const repo = newTempRepo(tempDirs);
       writeWiredRepo(repo);
       fs.writeFileSync(
-        path.join(repo, 'src/server/index.ts'),
+        path.join(repo, 'src/server/server-main.ts'),
         "import { bootstrapGlobalOKFSeed } from '../core/okf/global-seed';\n// never called\n",
       );
       const result = checkGlobalOKFSeedWired(repo);
@@ -247,6 +249,31 @@ describe('audit-ground-rules', () => {
       const result = checkGlobalOKFSeedWired(repo);
       expect(result.passed).toBe(false);
       expect(result.message).toContain('no .md files');
+    });
+
+    // §4.3.4 — bootstrapper-exclusion regression: pins that a correct tree
+    // with NO OKF wiring in index.ts still passes, so a future edit cannot
+    // silently re-point the check at the bootstrapper.
+    it('passes when wiring lives in server-main.ts even though the index.ts bootstrapper lacks it', () => {
+      const repo = newTempRepo(tempDirs);
+      writeWiredRepo(repo);
+      fs.writeFileSync(path.join(repo, 'src/server/index.ts'), "// bootstrapper — no OKF wiring here\n");
+      expect(checkGlobalOKFSeedWired(repo).passed).toBe(true);
+    });
+
+    // §7 T1 N5-fixed — stale-tree detection: wiring in the bootstrapper and
+    // ONLY there must FAIL, proving index.ts is not the target.
+    it('fails when the wiring lives only in the index.ts bootstrapper and server-main.ts is bare', () => {
+      const repo = newTempRepo(tempDirs);
+      writeWiredRepo(repo);
+      fs.writeFileSync(
+        path.join(repo, 'src/server/index.ts'),
+        "import { bootstrapGlobalOKFSeed } from '../core/okf/global-seed';\nbootstrapGlobalOKFSeed();\n",
+      );
+      fs.writeFileSync(path.join(repo, 'src/server/server-main.ts'), '// bare entry — no OKF wiring\n');
+      const result = checkGlobalOKFSeedWired(repo);
+      expect(result.passed).toBe(false);
+      expect(result.message).toContain('does not call bootstrapGlobalOKFSeed');
     });
   });
 
