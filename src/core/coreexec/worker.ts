@@ -3,7 +3,11 @@ import { CommandSandbox } from '../portgrid/sandbox';
 import { StealthScraper } from './scraping';
 import { classifyDirective, NodeDirective } from './dispatch';
 import { HarnessProfileEnum, type HarnessProfile } from '../basevault/schema';
-import { checkActionPermission } from './permission-gate';
+// §2.3 C8 — the gate seam (replaces the inline checkActionPermission call that
+// used to run AFTER executePlugin) + RouteSwitch's governed egress for
+// okf_indexer's URL fetch.
+import { gateAndDispatch } from './gate-order';
+import { egressFetch } from '../routeswitch/egress';
 import { RouteSwitchEngine } from '../routeswitch/engine';
 // SA-01: all gitnexus CLI invocation goes through this audited bridge
 // (CHILD_PROCESS_ALLOWLIST in scripts/audit-ground-rules.ts), never raw
@@ -123,12 +127,24 @@ export async function executePlugin(
     }
 
     if (!content && url) {
-       try {
-          const response = await fetch(url);
-          content = await response.text();
-       } catch (e: any) {
-          return { status: 'error', action: 'generic', error: `Failed to fetch URL: ${e.message}`, taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
+       // §2.3 C8-a — RouteSwitch owns egress (AGENTS.md boundary): this URL
+       // fetch goes through the governed door (scheme/host/DNS-address/kill
+       // switch/policy gates + timeout + byte cap), never a bare fetch.
+       const res = await egressFetch(
+          url,
+          { timeoutMs: 15_000, maxBytes: 2_000_000 },
+          { projectId, action: 'fetch', owner: 'coreexec/okf_indexer' },
+       );
+       if (res.blocked) {
+          return { status: 'error', action: 'generic', error: `Egress blocked (${res.blocked}) for ${url}`, taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
        }
+       if (!res.ok) {
+          const detail = res.status > 0
+             ? `Failed to fetch URL: HTTP ${res.status}`
+             : 'Failed to fetch URL: network error';
+          return { status: 'error', action: 'generic', error: detail, taskId, stdout: undefined, stderr: undefined, markdown: undefined, pageMetadata: undefined, message: undefined, prompt: undefined, data: undefined, reason: 'generic' };
+       }
+       content = res.text;
     }
 
     if (!content) {
@@ -214,7 +230,7 @@ export async function executePlugin(
  */
 export interface WorkerOutput {
   status: 'success' | 'error';
-  action: 'shell' | 'scrape' | 'verify' | 'generic' | 'legacy';
+  action: 'shell' | 'scrape' | 'verify' | 'generic' | 'legacy' | 'fetch';
   taskId: string | undefined;
   stdout: string | undefined;
   stderr: string | undefined;
@@ -288,26 +304,28 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
             return errEnvelope(`${harnessProfile} harness must run through CoreExec's isolated main-thread generation path`, taskId);
           }
 
-          if (input.plugin) {
-            const { CerebroVectorStore } = require('../memory/cerebro/vector');
-            const { db: workerDb } = require('../basevault/db');
-            const result = await executePlugin(input, projectId ?? null, workerDb, CerebroVectorStore);
-            if (result) return result;
-          }
-
-          // ── Permission enforcement (Phase 5) ─────────────────────────────
-          // Gate the two real executable actions (shell / scrape) against the
-          // project's assigned permission archetype + the tool registry. When
-          // a project has NO archetype (permission_archetype IS NULL) this is a
-          // no-op and behaviour is exactly as before — the non-negotiable
-          // permissive default for existing/unconfigured projects. Only a
-          // project that has explicitly opted in (non-NULL archetype) is gated.
-          if (directive.action === 'shell' || directive.action === 'scrape') {
-            const gate = await checkActionPermission(projectId, directive.action);
-            if (gate.blocked) {
-              return errEnvelope(gate.reason, taskId, directive.action);
+          // ── Permission enforcement (Phase 5 + §2.3 C8 gate hoist) ────────
+          // Gate EVERY action this task needs — the plugin's egress ('fetch')
+          // AND the directive's shell/scrape — BEFORE anything is dispatched.
+          // Pre-C8 order ran executePlugin (with okf_indexer's raw fetch) and
+          // returned before the gate, then gated only shell/scrape afterwards,
+          // so a network plugin egressed with zero policy checks. With no
+          // network plugin and a non-shell/scrape directive this resolves to
+          // zero checks and behaves exactly as before — the non-negotiable
+          // permissive default for existing/unconfigured projects (NO
+          // archetype → allow) is untouched; only a project that has opted in
+          // (non-NULL archetype) is gated.
+          const gated = await gateAndDispatch(input, directive, projectId, async () => {
+            if (input.plugin) {
+              const { CerebroVectorStore } = require('../memory/cerebro/vector');
+              const { db: workerDb } = require('../basevault/db');
+              const result = await executePlugin(input, projectId ?? null, workerDb, CerebroVectorStore);
+              if (result) return result;
             }
-          }
+            return undefined;
+          });
+          if (gated.blocked) return errEnvelope(gated.reason, taskId, gated.action);
+          if (gated.output) return gated.output;
 
           // CommandSandbox/StealthScraper both resolve the project's on-disk
           // cwd in their constructor and throw if the project has neither a
