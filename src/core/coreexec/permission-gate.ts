@@ -1,5 +1,6 @@
 /**
- * Phase 5 — real execution gating for the `shell` / `scrape` task actions.
+ * Phase 5 — real execution gating for the `shell` / `scrape` / `fetch` task
+ * actions (`fetch` added by §2.3 C8-b for RouteSwitch's governed egress).
  *
  * Resolves the task's project permission archetype and the tool-registry /
  * agent-permission settings (read inline from the BaseVault DB, mirroring the
@@ -38,7 +39,7 @@
  * `checkActionPermission` async; callers (worker.ts) await it.
  */
 
-export type GateAction = 'shell' | 'scrape';
+export type GateAction = 'shell' | 'scrape' | 'fetch';
 export type GateResult = { blocked: false } | { blocked: true; reason: string };
 
 const DEFAULT_TOOL_REGISTRY: { id: string; status: string }[] = [
@@ -114,8 +115,25 @@ export async function checkActionPermission(
           reason: `Blocked: archetype '${archetypeId}' does not permit command execution`,
         };
       }
+    } else if (action === 'scrape') {
+      const tool = tools.find((t) => t.id === 'web_scrape');
+      if (tool && tool.status === 'Disabled') {
+        return { blocked: true, reason: 'Blocked: web_scrape tool is disabled' };
+      }
+      if (!archetype.network) {
+        return {
+          blocked: true,
+          reason: `Blocked: archetype '${archetypeId}' does not permit network/web access`,
+        };
+      }
     } else {
-      // action === 'scrape'
+      // action === 'fetch' — §2.3 C8-b: outbound HTTP through RouteSwitch's
+      // governed egress (egressFetch) is gated by the SAME rule as scrape —
+      // the web_scrape tool toggle and archetype.network — because it is the
+      // same capability (reaching the network) behind the same PortGrid
+      // consent. Fail-closed catch-all: any action that is not an explicitly
+      // handled executable here is treated as network access, never allowed
+      // through unchecked.
       const tool = tools.find((t) => t.id === 'web_scrape');
       if (tool && tool.status === 'Disabled') {
         return { blocked: true, reason: 'Blocked: web_scrape tool is disabled' };
