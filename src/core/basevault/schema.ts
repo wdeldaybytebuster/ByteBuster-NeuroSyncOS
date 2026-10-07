@@ -10,7 +10,9 @@ export type Project = z.infer<typeof ProjectSchema>;
 
 export const SyncEventLogSchema = z.object({
   id: z.number().int(),
-  table_name: z.string(),
+  // §2.1 defense in depth: identifiers only, max 64 chars (the authoritative
+  // table/column allowlist lives in network/sync-policy.ts).
+  table_name: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+$/),
   action: z.enum(['INSERT', 'UPDATE', 'DELETE']),
   timestamp: z.number().int(),
   payload: z.string(), // JSON string
