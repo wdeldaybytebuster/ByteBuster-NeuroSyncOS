@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { SyncEventLogSchema, SyncEventLog } from '../schema';
 import { db } from '../db';
+import { parseDelta } from './sync-policy';
+import type { Statement } from 'better-sqlite3';
 import WebSocket from 'ws';
 import type { DiscoveredNode } from './mdns-discovery';
 
@@ -20,6 +22,19 @@ export class NodeTransport {
   
   constructor() {
     this.startPolling();
+  }
+
+  /**
+   * §2.1 — stop the 1s broadcast poll and drop cached statements.
+   * Callers/tests must call this on shutdown so no interval leaks (Axiom 6:
+   * no timers outliving their owner on a 6.3 GiB box).
+   */
+  dispose() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+    this.stmtCache.clear();
   }
 
   // Connect to a discovered peer
@@ -137,6 +152,28 @@ export class NodeTransport {
     ws.send(JSON.stringify(response));
   }
 
+  /**
+   * §2.1-C1 — prepared-statement cache for the sync writer.
+   *
+   * Statements are only ever built AFTER `parseDelta` has proven every
+   * identifier is a member of the SYNC_TABLES allowlist, and every runtime
+   * value is bound as a `?` parameter. The cache is bounded at 32 entries
+   * (clear-on-overflow — no LRU bookkeeping); in practice the key-set is one
+   * of a handful of fixed trigger payloads, so ~6-10 entries live here.
+   */
+  private stmtCache = new Map<string, Statement<unknown[]>>();
+  private static MAX_CACHED_STMTS = 32;
+
+  private stmt(sql: string) {
+    let s = this.stmtCache.get(sql);
+    if (!s) {
+      if (this.stmtCache.size >= NodeTransport.MAX_CACHED_STMTS) this.stmtCache.clear();
+      s = db.prepare(sql);
+      this.stmtCache.set(sql, s);
+    }
+    return s;
+  }
+
   private handleSyncDelta(deltaPacket: SyncPacket) {
     if (!deltaPacket.deltas || deltaPacket.deltas.length === 0) return;
 
@@ -147,42 +184,37 @@ export class NodeTransport {
       db.prepare(`UPDATE sync_lock SET is_syncing = 1 WHERE rowid = 1`).run();
       try {
         for (const delta of deltaPacket.deltas!) {
+          // §2.1-C1: validate BEFORE any SQL is prepared. table_name, action
+          // and every payload key have been proven allowlist members by
+          // parseDelta; every value below is a `?` binding. An unvalidated
+          // delta never reaches db.prepare — no SQL string is even built.
+          const parsed = parseDelta(delta);
+          if (!parsed.ok) {
+            console.warn(
+              `[Transport] Rejected delta on peer input (reason=${parsed.reason}, table=${String((delta as any)?.table_name).slice(0, 64)})`,
+            );
+            continue;
+          }
+          const { table, action, setSql, insertSql, id, values } = parsed.delta;
           try {
-            const payload = JSON.parse(delta.payload);
-
-            if (delta.action === 'INSERT' || delta.action === 'UPDATE') {
-              // MERGE for all tables: sync trigger payloads may carry only a subset
-              // of columns (e.g. sync_tasks_update omits output_data, started_at).
-              // A blind INSERT OR REPLACE would wipe those columns or trigger
-              // NOT NULL constraint failures (e.g. workflow_runs.dag_layout).
-              // Do a read-modify-write so existing columns are preserved.
-              const existing = db.prepare(`SELECT * FROM ${delta.table_name} WHERE id = ?`).get(payload.id) as Record<string, any> | undefined;
-              if (existing) {
-                // UPDATE: merge payload columns onto the existing row
-                const sets: string[] = [];
-                const params: any[] = [];
-                for (const [key, value] of Object.entries(payload)) {
-                  sets.push(`${key} = ?`);
-                  params.push(value);
-                }
-                params.push(payload.id);
-                db.prepare(`UPDATE ${delta.table_name} SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-                console.log(`[Transport] Merged UPDATE on ${delta.table_name} row ${payload.id}`);
-              } else {
-                // INSERT: full payload is safe here (no existing row to preserve)
-                const keys = Object.keys(payload);
-                const placeholders = keys.map(() => '?').join(', ');
-                db.prepare(`INSERT OR REPLACE INTO ${delta.table_name} (${keys.join(', ')}) VALUES (${placeholders})`).run(...Object.values(payload));
-                console.log(`[Transport] Inserted ${delta.table_name} row ${payload.id}`);
-              }
-            } else if (delta.action === 'DELETE') {
-              if (payload.id) {
-                db.prepare(`DELETE FROM ${delta.table_name} WHERE id = ?`).run(payload.id);
-              }
+            // MERGE for all tables: sync trigger payloads may carry only a subset
+            // of columns (e.g. sync_tasks_update omits output_data, started_at).
+            // A blind INSERT OR REPLACE would wipe those columns or trigger
+            // NOT NULL constraint failures (e.g. workflow_runs.dag_layout).
+            // Do a read-modify-write so existing columns are preserved.
+            const existing = this.stmt(`SELECT * FROM ${table} WHERE id = ?`).get(id) as Record<string, any> | undefined;
+            if (existing) {
+              // UPDATE: merge payload columns onto the existing row
+              this.stmt(`UPDATE ${table} SET ${setSql} WHERE id = ?`).run(...values, id);
+              console.log(`[Transport] Merged UPDATE on ${table} row ${id}`);
+            } else {
+              // INSERT: full payload is safe here (no existing row to preserve)
+              this.stmt(`INSERT OR REPLACE INTO ${table} ${insertSql}`).run(...values);
+              console.log(`[Transport] Inserted ${table} row ${id}`);
             }
-            console.log(`[Transport] Applied ${delta.action} on ${delta.table_name}`);
+            console.log(`[Transport] Applied ${action} on ${table}`);
           } catch (e) {
-            console.error(`[Transport] Failed to apply delta to ${delta.table_name}:`, e);
+            console.error(`[Transport] Failed to apply delta to ${table}:`, e);
           }
         }
       } finally {

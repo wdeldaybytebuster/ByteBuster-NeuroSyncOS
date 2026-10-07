@@ -17,13 +17,12 @@ describe('NodeTransport', () => {
   });
 
   afterEach(() => {
-    // We should probably stop polling if the transport interval isn't cleaned up
-    // but the transport class doesn't expose a close method. Let's add it or rely on vitest cleanup.
-    // Actually we can just let it be. Wait, setInterval in NodeTransport will leak in tests.
-    // I will mock setInterval.
+    // §2.1: dispose() stops the 1s broadcast poll so intervals don't leak
+    // between test files (Axiom 6 — no orphan timers on the edge box).
+    transport.dispose();
   });
 
-  it('should apply INSERT and DELETE deltas correctly', () => {
+  it('should apply INSERT deltas and REFUSE DELETE (unsupported-action)', () => {
     const packet: SyncPacket = {
       type: 'SYNC_DELTA',
       lastSyncTimestamp: Date.now(),
@@ -59,9 +58,14 @@ describe('NodeTransport', () => {
       ]
     };
 
+    // §4.1-4 (intent): no sync trigger in db.ts ever emits DELETE, so the
+    // allowlist refuses it — the row MUST survive. This assertion was
+    // inverted from the pre-remediation expectation (row deleted) because
+    // the old behaviour was the vulnerability: peer-controlled DELETE.
     (transport as any).handleSyncDelta(deletePacket);
 
     const projDeleted = db.prepare(`SELECT * FROM projects WHERE id = ?`).get('test-proj-1');
-    expect(projDeleted).toBeUndefined();
+    expect(projDeleted).toBeDefined();
+    expect((projDeleted as any).name).toBe('Test Project 1');
   });
 });
