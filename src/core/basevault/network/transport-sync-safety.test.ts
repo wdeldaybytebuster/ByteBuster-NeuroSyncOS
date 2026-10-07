@@ -1,16 +1,22 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { db, initDB } from '../db';
 import { NodeTransport, SyncPacket } from './transport';
+import { loadSyncSecret, syncMac } from './sync-handshake';
+
+// §2.1-C3: point the sync secret at a temp path so tests never touch (and
+// never depend on) .data/.sync.secret. Must be set before first handshake.
+process.env.NEUROSYNC_SYNC_SECRET_PATH ??= '/tmp/opencode/neurosync/test-sync.secret';
 
 /**
  * §4.1 V1 — transport sync-safety suite.
  *
- * Proves the C1/C2 remediation of §0-V1 (arbitrary SQL via WebSocket):
+ * Proves the C1/C2/C3 remediation of §0-V1 (arbitrary SQL via WebSocket):
  *  - only trigger-derived tables/columns ever reach SQL (validate-then-template),
  *  - the read-modify-write merge invariant at transport.ts:154-158 is preserved,
  *  - hostile packets change nothing and never leave sync_lock stuck,
  *  - the prepared-statement cache is bounded,
- *  - and (as of C3) an unauthenticated peer cannot reach the writer at all.
+ *  - and (as of C3) an unauthenticated peer cannot reach the writer at all
+ *    (items 6/7 + the handshake block).
  */
 
 let transport: NodeTransport;
@@ -19,13 +25,42 @@ let baselineTableCount: number;
 function fakeWs() {
   return {
     sent: [] as string[],
+    closed: [] as number[],
     readyState: 1, // WebSocket.OPEN
     send(msg: string) { this.sent.push(msg); },
-    close() { /* noop */ },
+    close(code?: number) { this.closed.push(code ?? 1005); },
   } as any;
 }
 
-function send(peerId: string, packet: unknown, ws: any = fakeWs()) {
+/** Raw (unauthenticated) frame — what an attacker on the LAN can send. */
+function sendRaw(peerId: string, packet: unknown, ws: any = fakeWs()) {
+  transport.handleIncomingMessage(JSON.stringify(packet), peerId, ws);
+  return ws;
+}
+
+/** Authenticated send: performs the real challenge–response first. */
+function authPeer(peerId: string): any {
+  const ws = fakeWs();
+  transport.addIncomingConnection(peerId, ws);
+  const challengeRaw = ws.sent[ws.sent.length - 1];
+  expect(challengeRaw, 'server must send a SYNC_CHALLENGE on open').toBeDefined();
+  const challenge = JSON.parse(challengeRaw);
+  expect(challenge.type).toBe('SYNC_CHALLENGE');
+  const mac = syncMac(loadSyncSecret(), challenge.nonce, challenge.peerId);
+  transport.handleIncomingMessage(
+    JSON.stringify({ type: 'SYNC_AUTH', nonce: challenge.nonce, peerId: challenge.peerId, mac }),
+    peerId,
+    ws,
+  );
+  expect(
+    (transport as any).authenticatedPeers.has(peerId),
+    'valid SYNC_AUTH must authenticate the peer',
+  ).toBe(true);
+  return ws;
+}
+
+function send(peerId: string, packet: unknown): any {
+  const ws = authPeer(peerId);
   transport.handleIncomingMessage(JSON.stringify(packet), peerId, ws);
   return ws;
 }
@@ -206,6 +241,126 @@ describe('transport-sync-safety — NEGATIVE (hostile deltas change nothing)', (
     const cache = (transport as any).stmtCache as Map<string, unknown>;
     expect(cache.size).toBeGreaterThan(0);
     expect(cache.size).toBeLessThanOrEqual(32);
+  });
+
+  it('item 6: unauthenticated peer sending SYNC_DELTA is dropped and touches nothing', () => {
+    db.prepare('DELETE FROM tasks WHERE id = ?').run('unauth-task-1');
+    const before = db.prepare('SELECT key, value FROM system_settings ORDER BY key').all();
+
+    // The literal §0-V1 exploit shape, sent with NO handshake completed.
+    const ws = sendRaw('evil-peer', deltaPacket([{
+      id: 900,
+      table_name: 'tasks',
+      action: 'INSERT',
+      timestamp: NOW(),
+      payload: JSON.stringify({ id: 'unauth-task-1', run_id: 'merge-run-1', status: 'unclaimed' }),
+    }]));
+    sendRaw('evil-peer', deltaPacket([{
+      id: 901,
+      table_name: 'system_settings',
+      action: 'INSERT',
+      timestamp: NOW(),
+      payload: JSON.stringify({ id: 'operator_credential', value: 'pwned' }),
+    }]));
+
+    expect(db.prepare('SELECT * FROM tasks WHERE id = ?').get('unauth-task-1')).toBeUndefined();
+    expect(db.prepare('SELECT key, value FROM system_settings ORDER BY key').all()).toEqual(before);
+    expect((transport as any).authenticatedPeers.has('evil-peer')).toBe(false);
+    expect(ws.closed).toEqual([]); // dropped silently — no crash, no write
+  });
+
+  it('item 7: authenticated peer + hostile delta is STILL rejected (auth ≠ validation)', () => {
+    const ws = send('peer-auth', deltaPacket([{
+      id: 910,
+      table_name: 'system_settings',
+      action: 'INSERT',
+      timestamp: NOW(),
+      payload: JSON.stringify({ id: 'llm_api_key', value: 'stolen' }),
+    }]));
+    expect((transport as any).authenticatedPeers.has('peer-auth')).toBe(true);
+    const rows = db.prepare(`SELECT value FROM system_settings WHERE key = 'llm_api_key'`).all();
+    expect(rows).toEqual([]); // defense in depth: policy rejects even for an authenticated peer
+    expect(ws.closed).toEqual([]);
+  });
+});
+
+describe('transport-sync-safety — C3 challenge–response handshake', () => {
+  it('a valid SYNC_AUTH authenticates the peer and lets deltas through', () => {
+    const ws = authPeer('good-peer');
+    expect(ws.closed).toEqual([]);
+    send('good-peer', deltaPacket([{
+      id: 920, table_name: 'projects', action: 'INSERT', timestamp: NOW(),
+      payload: JSON.stringify({ id: 'auth-proj', name: 'Authed', created_at: NOW() }),
+    }]));
+    expect(db.prepare('SELECT * FROM projects WHERE id = ?').get('auth-proj')).toBeDefined();
+  });
+
+  it('a wrong MAC is rejected and the socket is closed with 4401', () => {
+    const ws = fakeWs();
+    transport.addIncomingConnection('badmac-peer', ws);
+    const challenge = JSON.parse(ws.sent[ws.sent.length - 1]);
+    transport.handleIncomingMessage(
+      JSON.stringify({ type: 'SYNC_AUTH', nonce: challenge.nonce, peerId: challenge.peerId, mac: 'AAAAforgedAAAA' }),
+      'badmac-peer',
+      ws,
+    );
+    expect((transport as any).authenticatedPeers.has('badmac-peer')).toBe(false);
+    expect(ws.closed).toEqual([4401]);
+
+    // …and a delta right after the failed auth still reaches nothing.
+    transport.handleIncomingMessage(
+      JSON.stringify(deltaPacket([{
+        id: 930, table_name: 'projects', action: 'INSERT', timestamp: NOW(),
+        payload: JSON.stringify({ id: 'after-badmac', name: 'x', created_at: NOW() }),
+      }])),
+      'badmac-peer',
+      ws,
+    );
+    expect(db.prepare('SELECT * FROM projects WHERE id = ?').get('after-badmac')).toBeUndefined();
+  });
+
+  it('a peer that never answers the challenge is closed with 4401 after 5 s', () => {
+    vi.useFakeTimers();
+    try {
+      const ws = fakeWs();
+      transport.addIncomingConnection('silent-peer', ws);
+      expect(ws.closed).toEqual([]);
+      vi.advanceTimersByTime(5000);
+      expect(ws.closed).toEqual([4401]);
+      expect((transport as any).authenticatedPeers.has('silent-peer')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('3 failed handshakes lock the peer out for 5 min (even a later-valid MAC fails)', () => {
+    const fails: any[] = [];
+    for (let i = 0; i < 3; i++) {
+      const ws = fakeWs();
+      transport.addIncomingConnection('repeat-offender', ws);
+      const challenge = JSON.parse(ws.sent[ws.sent.length - 1]);
+      transport.handleIncomingMessage(
+        JSON.stringify({ type: 'SYNC_AUTH', nonce: challenge.nonce, peerId: challenge.peerId, mac: `wrong-${i}` }),
+        'repeat-offender',
+        ws,
+      );
+      fails.push(ws);
+    }
+    expect((fails[0] as any).closed).toEqual([4401]);
+    expect((transport as any).isLockedOut('repeat-offender')).toBe(true);
+
+    // A correct MAC after lockout must NOT authenticate: the peer is refused
+    // before a challenge is even issued, and any frame it sends anyway fails.
+    const ws4 = fakeWs();
+    transport.addIncomingConnection('repeat-offender', ws4);
+    expect(ws4.sent).toEqual([]); // no challenge for a locked-out peer
+    transport.handleIncomingMessage(
+      JSON.stringify({ type: 'SYNC_AUTH', nonce: 'a'.repeat(22), peerId: 'repeat-offender', mac: 'valid-looking-but-refused' }),
+      'repeat-offender',
+      ws4,
+    );
+    expect((transport as any).authenticatedPeers.has('repeat-offender')).toBe(false);
+    expect(ws4.closed).toContain(4401);
   });
 });
 

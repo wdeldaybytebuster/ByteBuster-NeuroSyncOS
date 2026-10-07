@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { SyncEventLogSchema, SyncEventLog } from '../schema';
 import { db } from '../db';
 import { parseDelta } from './sync-policy';
+import { loadSyncSecret, syncMac, macsEqual } from './sync-handshake';
+import { randomBytes } from 'node:crypto';
 import type { Statement } from 'better-sqlite3';
 import WebSocket from 'ws';
 import type { DiscoveredNode } from './mdns-discovery';
@@ -14,26 +16,54 @@ export const SyncPacketSchema = z.object({
 });
 export type SyncPacket = z.infer<typeof SyncPacketSchema>;
 
+/** §2.1-C3 — state for one in-flight challenge we issued to a peer. */
+interface PendingChallenge {
+  nonce: string;
+  /** The label WE assigned the responder; also sent in the challenge. */
+  label: string;
+  timer: NodeJS.Timeout;
+  /** Client-side only: fires to send SYNC_OFFER once the peer is proven. */
+  onAuthenticated?: (() => void) | undefined;
+}
+
 export class NodeTransport {
-  // Simulates an E2EE connection over WebSocket or WebRTC Data Channels
+  // E2EE-style connection over WebSocket (see sync-handshake.ts for the
+  // §2.1-C3 challenge–response that actually authenticates the peer).
   private activeConnections: Map<string, WebSocket> = new Map();
   private lastPolledTimestamp: number = Date.now();
   private pollInterval: NodeJS.Timeout | null = null;
-  
+
+  /** §2.1-C3: peers that completed the HMAC handshake. Frames from anyone
+   *  else are dropped before schema parsing, let alone SQL. */
+  private authenticatedPeers = new Set<string>();
+  private pendingChallenges = new Map<string, PendingChallenge>();
+  /** ≤ 64 entries: {fails, until} per peerId, 5-minute window. */
+  private handshakeFailures = new Map<string, { fails: number; until: number }>();
+
+  private static readonly HANDSHAKE_TIMEOUT_MS = 5_000;
+  private static readonly MAX_HANDSHAKE_FAILS = 3;
+  private static readonly HANDSHAKE_LOCKOUT_MS = 5 * 60 * 1000;
+  private static readonly MAX_FAILURE_ENTRIES = 64;
+  private static readonly MAX_AUTHENTICATED = 128;
+
   constructor() {
     this.startPolling();
   }
 
   /**
-   * §2.1 — stop the 1s broadcast poll and drop cached statements.
-   * Callers/tests must call this on shutdown so no interval leaks (Axiom 6:
-   * no timers outliving their owner on a 6.3 GiB box).
+   * §2.1 — stop the 1s broadcast poll, drop cached statements and any
+   * in-flight handshake timers. Callers/tests must call this on shutdown so
+   * no interval leaks (Axiom 6: no timers outliving their owner).
    */
   dispose() {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
     }
+    for (const pending of this.pendingChallenges.values()) clearTimeout(pending.timer);
+    this.pendingChallenges.clear();
+    this.authenticatedPeers.clear();
+    this.handshakeFailures.clear();
     this.stmtCache.clear();
   }
 
@@ -48,13 +78,16 @@ export class NodeTransport {
     ws.on('open', () => {
       console.log(`[Transport] Connected to ${peerId}`);
       this.activeConnections.set(peerId, ws);
-      
-      // Send an initial SYNC_OFFER
-      const offer: SyncPacket = {
-        type: 'SYNC_OFFER',
-        lastSyncTimestamp: this.lastPolledTimestamp
-      };
-      ws.send(JSON.stringify(offer));
+
+      // §2.1-C3: challenge FIRST. The SYNC_OFFER is only sent after the peer
+      // proves it knows the sync secret (see beginHandshake/onAuthenticated).
+      this.beginHandshake(peerId, ws, () => {
+        const offer: SyncPacket = {
+          type: 'SYNC_OFFER',
+          lastSyncTimestamp: this.lastPolledTimestamp
+        };
+        ws.send(JSON.stringify(offer));
+      });
     });
 
     ws.on('message', (data) => {
@@ -64,17 +97,24 @@ export class NodeTransport {
     ws.on('close', () => {
       console.log(`[Transport] Connection closed to ${peerId}`);
       this.activeConnections.delete(peerId);
+      this.authenticatedPeers.delete(peerId);
+      this.clearChallenge(peerId);
     });
 
     ws.on('error', (err: any) => {
       console.error(`[Transport] Connection error with ${peerId}:`, err.message);
       this.activeConnections.delete(peerId);
+      this.authenticatedPeers.delete(peerId);
+      this.clearChallenge(peerId);
     });
   }
 
   addIncomingConnection(peerId: string, ws: any) {
     console.log(`[Transport] Registering incoming connection from ${peerId}`);
     this.activeConnections.set(peerId, ws);
+    // §2.1-C3: every inbound socket is challenged on open; nothing else it
+    // sends is honoured until it answers with a valid HMAC.
+    this.beginHandshake(peerId, ws);
   }
 
   private startPolling() {
@@ -85,6 +125,13 @@ export class NodeTransport {
 
   private pollAndBroadcastDeltas() {
     if (this.activeConnections.size === 0) return;
+
+    // §2.1-C3: only peers that completed the handshake receive data. Compute
+    // recipients BEFORE advancing the watermark, or deltas would be skipped
+    // for the (yet unauthenticated) peers they were read for.
+    const recipients = [...this.activeConnections.entries()]
+      .filter(([peerId]) => this.authenticatedPeers.has(peerId));
+    if (recipients.length === 0) return;
 
     try {
       const stmt = db.prepare(`
@@ -104,7 +151,7 @@ export class NodeTransport {
         };
 
         const payload = JSON.stringify(packet);
-        for (const [peerId, ws] of this.activeConnections.entries()) {
+        for (const [, ws] of recipients) {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(payload);
           }
@@ -115,9 +162,154 @@ export class NodeTransport {
     }
   }
 
-  handleIncomingMessage(data: string, peerId: string, ws: WebSocket) {
+  // ─── §2.1-C3: challenge–response handshake ─────────────────────────────────
+
+  /**
+   * Issue a SYNC_CHALLENGE to the peer. It must answer within 5 s with
+   * `SYNC_AUTH {nonce, peerId, mac}` where
+   * `mac = HMAC(secret, nonce + '|' + peerId)` and `peerId` is THIS side's
+   * label for the peer (echoed from the challenge so both sides MAC the same
+   * input). Verified in constant time; 3 failures per peer per 5 min lock
+   * the peerId out; failure closes the socket with 4401.
+   */
+  private beginHandshake(peerId: string, ws: any, onAuthenticated?: () => void) {
+    if (this.isLockedOut(peerId)) {
+      console.warn(`[Transport] Handshake refused for locked-out peer ${peerId}`);
+      try { ws.close(4401, 'locked-out'); } catch { /* socket already gone */ }
+      return;
+    }
+    this.clearChallenge(peerId);
+    const nonce = randomBytes(16).toString('base64url');
+    const timer = setTimeout(() => {
+      this.recordHandshakeFailure(peerId, 'timeout');
+      this.clearChallenge(peerId);
+      try { ws.close(4401, 'handshake-timeout'); } catch { /* socket already gone */ }
+    }, NodeTransport.HANDSHAKE_TIMEOUT_MS);
+    this.pendingChallenges.set(peerId, { nonce, label: peerId, timer, onAuthenticated });
     try {
-      const parsed = JSON.parse(data);
+      ws.send(JSON.stringify({ type: 'SYNC_CHALLENGE', nonce, peerId }));
+    } catch (e) {
+      console.error(`[Transport] Failed to send challenge to ${peerId}:`, e);
+    }
+  }
+
+  /** A peer challenged US: answer with a MAC over its nonce + its label. */
+  private respondToChallenge(parsed: Record<string, unknown>, peerId: string, ws: any) {
+    const nonce = typeof parsed.nonce === 'string' ? parsed.nonce : '';
+    const label = typeof parsed.peerId === 'string' ? parsed.peerId : peerId;
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(nonce)) return; // malformed → ignore
+    try {
+      ws.send(JSON.stringify({
+        type: 'SYNC_AUTH',
+        nonce,
+        peerId: label,
+        mac: syncMac(loadSyncSecret(), nonce, label),
+      }));
+    } catch (e) {
+      console.error(`[Transport] Failed to answer challenge from ${peerId}:`, e);
+    }
+  }
+
+  /** Verify the peer's SYNC_AUTH against the challenge WE issued. */
+  private handleAuthFrame(parsed: Record<string, unknown>, peerId: string, ws: any) {
+    const pending = this.pendingChallenges.get(peerId);
+    const nonce = typeof parsed.nonce === 'string' ? parsed.nonce : '';
+    const mac = typeof parsed.mac === 'string' ? parsed.mac : '';
+
+    if (!pending || !nonce || !mac || !macsEqual(nonce, pending.nonce)) {
+      this.failHandshake(peerId, ws, pending ? 'nonce-mismatch' : 'no-pending-challenge');
+      return;
+    }
+    const expected = syncMac(loadSyncSecret(), pending.nonce, pending.label);
+    if (!macsEqual(mac, expected)) {
+      this.failHandshake(peerId, ws, 'bad-mac');
+      return;
+    }
+
+    // Valid — retire the challenge. (A re-challenge of an already-authenticated
+    // peer simply refreshes the proof; auth state is unchanged.)
+    clearTimeout(pending.timer);
+    this.pendingChallenges.delete(peerId);
+    const alreadyAuthed = this.authenticatedPeers.has(peerId);
+    if (!alreadyAuthed) {
+      if (this.authenticatedPeers.size >= NodeTransport.MAX_AUTHENTICATED) {
+        const oldest = this.authenticatedPeers.values().next().value;
+        if (oldest !== undefined) this.authenticatedPeers.delete(oldest); // bounded Set
+      }
+      this.authenticatedPeers.add(peerId);
+      console.log(`[Transport] Peer ${peerId} authenticated`);
+    }
+    pending.onAuthenticated?.();
+  }
+
+  private failHandshake(peerId: string, ws: any, why: string) {
+    this.recordHandshakeFailure(peerId, why);
+    this.clearChallenge(peerId);
+    this.authenticatedPeers.delete(peerId);
+    try { ws.close(4401, 'auth-failed'); } catch { /* socket already gone */ }
+  }
+
+  /** ≤ 64 entries; window fixed at first failure of the current 5 min. */
+  private recordHandshakeFailure(peerId: string, why: string) {
+    const now = Date.now();
+    let entry = this.handshakeFailures.get(peerId);
+    if (!entry || entry.until < now) {
+      if (this.handshakeFailures.size >= NodeTransport.MAX_FAILURE_ENTRIES) {
+        const oldest = this.handshakeFailures.keys().next().value;
+        if (oldest !== undefined) this.handshakeFailures.delete(oldest);
+      }
+      entry = { fails: 0, until: now + NodeTransport.HANDSHAKE_LOCKOUT_MS };
+      this.handshakeFailures.set(peerId, entry);
+    }
+    entry.fails += 1;
+    console.warn(`[Transport] Handshake failure ${entry.fails}/${NodeTransport.MAX_HANDSHAKE_FAILS} for ${peerId} (${why})`);
+  }
+
+  /** Exposed for tests: 3 failures inside 5 min → locked until `until`. */
+  private isLockedOut(peerId: string): boolean {
+    const entry = this.handshakeFailures.get(peerId);
+    return !!entry && entry.fails >= NodeTransport.MAX_HANDSHAKE_FAILS && entry.until >= Date.now();
+  }
+
+  private clearChallenge(peerId: string) {
+    const pending = this.pendingChallenges.get(peerId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pendingChallenges.delete(peerId);
+    }
+  }
+
+  handleIncomingMessage(data: string, peerId: string, ws: WebSocket) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data);
+    } catch (e) {
+      console.error(`[Transport] Non-JSON frame from ${peerId}`);
+      return;
+    }
+
+    // §2.1-C3 enforcement point: handshake frames are handled BEFORE the
+    // packet schema, and an unauthenticated peer may only ever complete (or
+    // fail) the handshake — its SYNC_DELTA can never reach handleSyncDelta.
+    if (parsed !== null && typeof parsed === 'object') {
+      const type = (parsed as Record<string, unknown>).type;
+      if (type === 'SYNC_CHALLENGE') {
+        this.respondToChallenge(parsed as Record<string, unknown>, peerId, ws);
+        return;
+      }
+      if (type === 'SYNC_AUTH') {
+        this.handleAuthFrame(parsed as Record<string, unknown>, peerId, ws);
+        return;
+      }
+    }
+
+    if (!this.authenticatedPeers.has(peerId)) {
+      const type = (parsed as Record<string, unknown> | null)?.type;
+      console.warn(`[Transport] Dropping ${String(type)} frame from unauthenticated peer ${peerId}`);
+      return;
+    }
+
+    try {
       const packet = SyncPacketSchema.parse(parsed);
 
       if (packet.type === 'SYNC_OFFER') {
@@ -224,6 +416,7 @@ export class NodeTransport {
   }
 
   private send(peerId: string, message: string) {
+    if (!this.authenticatedPeers.has(peerId)) return; // §2.1-C3
     const ws = this.activeConnections.get(peerId);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(message);
@@ -257,13 +450,16 @@ export class NodeTransport {
           clearTimeout(timeoutId);
           console.log(`[Transport] Connected manually to ${peerId}`);
           this.activeConnections.set(peerId, ws);
-          
-          // Send an initial SYNC_OFFER
-          const offer: SyncPacket = {
-            type: 'SYNC_OFFER',
-            lastSyncTimestamp: this.lastPolledTimestamp
-          };
-          ws.send(JSON.stringify(offer));
+
+          // §2.1-C3: challenge FIRST — SYNC_OFFER only after the peer proves
+          // it knows the sync secret.
+          this.beginHandshake(peerId, ws, () => {
+            const offer: SyncPacket = {
+              type: 'SYNC_OFFER',
+              lastSyncTimestamp: this.lastPolledTimestamp
+            };
+            ws.send(JSON.stringify(offer));
+          });
           resolve();
         }
       });
