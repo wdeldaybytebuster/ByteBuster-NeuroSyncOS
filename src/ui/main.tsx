@@ -4,6 +4,7 @@ import { OSLayout } from './layouts/OSLayout';
 import { ThemeProvider } from './components/ThemeContext';
 import { DeveloperModeProvider } from './components/DeveloperModeContext';
 import { PreferencesProvider } from './components/PreferencesContext';
+import { AuthGate } from './components/AuthGate';
 import './index.css';
 import '@xyflow/react/dist/style.css';
 
@@ -12,7 +13,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ThemeProvider>
       <DeveloperModeProvider>
         <PreferencesProvider>
-          <OSLayout />
+          <AuthGate>
+            <OSLayout />
+          </AuthGate>
         </PreferencesProvider>
       </DeveloperModeProvider>
     </ThemeProvider>

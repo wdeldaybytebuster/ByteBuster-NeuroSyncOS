@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Globe, Folder, Plus, X, FolderOpen, Pencil, Archive } from 'lucide-react';
 import { useNavigation } from '../layouts/OSLayout';
 import { PathBrowser } from './PathBrowser';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface Project {
   id: string;
@@ -49,7 +49,7 @@ export function ProjectSwitcher() {
   const [pathBrowserTarget, setPathBrowserTarget] = useState<'create' | 'edit'>('create');
 
   const fetchProjects = () => {
-    fetch(`${API}/api/projects`)
+    authFetch(`${API}/api/projects`)
       .then(r => r.json())
       .then(data => { if (data.projects) setProjects(data.projects); })
       .catch(() => {})
@@ -63,7 +63,7 @@ export function ProjectSwitcher() {
     setCreating(true);
     setCreateError('');
     try {
-      const res = await fetch(`${API}/api/projects`, {
+      const res = await authFetch(`${API}/api/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim(), projectRootPath: newRootPath.trim() || undefined })
@@ -95,7 +95,7 @@ export function ProjectSwitcher() {
     e.stopPropagation();
     if (!window.confirm(`Archive "${p.name}"? It will disappear from this list but its data isn't deleted.`)) return;
     try {
-      const res = await fetch(`${API}/api/projects/${p.id}/archive`, { method: 'POST' });
+      const res = await authFetch(`${API}/api/projects/${p.id}/archive`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setProjects(prev => prev.filter(proj => proj.id !== p.id));
@@ -109,7 +109,7 @@ export function ProjectSwitcher() {
     setEditSaving(true);
     setEditError('');
     try {
-      const res = await fetch(`${API}/api/projects/${editingId}`, {
+      const res = await authFetch(`${API}/api/projects/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -4,8 +4,8 @@ import { useDeveloperMode } from './DeveloperModeContext';
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
 import { useNavigation } from '../layouts/OSLayout';
 import type { DAGNode } from '../../core/basevault/schema';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 export interface DAGProposalPayload {
   id: string;
@@ -48,7 +48,7 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
       // Route through NeuroSync's own backend (ScopeLogic interview) — never a raw
       // LLM endpoint and never a hardcoded credential. The backend owns prompt
       // construction, provider routing (RouteSwitch), and per-project session state.
-      const res = await fetch(`${API}/api/scopelogic/prompt`, {
+      const res = await authFetch(`${API}/api/scopelogic/prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg, projectId: activeProjectId || null }),

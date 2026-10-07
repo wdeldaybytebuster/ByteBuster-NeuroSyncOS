@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { API, authFetch, openEventSource } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface Telemetry {
   temperature: number | null;
@@ -15,7 +15,7 @@ export function GovernorUI() {
   const [showWarning, setShowWarning] = useState(false);
 
   useEffect(() => {
-    const eventSource = new EventSource(`${API}/api/system/metrics`);
+    const eventSource = openEventSource(`${API}/api/system/metrics`);
     
     eventSource.addEventListener('telemetry', (e) => {
       const data = JSON.parse(e.data) as Telemetry;
@@ -44,7 +44,7 @@ export function GovernorUI() {
   const applyConfig = async () => {
     if (!targetWorkers) return;
     try {
-      await fetch(`${API}/api/system/config`, {
+      await authFetch(`${API}/api/system/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ maxWorkers: targetWorkers })

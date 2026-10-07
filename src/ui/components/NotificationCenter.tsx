@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, AlertTriangle, Key, FileUp } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface OsTodo {
   id: string;
@@ -21,7 +21,7 @@ export function NotificationCenter() {
 
   const fetchTodos = async () => {
     try {
-      const res = await fetch(`${API}/api/todos`);
+      const res = await authFetch(`${API}/api/todos`);
       const data = await res.json();
       if (data.success) {
         setTodos(data.todos);
@@ -45,7 +45,7 @@ export function NotificationCenter() {
   const handleResolve = async (todoId: string, actionType: string) => {
     try {
       const resolutionData = resolutionInputs[todoId] || (actionType === 'APPROVE_BOOLEAN' ? 'approved' : '');
-      await fetch(`${API}/api/todos/resolve`, {
+      await authFetch(`${API}/api/todos/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ todoId, resolutionData })

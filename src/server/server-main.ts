@@ -12,7 +12,6 @@ import { injectLLMGenerator, ReflectionExecutor } from '../core/memory/cerebro/r
 import path from 'path';
 import fs from 'fs';
 
-import { readiness } from '../core/basevault/readiness';
 import { log } from '../core/observability/logger';
 import { bootstrapGlobalOKFSeed } from '../core/okf/global-seed';
 
@@ -33,6 +32,11 @@ const app = new Hono();
 // a foreign origin never receives Access-Control-Allow-Origin). Registered
 // before auth so OPTIONS preflight short-circuits ahead of the 401.
 import { perimeterCors, rateLimitMiddleware } from './perimeter';
+// §2.2-C6 — the operator credential gate replaces the old anonymous block
+// (readiness-derived gating + header-presence-only check both failed open).
+import { authMiddleware } from './auth/middleware';
+import { registerAuthRoutes } from './auth/routes';
+import { isSetupComplete, openSetupWindow, setBindAddress } from './auth/credentials';
 app.use('/*', perimeterCors);
 
 const transport = new NodeTransport();
@@ -61,27 +65,17 @@ mdnsDiscovery.start();
 // without importing this file (it binds a port).
 app.use('/*', rateLimitMiddleware);
 
-app.use('/*', async (c, next) => {
-  // 3. Authentication & Exemptions (§2.1-C6 replaces this block wholesale)
-  const path = c.req.path;
-  if (path.startsWith('/health') || path.startsWith('/api/config')) {
-    return next();
-  }
-  
-  if (!readiness.configured) {
-    return next();
-  }
-
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) {
-    // If we're hitting API routes but missing auth
-    if (path.startsWith('/api/')) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-  }
-
-  await next();
-});
+// §2.2-C6 — mount order matters: cors (:pre-35) → rate limit → auth → routes.
+// The old block here checked `readiness.configured` (an orphaned LLM setting)
+// and only the PRESENCE of an Authorization header — it never inspected the
+// value, so `Authorization: Bearer garbage` passed. authMiddleware instead
+// derives state from system_settings.operator_credential, verifies Bearer
+// sessions / short-lived ?ticket= streams (§2.2 b/c), and refuses non-loopback
+// sources outright while no credential exists (§2.2(i)). The dead /health and
+// /api/config exemptions went with the old block — neither is a route.
+app.use('/*', authMiddleware);
+// /api/auth/* is public inside the middleware (it OWNS those 401s).
+registerAuthRoutes(app);
 
 // Initialize Database
 initDB();
@@ -623,7 +617,14 @@ function dbSetting(key: string): string | undefined {
   }
 }
 const bindAddress = process.env.NEUROSYNC_BIND || dbSetting('bind_address') || '127.0.0.1';
+// §2.2(a)(3)(4) — the setup route needs both facts (loopback bind + boot-time
+// window) before it will accept a first-run credential. Both are set here,
+// before serve() accepts a single request; the window itself lives in RAM
+// (one eMMC write total: the credential hash at setup — Axiom 6 cost table).
+setBindAddress(bindAddress);
+openSetupWindow();
 log.info(`[NeuroSync] API Gateway running on http://${bindAddress === '127.0.0.1' ? 'localhost' : bindAddress}:${port} (bind ${bindAddress})`);
+log.info(`[NeuroSync] Auth: ${isSetupComplete() ? 'enabled' : 'disabled (setup pending)'}`);
 
 import { ModelDiscovery } from '../core/routeswitch/discovery';
 ModelDiscovery.fetchModels().then(() => {

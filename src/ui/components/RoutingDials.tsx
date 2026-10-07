@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { authFetch } from '../lib/api';
 
 type Priority = 'Speed' | 'Cost' | 'Intelligence';
 
@@ -10,7 +11,7 @@ export function RoutingDials() {
   const [statusMsg, setStatusMsg] = useState('');
 
   useEffect(() => {
-    fetch('/api/system/settings')
+    authFetch('/api/system/settings')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.settings) {
@@ -28,7 +29,7 @@ export function RoutingDials() {
     setLoading(true);
     setStatusMsg('');
     try {
-      const res = await fetch('/api/system/settings', {
+      const res = await authFetch('/api/system/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model_selector_priority: newPriority })

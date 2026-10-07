@@ -67,6 +67,26 @@ export const RATE_LIMIT_MAX = 120;          // requests per window
 export const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 export const RATE_LIMIT_MAX_KEYS = 1024;    // hard memory bound (~100 KB)
 
+/**
+ * Loopback classification — one definition shared by the auth middleware
+ * (source check), the setup route (bind-address check, §2.2(a) condition 4)
+ * and C5's bind policy. `127.0.0.0/8`, `::1` and IPv4-mapped `::ffff:127.x`
+ * are local; everything else is not.
+ *
+ * `unknown` / absent is treated as LOCAL on purpose: hono's scratch test
+ * requests carry no socket, whereas @hono/node-server and @hono/node-ws always
+ * supply `c.env.incoming.socket.remoteAddress` for a real TCP/WS connection —
+ * so in production this branch is unreachable and never widens the perimeter.
+ */
+export function isLoopbackAddress(addr: string | undefined | null): boolean {
+  if (addr === undefined || addr === null || addr === '' || addr === 'unknown') return true;
+  const ip = addr.startsWith('::ffff:') ? addr.slice(7) : addr;
+  if (ip === '::1' || ip === 'localhost') return true;
+  if (ip === '0.0.0.0' || ip === '::') return false; // wildcard binds are NOT loopback
+  return /^127(\.\d{1,3}){3}$/.test(ip) || ip === '127.0.0.1';
+}
+
+
 /** Bounded rate-limit store: ip → { count, resetTime }. Never exceeds 1024. */
 export const rateLimits = new Map<string, { count: number; resetTime: number }>();
 

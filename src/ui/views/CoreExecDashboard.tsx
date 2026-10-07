@@ -9,8 +9,8 @@ import { GovernorUI } from '../components/GovernorUI';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { Play, AlertTriangle, Clock, CheckCircle, Cpu, RefreshCw, Shield, Power, BarChart2, Activity } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#00E5FF';
 
 // Shared glow box class for center canvas sections
@@ -69,7 +69,7 @@ function DashboardView() {
   useEffect(() => {
     setLoadingRuns(true);
     const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
-    fetch(`${API}/api/basevault/runs${qs}`)
+    authFetch(`${API}/api/basevault/runs${qs}`)
       .then(r => r.json())
       .then(data => { if (data.runs) setRuns(data.runs); })
       .catch(() => {})
@@ -80,7 +80,7 @@ function DashboardView() {
   useEffect(() => {
     const fetchMetrics = () => {
       const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
-      fetch(`${API}/api/coreexec/metrics${qs}`)
+      authFetch(`${API}/api/coreexec/metrics${qs}`)
         .then(r => r.json())
         .then(data => { if (!data.error) setMetrics(data); })
         .catch(() => {});
@@ -93,7 +93,7 @@ function DashboardView() {
   // Fetch tasks for selected run
   useEffect(() => {
     if (!selectedRun) { setTasks([]); return; }
-    fetch(`${API}/api/coreexec/run/${selectedRun}/status`)
+    authFetch(`${API}/api/coreexec/run/${selectedRun}/status`)
       .then(r => r.json())
       .then(data => { if (data.tasks) setTasks(data.tasks); })
       .catch(() => {});
@@ -103,7 +103,7 @@ function DashboardView() {
   useEffect(() => {
     if (!selectedRun) return;
     const iv = setInterval(() => {
-      fetch(`${API}/api/coreexec/run/${selectedRun}/status`)
+      authFetch(`${API}/api/coreexec/run/${selectedRun}/status`)
         .then(r => r.json())
         .then(data => { if (data.tasks) setTasks(data.tasks); })
         .catch(() => {});
@@ -298,14 +298,14 @@ function SetupView() {
 
   // Fetch existing cron jobs
   useEffect(() => {
-    fetch(`${API}/api/scheduler/jobs`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/scheduler/jobs`).then(r => r.json()).then(d => {
       if (d.success && d.jobs) setCronJobs(d.jobs);
     }).catch(() => {});
   }, []);
 
   // Load settings from backend
   useEffect(() => {
-    fetch(`${API}/api/system/settings`)
+    authFetch(`${API}/api/system/settings`)
       .then(r => r.json())
       .then(data => {
         if (data.success && data.settings) {
@@ -320,7 +320,7 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ max_iterations: maxIterations, auto_requeue: autoRequeue, snapshot_on_crash: snapshotOnCrash })
@@ -412,7 +412,7 @@ function SetupView() {
                   if (!cronName.trim() || !cronExpr.trim()) { setCronError('Name and expression required'); return; }
                   setCronSaving(true); setCronError('');
                   try {
-                    const res = await fetch(`${API}/api/scheduler/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: activeProjectId || 'global', name: cronName, cronSchedule: cronExpr }) });
+                    const res = await authFetch(`${API}/api/scheduler/jobs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: activeProjectId || 'global', name: cronName, cronSchedule: cronExpr }) });
                     const d = await res.json();
                     if (d.success) { setCronName(''); setCronExpr(''); setCronJobs(prev => [...prev, { id: d.id, name: cronName, cron: cronExpr, nextTick: null }]); }
                     else { setCronError(d.error || 'Failed'); }
@@ -440,7 +440,7 @@ function SetupView() {
                   <div className="text-xs font-bold text-white">{job.name}</div>
                   <div className="text-[10px] font-mono text-gray-500">{job.cron} {job.nextTick ? `• Next: ${new Date(job.nextTick).toLocaleString()}` : ''}</div>
                 </div>
-                <button onClick={async () => { await fetch(`${API}/api/scheduler/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {}); setCronJobs(prev => prev.filter(j => j.id !== job.id)); }} className="text-[9px] font-bold text-red-400 hover:text-red-300 px-2 py-1 rounded border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 transition-all">Remove</button>
+                <button onClick={async () => { await authFetch(`${API}/api/scheduler/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {}); setCronJobs(prev => prev.filter(j => j.id !== job.id)); }} className="text-[9px] font-bold text-red-400 hover:text-red-300 px-2 py-1 rounded border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 transition-all">Remove</button>
               </div>
             ))}
           </div>

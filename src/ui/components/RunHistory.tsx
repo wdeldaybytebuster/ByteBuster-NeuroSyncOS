@@ -12,6 +12,7 @@ interface RunHistoryProps {
 }
 
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
+import { authFetch } from '../lib/api';
 
 const STATUS_COLORS: Record<string, string> = {
   pending:   'var(--text-muted)',
@@ -48,7 +49,7 @@ export function RunHistory({ onSelectRun, activeRunId }: RunHistoryProps) {
   useEffect(() => {
     const fetchRuns = async () => {
       try {
-        const res = await fetch('http://localhost:3743/api/basevault/runs');
+        const res = await authFetch('http://localhost:3743/api/basevault/runs');
         const data = await res.json();
         if (data.runs) setRuns(data.runs);
         setError(null);

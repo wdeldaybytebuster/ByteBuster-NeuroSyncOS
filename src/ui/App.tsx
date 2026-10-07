@@ -23,6 +23,7 @@ import { isReservedDAGPrompt } from '../core/system-reserved';
 import { Statusline } from './components/Statusline';
 import { useHardwareTier } from '../core/scoutdaemon/hardware-context';
 import { WorkflowDAGLayoutSchema } from '../core/basevault/schema';
+import { authFetch, openEventSource } from './lib/api';
 
 // ── Custom Node ────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ export default function App() {
   useEffect(() => {
     if (!activeRunId) return;
 
-    const sse = new EventSource('http://localhost:3743/api/scout/events');
+    const sse = openEventSource('http://localhost:3743/api/scout/events');
 
     sse.addEventListener('scout-update', (event) => {
       try {
@@ -208,7 +209,7 @@ export default function App() {
     let snapshotNodes: Node[] | null = null;
     let snapshotEdges: Edge[] | null = null;
     try {
-      const res  = await fetch(`http://localhost:3743/api/basevault/run/${runId}`, { signal: controller.signal });
+      const res  = await authFetch(`http://localhost:3743/api/basevault/run/${runId}`, { signal: controller.signal });
       const data = await res.json();
       if (!data.run) return;
       if (seq !== rehydrateSeqRef.current) return; // superseded
@@ -318,7 +319,7 @@ export default function App() {
     const controller = new AbortController();
     retryAbortRef.current = controller;
     try {
-      const res = await fetch(`http://localhost:3743/api/coreexec/retry/${runId}`, {
+      const res = await authFetch(`http://localhost:3743/api/coreexec/retry/${runId}`, {
         method: 'POST',
         signal: controller.signal,
       });
@@ -340,7 +341,7 @@ export default function App() {
     if (!currentProposal) return;
     setRunStatus('running');
     try {
-      const res  = await fetch('http://localhost:3743/api/coreexec/approve', {
+      const res  = await authFetch('http://localhost:3743/api/coreexec/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposal: currentProposal }),
@@ -363,7 +364,7 @@ export default function App() {
   // ── Session reset (Unit 19) ────────────────────────────────────────────────
 
   const handleReset = async () => {
-    await fetch('http://localhost:3743/api/scopelogic/reset', { method: 'POST' });
+    await authFetch('http://localhost:3743/api/scopelogic/reset', { method: 'POST' });
     setCurrentProposal(null);
     setRunStatus('idle');
     setActiveRunId(null);
@@ -479,7 +480,7 @@ export default function App() {
             if (!r) return;
             const ctrl = new AbortController();
             try {
-              const res  = await fetch(`http://localhost:3743/api/basevault/run/${r}`, { signal: ctrl.signal });
+              const res  = await authFetch(`http://localhost:3743/api/basevault/run/${r}`, { signal: ctrl.signal });
               const data = await res.json();
               const task = (data.tasks || []).find((t: any) => t.id === inspector.nodeId);
               setInspector(prev => prev ? { ...prev, status: task?.status || prev.status, outputData: task?.output_data ?? prev.outputData } : prev);

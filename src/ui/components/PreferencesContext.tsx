@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { coerceBooleanSetting } from './preferencesLogic';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface PreferencesContextType {
   /** Global SmartTips kill-switch (UnifiedMasterDashboard Set-up, Control C).
@@ -39,7 +39,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     const needsSmartTips = localStorage.getItem('ns-smart-tips') === null;
     const needsReducedMotion = localStorage.getItem('ns-reduced-motion') === null;
     if (!needsSmartTips && !needsReducedMotion) return;
-    fetch(`${API}/api/system/settings`)
+    authFetch(`${API}/api/system/settings`)
       .then(r => r.json())
       .then(d => {
         if (!d?.success || !d.settings) return;
@@ -65,7 +65,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const setSmartTipsEnabled = (value: boolean) => {
     setSmartTipsEnabledState(value);
     localStorage.setItem('ns-smart-tips', String(value));
-    fetch(`${API}/api/system/settings`, {
+    authFetch(`${API}/api/system/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ smart_tips: value }),
@@ -75,7 +75,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const setReducedMotion = (value: boolean) => {
     setReducedMotionState(value);
     localStorage.setItem('ns-reduced-motion', String(value));
-    fetch(`${API}/api/system/settings`, {
+    authFetch(`${API}/api/system/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reduced_motion: value }),
