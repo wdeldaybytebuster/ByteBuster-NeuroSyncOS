@@ -398,13 +398,32 @@ systemRouter.get('/proof-badges', (c) => {
 // absolute file); for a URL server we attempt a bounded-timeout HTTP connect.
 // Each connection is returned with a real reachability status instead of the
 // old behaviour of echoing the stored/default list back as if all were live.
+//
+// §5-3 (DEFERRED, plan §2.3 C9): this probe still uses a RAW `fetch` — routing
+// it through `egressFetch` is explicitly deferred to §5-3 (see the fetch site
+// below). The `allowPrivate` flag is PLUMBING ONLY today: it is stored on the
+// connection config so that when §5-3 lands, a private/internal MCP endpoint
+// can be declared and honoured without another settings-shape migration. It
+// gates NOTHING yet — do not treat it as a security control.
 
 const MCP_PROBE_TIMEOUT_MS = 2000;
 
 async function probeMcpReachability(
-  conn: { command?: string; url?: string; transport?: string; [k: string]: unknown }
+  conn: {
+    command?: string;
+    url?: string;
+    transport?: string;
+    /** §5-3 plumbing (see header) — reserved; NOT enforced while the probe stays raw. */
+    allowPrivate?: boolean;
+    [k: string]: unknown;
+  },
 ): Promise<'reachable' | 'unreachable' | 'unknown'> {
   // URL-based (http/sse) server — real bounded HTTP connect.
+  //
+  // §5-3 (DEFERRED): raw fetch on purpose — converting this probe to the
+  // governed egress door (address gates + kill switch) is a §5-3 item, not a
+  // C9 item. C9 deliberately leaves this site untouched so the deferred audit
+  // item remains visible (and allowlisted) rather than half-fixed.
   if (typeof conn.url === 'string' && conn.url.trim() !== '') {
     try {
       const res = await fetch(conn.url, {

@@ -1,8 +1,17 @@
-import { initDB } from '../basevault/db';
-import { ZenDiscoveryService } from './discovery';
-import { classifyComplexity } from './model-selector/classifier';
-import { selectOptimalModel } from './model-selector/dynamic-router';
-import { executeWithFallback } from './router';
+/**
+ * Operator-only LIVE integration test (§2.3 C9 — moved out of src/ so it can
+ * never be imported by production code or the test runner).
+ *
+ * Makes REAL network calls (Zen discovery + OpenRouter completion). Runs only
+ * when explicitly requested:  NEUROSYNC_LIVE_TEST=1 npx tsx scripts/live-test.ts
+ * (the plan's env-var name contained a typo — "NEurOSYNC" — implemented here
+ * correctly as NEUROSYNC_LIVE_TEST; documented as a §2.3 C9 deviation).
+ */
+import { initDB } from '../src/core/basevault/db';
+import { ZenDiscoveryService } from '../src/core/routeswitch/discovery';
+import { classifyComplexity } from '../src/core/routeswitch/model-selector/classifier';
+import { selectOptimalModel } from '../src/core/routeswitch/model-selector/dynamic-router';
+import { executeWithFallback } from '../src/core/routeswitch/router';
 
 async function runTest() {
   console.log('--- LIVE INTEGRATION TEST START ---');
@@ -46,4 +55,10 @@ async function runTest() {
   }
 }
 
-runTest().catch(console.error);
+if (process.env.NEUROSYNC_LIVE_TEST === '1') {
+  runTest().catch(console.error);
+} else {
+  console.log(
+    '[live-test] skipped — set NEUROSYNC_LIVE_TEST=1 to run (this script makes real network calls).',
+  );
+}

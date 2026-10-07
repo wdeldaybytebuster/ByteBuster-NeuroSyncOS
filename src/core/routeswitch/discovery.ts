@@ -1,4 +1,5 @@
 import { db } from '../basevault/db';
+import { egressFetch, externalCallsAllowed } from './egress';
 
 export interface ModelInfo {
   id: string;
@@ -29,13 +30,32 @@ export class ModelDiscovery {
   private static cachedModels: ModelInfo[] = [];
 
   public static async fetchModels(): Promise<void> {
+    // §2.3 C9 — kill-switch early exit. Boot (server-main.ts:630) calls this
+    // unconditionally; when external calls are disabled the whole operation is
+    // skipped — zero DNS, zero socket, zero eMMC boot cost (Axiom 6). Covers
+    // EVERY caller, not just boot (the plan's server-main.ts:547-552 refs
+    // were stale).
+    if (!(await externalCallsAllowed())) {
+      console.log('[discovery] external calls disabled — skipping OpenRouter model fetch');
+      return;
+    }
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/models');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch models: ${response.statusText}`);
+      // §2.3 C9 — through the governed egress door (RouteSwitch boundary):
+      // scheme/DNS/policy gates + 5s timeout + 1 MB body cap.
+      const res = await egressFetch(
+        'https://openrouter.ai/api/v1/models',
+        { timeoutMs: 5000, maxBytes: 1_000_000 },
+        { action: 'fetch', owner: 'boot-discovery' },
+      );
+      if (res.blocked) {
+        throw new Error(`Egress blocked (${res.blocked}) for OpenRouter models`);
       }
-      
-      const data = await response.json();
+      if (!res.ok) {
+        // statusText is gone with the Response object — status carries the signal.
+        throw new Error(`Failed to fetch models: HTTP ${res.status}`);
+      }
+
+      const data = JSON.parse(res.text);
       
       const models = data.data.map((model: any) => ({
         id: model.id,
@@ -114,12 +134,25 @@ export class OpenCodeDiscoveryService {
   private static cachedModelIds: string[] = [];
 
   public static async fetchModelIds(): Promise<void> {
+    // §2.3 C9 — same kill-switch early exit as fetchModels above.
+    if (!(await externalCallsAllowed())) {
+      console.log('[discovery] external calls disabled — skipping OpenCode Zen model fetch');
+      return;
+    }
     try {
-      const response = await fetch('https://opencode.ai/zen/v1/models');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch OpenCode Zen models: ${response.statusText}`);
+      // §2.3 C9 — governed egress (same gates/timeout/cap as fetchModels).
+      const res = await egressFetch(
+        'https://opencode.ai/zen/v1/models',
+        { timeoutMs: 5000, maxBytes: 1_000_000 },
+        { action: 'fetch', owner: 'routeswitch/zen-discovery' },
+      );
+      if (res.blocked) {
+        throw new Error(`Egress blocked (${res.blocked}) for OpenCode Zen models`);
       }
-      const data = await response.json();
+      if (!res.ok) {
+        throw new Error(`Failed to fetch OpenCode Zen models: HTTP ${res.status}`);
+      }
+      const data = JSON.parse(res.text);
       this.cachedModelIds = (data.data || []).map((m: any) => m.id as string);
     } catch (error) {
       console.error('Error fetching OpenCode Zen models:', error);

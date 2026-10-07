@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { db } from '../basevault/db';
+import { egressFetch } from '../routeswitch/egress';
 
 /**
  * GitNexusClient — optional, best-effort bridge to a locally-installed GitNexus
@@ -125,9 +126,18 @@ function spawnEvalServer(port: number): Promise<{ child: ChildProcess; host: str
 
 /** Fetch the list of repos the eval-server currently has indexed. */
 async function fetchIndexedRepos(host: string, port: number): Promise<string[]> {
-  const res = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
+  // §2.3 C9 — through the governed egress door. `internal: true`: this is a
+  // LOCAL eval-server (host from its READY line, assumed loopback), so the
+  // kill switch must not sever it — but a non-loopback host is now blocked
+  // (fail-safe: returns [] → the modality degrades silently, per the file
+  // contract above). timeoutMs replaces the old inline AbortSignal.
+  const res = await egressFetch(
+    `http://${host}:${port}/health`,
+    { internal: true, timeoutMs: QUERY_TIMEOUT_MS },
+    { action: 'fetch', owner: 'memory/gitnexus-client' },
+  );
   if (!res.ok) return [];
-  const body = (await res.json()) as { repos?: string[] };
+  const body = JSON.parse(res.text) as { repos?: string[] };
   return body.repos ?? [];
 }
 
@@ -202,11 +212,18 @@ async function ensureServer(): Promise<RunningServer | null> {
 async function gracefulKill(s: RunningServer): Promise<void> {
   try {
     if (s.shutdownToken) {
-      await fetch(`http://${s.host}:${s.port}/shutdown`, {
-        method: 'POST',
-        headers: { 'X-Shutdown-Token': s.shutdownToken },
-        signal: AbortSignal.timeout(3000),
-      }).catch(() => undefined);
+      // §2.3 C9 — governed egress (internal/local); egress never throws, and
+      // the outer catch below still ignores anything unexpected.
+      await egressFetch(
+        `http://${s.host}:${s.port}/shutdown`,
+        {
+          internal: true,
+          timeoutMs: 3000,
+          method: 'POST',
+          headers: { 'X-Shutdown-Token': s.shutdownToken },
+        },
+        { action: 'fetch', owner: 'memory/gitnexus-client' },
+      );
     }
   } catch { /* ignore */ }
   try { s.child.kill('SIGKILL'); } catch { /* ignore */ }
@@ -227,15 +244,23 @@ export async function queryCodeStructure(query: string, projectId?: string): Pro
     const repo = resolveRepoForCall(s.repos, projectId);
     if (!repo) return null;
 
-    const res = await fetch(`http://${s.host}:${s.port}/tool/query`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ search_query: query, repo, limit: 2 }),
-      signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
-    });
+    // §2.3 C9 — governed egress (internal/local eval-server, POST JSON);
+    // timeoutMs replaces the old inline AbortSignal. On any block/failure
+    // egress returns ok:false → null → silent degradation (never throws).
+    const res = await egressFetch(
+      `http://${s.host}:${s.port}/tool/query`,
+      {
+        internal: true,
+        timeoutMs: QUERY_TIMEOUT_MS,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ search_query: query, repo, limit: 2 }),
+      },
+      { action: 'fetch', owner: 'memory/gitnexus-client' },
+    );
 
     if (!res.ok) return null;
-    const text = (await res.text()).trim();
+    const text = res.text.trim();
     if (!text) return null;
     // The eval-server renders disambiguation / lookup failures as plain-text
     // bodies starting with "Error:" — treat those as "no result", not context.

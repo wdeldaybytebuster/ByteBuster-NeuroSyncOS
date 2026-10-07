@@ -27,7 +27,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import fs from 'node:fs';
 import { db, initDB, dbPath } from '../basevault/db';
-import { egressFetch } from './egress';
+import { egressFetch, externalCallsAllowed } from './egress';
 
 const HELLO = 'hello-egress'; // 12 bytes
 const BIG_TARGET = 10 * 1024 * 1024; // 10 MB
@@ -39,6 +39,10 @@ describe('egressFetch (§2.3 C8-a / §4.3 governed egress)', () => {
   let hits: number;
 
   const url = (p: string): string => `http://127.0.0.1:${port}${p}`;
+
+  // §2.3 C9 — cross-origin hop inspection (set by routes/tests 19/20 below).
+  let peerPort = 0;
+  let hop1Auth = null as string | null;
 
   beforeAll(async () => {
     initDB();
@@ -83,6 +87,30 @@ describe('egressFetch (§2.3 C8-a / §4.3 governed egress)', () => {
       } else if (p === '/redirect-metadata') {
         res.writeHead(302, { location: 'http://169.254.169.254/latest/' });
         res.end();
+      } else if (p === '/echo') {
+        // §2.3 C9 — echoes the request back so tests can prove that
+        // method/headers/body survive the egress layer, and carries a custom
+        // response header so tests can prove response headers are surfaced.
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          res.writeHead(200, { 'content-type': 'application/json', 'x-c9-response': 'probe' });
+          res.end(JSON.stringify({
+            method: req.method,
+            header: req.headers['x-c9-probe'] ?? null,
+            body: Buffer.concat(chunks).toString('utf8'),
+          }));
+        });
+      } else if (p.startsWith('/redirect307/')) {
+        // §2.3 C9 — 307 must preserve method+body on a same-origin hop.
+        res.writeHead(307, { location: decodeURIComponent(p.slice('/redirect307/'.length)) });
+        res.end();
+      } else if (p === '/redirect-peer') {
+        // §2.3 C9 — hop 1 records the Authorization header it received; the
+        // 302 then sends hop 2 to a DIFFERENT origin (peer server, other port).
+        hop1Auth = req.headers.authorization ?? null;
+        res.writeHead(302, { location: `http://127.0.0.1:${peerPort}/collect` });
+        res.end();
       } else {
         res.writeHead(404, { 'content-type': 'text/plain' });
         res.end('not here');
@@ -94,6 +122,7 @@ describe('egressFetch (§2.3 C8-a / §4.3 governed egress)', () => {
 
   beforeEach(() => {
     hits = 0;
+    hop1Auth = null;
     db.prepare('DELETE FROM projects').run();
     db.prepare(
       "DELETE FROM system_settings WHERE key IN ('tool_registry','agent_permissions','external_calls_enabled')",
@@ -284,5 +313,103 @@ describe('egressFetch (§2.3 C8-a / §4.3 governed egress)', () => {
     expect(res.ok).toBe(false);
     expect(res.blocked).toBe('internal-not-loopback');
     expect(hits).toBe(1); // vetted BEFORE following — metadata host never contacted
+  });
+
+  // ── §2.3 C9 — request passthrough + response-header surfacing ────────────
+  // Router/cerebro/gitnexus POST JSON through egress; the router also needs
+  // the response headers (rate-limit state) back. Without these, converted
+  // callers would silently degrade to GET-with-no-headers.
+  it('17: POST method/headers/body reach the wire unchanged; response headers returned', async () => {
+    const res = await egressFetch(
+      url('/echo'),
+      {
+        internal: true,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-c9-probe': 'ping' },
+        body: JSON.stringify({ hello: 'c9' }),
+      },
+      { action: 'fetch', owner: 'test' },
+    );
+    expect(res.ok).toBe(true);
+    const echo = JSON.parse(res.text) as { method: string | null; header: string | null; body: string };
+    expect(echo.method).toBe('POST');
+    expect(echo.header).toBe('ping');
+    expect(echo.body).toBe('{"hello":"c9"}');
+    // EgressResult.headers — the rate-limit/telemetry header surface.
+    expect(res.headers['x-c9-response']).toBe('probe');
+    expect(res.headers['content-type']).toContain('application/json');
+  });
+
+  // ── §2.3 C9 — public kill-switch predicate (discovery's early exit) ───────
+  it("18: externalCallsAllowed() mirrors the kill switch (false/'0'/absent)", async () => {
+    const setKV = (v: string): void => {
+      db.prepare("INSERT OR REPLACE INTO system_settings (key, value) VALUES ('external_calls_enabled', ?)").run(v);
+    };
+    setKV('false');
+    expect(await externalCallsAllowed()).toBe(false);
+    setKV('0');
+    expect(await externalCallsAllowed()).toBe(false);
+    setKV('1');
+    expect(await externalCallsAllowed()).toBe(true);
+    db.prepare("DELETE FROM system_settings WHERE key = 'external_calls_enabled'").run();
+    expect(await externalCallsAllowed()).toBe(true); // never written → default: allowed
+  });
+
+  // ── §2.3 C9 — cross-origin redirect must NOT carry custom headers ────────
+  // SSRF credential-leak control: an Authorization token minted for OUR API
+  // must never ride a redirect to a third-party origin.
+  it('19: cross-origin redirect forwards headers to hop 1 but drops them for hop 2', async () => {
+    let peerSawAuth: string | null = null;
+    let peerSawProbe: string | null = null;
+    const peer = http.createServer((req, res) => {
+      peerSawAuth = req.headers.authorization ?? null;
+      const probe = req.headers['x-c9-probe'];
+      peerSawProbe = typeof probe === 'string' ? probe : null;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ collected: true }));
+    });
+    await new Promise<void>((resolve) => peer.listen(0, '127.0.0.1', resolve));
+    peerPort = (peer.address() as AddressInfo).port;
+    try {
+      const res = await egressFetch(
+        url('/redirect-peer'),
+        {
+          internal: true,
+          headers: { authorization: 'Bearer super-secret', 'x-c9-probe': 'ping' },
+        },
+        { action: 'fetch', owner: 'test' },
+      );
+      expect(res.ok).toBe(true);
+      expect(JSON.parse(res.text)).toEqual({ collected: true });
+      // Hop 1 (our own origin) received the credentials…
+      expect(hop1Auth).toBe('Bearer super-secret');
+      // …hop 2 (peer origin) must NOT — custom headers are dropped cross-origin.
+      expect(peerSawAuth).toBeNull();
+      expect(peerSawProbe).toBeNull();
+      expect(hits).toBe(1); // peer is a separate server — main saw only hop 1
+    } finally {
+      peer.closeAllConnections();
+      await new Promise<void>((resolve) => peer.close(() => resolve()));
+    }
+  });
+
+  // ── §2.3 C9 — 307 same-origin preserves method + body + headers ──────────
+  it('20: 307 same-origin keeps POST/JSON body/custom headers through the hop', async () => {
+    const res = await egressFetch(
+      url(`/redirect307/${encodeURIComponent('/echo')}`),
+      {
+        internal: true,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-c9-probe': 'ping' },
+        body: JSON.stringify({ hello: 'c9' }),
+      },
+      { action: 'fetch', owner: 'test' },
+    );
+    expect(res.ok).toBe(true);
+    const echo = JSON.parse(res.text) as { method: string | null; header: string | null; body: string };
+    expect(echo.method).toBe('POST');
+    expect(echo.header).toBe('ping');
+    expect(echo.body).toBe('{"hello":"c9"}');
+    expect(hits).toBe(2); // /redirect307 + /echo
   });
 });
