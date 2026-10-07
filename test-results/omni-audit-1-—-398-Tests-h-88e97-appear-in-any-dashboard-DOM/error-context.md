@@ -6,8 +6,8 @@
 
 # Test info
 
-- Name: omni-audit.spec.ts >> 5 — CerebroDashboard fires a real /api/cerebro/learning-approvals request
-- Location: e2e/omni-audit.spec.ts:163:5
+- Name: omni-audit.spec.ts >> 1 — "398 Tests" hardcoded string does not appear in any dashboard DOM
+- Location: e2e/omni-audit.spec.ts:47:5
 
 # Error details
 
@@ -21,6 +21,78 @@ Call log:
 # Test source
 
 ```ts
+  1   | /**
+  2   |  * NeuroSync OS — Auditor E2E Omni-Testing Suite
+  3   |  *
+  4   |  * Mandate: Verify that ALL "UI theatre" (fake/hardcoded data) has been
+  5   |  * physically eradicated from the rendered DOM. Playwright must spin up
+  6   |  * the real servers, open each dashboard, and assert against LIVE endpoints.
+  7   |  *
+  8   |  * Rules:
+  9   |  *  - No string "398 Tests" may appear in the DOM.
+  10  |  *  - No string "Pruned (30d): 0" (hardcoded zero) may appear as static text.
+  11  |  *  - Math.random() jitter must not cause the DB Stats value to jump > 500
+  12  |  *    between two consecutive reads from the same endpoint response.
+  13  |  *  - /api/todos and /api/cerebro/learning-approvals must be fetched and
+  14  |  *    rendered (network interception confirms the response is consumed).
+  15  |  */
+  16  | 
+  17  | import { test, expect, Page } from '@playwright/test';
+  18  | 
+  19  | const API = 'http://localhost:3743';
+  20  | const UI  = 'http://localhost:3742';
+  21  | 
+  22  | // ── Helpers ────────────────────────────────────────────────────────────────────
+  23  | 
+  24  | /** Navigate to the OS layout and click a sidebar module */
+  25  | async function goToModule(page: Page, moduleId: string) {
+  26  |   await page.goto(UI, { waitUntil: 'networkidle' });
+  27  | 
+  28  |   // The OS loads into OSLayout — click the matching nav button
+  29  |   // Module buttons are rendered by ModuleRouter with the module id as key.
+  30  |   // The sidebar has <button> elements whose <span> text matches MODULE_LABELS.
+  31  |   // We target by data-module attribute if present, else fall back to role text.
+  32  |   // Open the left sidebar (hamburger) first — it starts collapsed on desktop
+  33  |   const hamburger = page.locator('header button[aria-label="Toggle module navigation"]').first();
+  34  |   if (await hamburger.isVisible({ timeout: 5_000 }).catch(() => false)) {
+  35  |     await hamburger.click();
+  36  |     await page.waitForTimeout(400);
+  37  |   }
+  38  |   const sidebarBtn = page.locator(`aside button`).filter({ hasText: new RegExp(moduleId, 'i') }).first();
+  39  |   if (await sidebarBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+  40  |     await sidebarBtn.click();
+  41  |     await page.waitForTimeout(800);
+  42  |   }
+  43  | }
+  44  | 
+  45  | // ── Test 1: No fake "398 Tests" string anywhere in the DOM ─────────────────────
+  46  | 
+  47  | test('1 — "398 Tests" hardcoded string does not appear in any dashboard DOM', async ({ page }) => {
+> 48  |   await page.goto(UI, { waitUntil: 'networkidle' });
+      |              ^ Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3742/
+  49  | 
+  50  |   // Open sidebar
+  51  |   const hamburger = page.locator('header button[aria-label="Toggle module navigation"]').first();
+  52  |   if (await hamburger.isVisible({ timeout: 5_000 }).catch(() => false)) {
+  53  |     await hamburger.click();
+  54  |     await page.waitForTimeout(400);
+  55  |   }
+  56  | 
+  57  |   const modules = ['master', 'coreexec', 'basevault', 'routeswitch', 'scopelogic', 'portgrid', 'scoutdaemon', 'cerebro'];
+  58  |   const nav = page.locator('aside button');
+  59  | 
+  60  |   for (const mod of modules) {
+  61  |     const btn = nav.filter({ hasText: new RegExp(mod, 'i') }).first();
+  62  |     const visible = await btn.isVisible({ timeout: 3_000 }).catch(() => false);
+  63  |     if (visible) {
+  64  |       await btn.click();
+  65  |       await page.waitForTimeout(600);
+  66  |     }
+  67  | 
+  68  |     const bodyText = await page.locator('body').innerText();
+  69  |     expect(
+  70  |       bodyText,
+  71  |       `Module "${mod}" DOM contains banned hardcoded string "398 Tests"`
   72  |     ).not.toContain('398 Tests');
   73  |   }
   74  | });
@@ -98,61 +170,4 @@ Call log:
   146 |   let todosRequestFired = false;
   147 | 
   148 |   page.on('request', req => {
-  149 |     if (req.url().includes('/api/todos') || req.url().includes('/api/basevault/todos')) {
-  150 |       todosRequestFired = true;
-  151 |     }
-  152 |   });
-  153 | 
-  154 |   await page.goto(UI, { waitUntil: 'networkidle' });
-  155 | 
-  156 |   await clickModule(page, 'portgrid');
-  157 | 
-  158 |   expect(todosRequestFired).toBe(true);
-  159 | });
-  160 | 
-  161 | // ── Test 5: /api/cerebro/learning-approvals is fetched ────────────────────────
-  162 | 
-  163 | test('5 — CerebroDashboard fires a real /api/cerebro/learning-approvals request', async ({ page }) => {
-  164 |   let approvalsRequestFired = false;
-  165 | 
-  166 |   page.on('request', req => {
-  167 |     if (req.url().includes('/api/cerebro/learning-approvals') || req.url().includes('/api/cerebro')) {
-  168 |       approvalsRequestFired = true;
-  169 |     }
-  170 |   });
-  171 | 
-> 172 |   await page.goto(UI, { waitUntil: 'networkidle' });
-      |              ^ Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3742/
-  173 | 
-  174 |   await clickModule(page, 'cerebro');
-  175 | 
-  176 |   expect(approvalsRequestFired).toBe(true);
-  177 | });
-  178 | 
-  179 | // ── Test 6: UnifiedMasterDashboard renders without fake static data ────────────
-  180 | 
-  181 | test('6 — UnifiedMasterDashboard loads and contains no known fake strings', async ({ page }) => {
-  182 |   await page.goto(UI, { waitUntil: 'networkidle' });
-  183 | 
-  184 |   await clickModule(page, 'master');
-  185 | 
-  186 |   const bodyText = await page.locator('body').innerText();
-  187 | 
-  188 |   // Full banned-string audit for UnifiedMasterDashboard
-  189 |   const bannedStrings = [
-  190 |     '398 Tests',
-  191 |     'PASSING (398',
-  192 |     'v3.2.1',           // fabricated version string
-  193 |     'TODO: wire up',    // dev placeholder text
-  194 |     'placeholder',      // generic placeholders
-  195 |   ];
-  196 | 
-  197 |   for (const banned of bannedStrings) {
-  198 |     expect(
-  199 |       bodyText,
-  200 |       `UnifiedMasterDashboard DOM contains banned string: "${banned}"`
-  201 |     ).not.toContain(banned);
-  202 |   }
-  203 | });
-  204 | 
 ```

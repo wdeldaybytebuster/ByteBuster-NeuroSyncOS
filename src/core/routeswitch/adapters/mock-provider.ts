@@ -15,6 +15,8 @@ export class MockProvider implements LLMProvider {
     supportsStructuredOutput: true,
     contextWindowTokens: 4096,
     inputTypes: ['text'],
+    // Mock is a synthetic offline provider — no real modality.
+    // Declared explicitly for P8-4 contract completeness.
   };
 
   // Synthetic offline provider: no real inference, so no real per-token

@@ -7,7 +7,7 @@ export default defineConfig({
   workers: 1, // single worker — RAM-constrained edge node
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'e2e-report' }]],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:3742',
     headless: true,
   },
 });

@@ -3,13 +3,14 @@ import { Minimize2, Maximize2 } from 'lucide-react';
 import { useDeveloperMode } from './DeveloperModeContext';
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
 import { useNavigation } from '../layouts/OSLayout';
+import type { DAGNode } from '../../core/basevault/schema';
 
 const API = 'http://localhost:3743';
 
 export interface DAGProposalPayload {
   id: string;
   status: string;
-  nodes: { id: string; dependencies: string[]; prompt: string }[];
+  nodes: DAGNode[];
 }
 
 interface ScopeLogicChatProps {

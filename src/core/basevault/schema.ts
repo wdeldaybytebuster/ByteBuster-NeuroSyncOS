@@ -17,6 +17,43 @@ export const SyncEventLogSchema = z.object({
 });
 export type SyncEventLog = z.infer<typeof SyncEventLogSchema>;
 
+export const HarnessProfileEnum = z.enum(['planner', 'generator', 'evaluator', 'scout', 'default']);
+export type HarnessProfile = z.infer<typeof HarnessProfileEnum>;
+
+export const DAGNodeSchema = z.object({
+  id: z.string(),
+  dependencies: z.array(z.string()),
+  prompt: z.string().optional(),
+  harness_profile: HarnessProfileEnum.optional().default('default'),
+  plugin: z.string().optional(),
+  params: z.any().optional(),
+});
+export type DAGNode = z.infer<typeof DAGNodeSchema>;
+
+export const DAGLayoutSchema = z.object({
+  nodes: z.array(DAGNodeSchema),
+});
+export type DAGLayout = z.infer<typeof DAGLayoutSchema>;
+
+// Blocked runs retain their audit reason instead of a node list. Accept this
+// explicit legacy sentinel alongside executable layouts when parsing run rows.
+export const BlockedDAGLayoutSchema = z.object({
+  blocked_by_validation: z.literal(true),
+  reason: z.string(),
+  origin_workflow_id: z.string(),
+  origin: z.enum(['scheduler', 'approve-route']),
+});
+
+/** Parse the SQLite JSON-string representation into a validated typed layout. */
+export const WorkflowDAGLayoutSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.union([DAGLayoutSchema, BlockedDAGLayoutSchema]));
+
 // §3.3 — 'blocked-by-validation' is a sentinel status written by
 // escalateBlockedDAGToOsTodos (§3.4) into the FK-satisfying placeholder
 // workflow_runs row. It must be a first-class enum member so that
@@ -24,8 +61,8 @@ export type SyncEventLog = z.infer<typeof SyncEventLogSchema>;
 // the RunHistory UI can render these rows distinctly from 'failed' runs.
 export const WorkflowRunSchema = z.object({
   id: z.string().uuid(),
-  project_id: z.string().uuid(),
-  dag_layout: z.string(), // JSON string representing the DAG template
+  project_id: z.string(),
+  dag_layout: WorkflowDAGLayoutSchema,
   status: z.enum(['pending', 'running', 'completed', 'failed', 'blocked-by-validation']),
   created_at: z.number().int(),
 });

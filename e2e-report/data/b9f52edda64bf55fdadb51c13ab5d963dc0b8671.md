@@ -6,8 +6,8 @@
 
 # Test info
 
-- Name: omni-audit.spec.ts >> 5 — CerebroDashboard fires a real /api/cerebro/learning-approvals request
-- Location: e2e/omni-audit.spec.ts:163:5
+- Name: omni-audit.spec.ts >> 6 — UnifiedMasterDashboard loads and contains no known fake strings
+- Location: e2e/omni-audit.spec.ts:181:5
 
 # Error details
 
@@ -21,16 +21,6 @@ Call log:
 # Test source
 
 ```ts
-  72  |     ).not.toContain('398 Tests');
-  73  |   }
-  74  | });
-  75  | 
-  76  | /**
-  77  |  * Open the left sidebar (hamburger) and click a module by text match.
-  78  |  * The sidebar starts collapsed on desktop; this expands it first.
-  79  |  */
-  80  | async function clickModule(page: Page, moduleText: string) {
-  81  |   const hamburger = page.locator('header button[aria-label="Toggle module navigation"]').first();
   82  |   if (await hamburger.isVisible({ timeout: 5_000 }).catch(() => false)) {
   83  |     await hamburger.click();
   84  |     await page.waitForTimeout(400);
@@ -121,8 +111,7 @@ Call log:
   169 |     }
   170 |   });
   171 | 
-> 172 |   await page.goto(UI, { waitUntil: 'networkidle' });
-      |              ^ Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3742/
+  172 |   await page.goto(UI, { waitUntil: 'networkidle' });
   173 | 
   174 |   await clickModule(page, 'cerebro');
   175 | 
@@ -132,7 +121,8 @@ Call log:
   179 | // ── Test 6: UnifiedMasterDashboard renders without fake static data ────────────
   180 | 
   181 | test('6 — UnifiedMasterDashboard loads and contains no known fake strings', async ({ page }) => {
-  182 |   await page.goto(UI, { waitUntil: 'networkidle' });
+> 182 |   await page.goto(UI, { waitUntil: 'networkidle' });
+      |              ^ Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3742/
   183 | 
   184 |   await clickModule(page, 'master');
   185 | 

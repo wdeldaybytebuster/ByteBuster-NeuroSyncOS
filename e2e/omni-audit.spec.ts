@@ -17,7 +17,7 @@
 import { test, expect, Page } from '@playwright/test';
 
 const API = 'http://localhost:3743';
-const UI  = 'http://localhost:5173';
+const UI  = 'http://localhost:3742';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -29,10 +29,16 @@ async function goToModule(page: Page, moduleId: string) {
   // Module buttons are rendered by ModuleRouter with the module id as key.
   // The sidebar has <button> elements whose <span> text matches MODULE_LABELS.
   // We target by data-module attribute if present, else fall back to role text.
-  const sidebarBtn = page.locator(`nav button`).filter({ hasText: new RegExp(moduleId, 'i') }).first();
+  // Open the left sidebar (hamburger) first — it starts collapsed on desktop
+  const hamburger = page.locator('header button[aria-label="Toggle module navigation"]').first();
+  if (await hamburger.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await hamburger.click();
+    await page.waitForTimeout(400);
+  }
+  const sidebarBtn = page.locator(`aside button`).filter({ hasText: new RegExp(moduleId, 'i') }).first();
   if (await sidebarBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await sidebarBtn.click();
-    await page.waitForTimeout(800); // let the view render
+    await page.waitForTimeout(800);
   }
 }
 
@@ -41,8 +47,15 @@ async function goToModule(page: Page, moduleId: string) {
 test('1 — "398 Tests" hardcoded string does not appear in any dashboard DOM', async ({ page }) => {
   await page.goto(UI, { waitUntil: 'networkidle' });
 
+  // Open sidebar
+  const hamburger = page.locator('header button[aria-label="Toggle module navigation"]').first();
+  if (await hamburger.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await hamburger.click();
+    await page.waitForTimeout(400);
+  }
+
   const modules = ['master', 'coreexec', 'basevault', 'routeswitch', 'scopelogic', 'portgrid', 'scoutdaemon', 'cerebro'];
-  const nav = page.locator('nav button');
+  const nav = page.locator('aside button');
 
   for (const mod of modules) {
     const btn = nav.filter({ hasText: new RegExp(mod, 'i') }).first();
@@ -60,17 +73,27 @@ test('1 — "398 Tests" hardcoded string does not appear in any dashboard DOM', 
   }
 });
 
+/**
+ * Open the left sidebar (hamburger) and click a module by text match.
+ * The sidebar starts collapsed on desktop; this expands it first.
+ */
+async function clickModule(page: Page, moduleText: string) {
+  const hamburger = page.locator('header button[aria-label="Toggle module navigation"]').first();
+  if (await hamburger.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await hamburger.click();
+    await page.waitForTimeout(400);
+  }
+  const btn = page.locator('aside button').filter({ hasText: new RegExp(moduleText, 'i') }).first();
+  if (await btn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await btn.click();
+    await page.waitForTimeout(1000);
+  }
+}
+
 // ── Test 2: "Pruned (30d): 0" static hardcode is gone ─────────────────────────
 
 test('2 — CerebroDashboard does not render static "Pruned (30d): 0"', async ({ page }) => {
-  await page.goto(UI, { waitUntil: 'networkidle' });
-
-  // Navigate to cerebro
-  const cerebro = page.locator('nav button').filter({ hasText: /cerebro/i }).first();
-  if (await cerebro.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await cerebro.click();
-    await page.waitForTimeout(1_000);
-  }
+  await clickModule(page, 'cerebro');
 
   const bodyText = await page.locator('body').innerText();
 
@@ -95,27 +118,24 @@ test('3 — BaseVaultDashboard DB checkpoint count is deterministic (no Math.ran
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ success: true, pageCount: 1024, checkpoint: 42, walFrames: 7 }),
+      body: JSON.stringify({ success: true, latencyMs: 0.05, walCheckpoints: 42 }),
     });
   });
 
   await page.goto(UI, { waitUntil: 'networkidle' });
 
-  const basevault = page.locator('nav button').filter({ hasText: /basevault|base vault/i }).first();
-  if (await basevault.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await basevault.click();
-    await page.waitForTimeout(1_500);
-  }
+  await clickModule(page, 'basevault');
 
-  // Read the checkpoint stat once, wait for a re-render cycle, read again.
-  const statLocator = page.locator('text=/42|checkpoint/i').first();
+  // Read the WAL checkpoint stat once, wait for a re-render cycle, read again.
+  // The widget renders it as "{walCheckpoints}/min" (e.g. "42/min").
+  const statLocator = page.locator('text=/42\/min/i').first();
   const firstRead  = await statLocator.textContent({ timeout: 5_000 }).catch(() => null);
 
-  await page.waitForTimeout(2_000); // wait for a possible re-poll
+  await page.waitForTimeout(3_500); // wait for a possible re-poll (3s interval)
   const secondRead = await statLocator.textContent({ timeout: 5_000 }).catch(() => null);
 
   // If Math.random() were still present the value would drift. With the
-  // mocked deterministic 42, it must stay equal.
+  // mocked deterministic 42, it must stay equal across both reads.
   expect(firstRead).toEqual(secondRead);
   expect(firstRead).not.toBeNull();
 });
@@ -133,12 +153,7 @@ test('4 — PortGridDashboard fires a real /api/todos request and renders the re
 
   await page.goto(UI, { waitUntil: 'networkidle' });
 
-  // Navigate to portgrid
-  const portgrid = page.locator('nav button').filter({ hasText: /portgrid/i }).first();
-  if (await portgrid.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await portgrid.click();
-    await page.waitForTimeout(2_000); // allow fetch + render
-  }
+  await clickModule(page, 'portgrid');
 
   expect(todosRequestFired).toBe(true);
 });
@@ -156,11 +171,7 @@ test('5 — CerebroDashboard fires a real /api/cerebro/learning-approvals reques
 
   await page.goto(UI, { waitUntil: 'networkidle' });
 
-  const cerebro = page.locator('nav button').filter({ hasText: /cerebro/i }).first();
-  if (await cerebro.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await cerebro.click();
-    await page.waitForTimeout(2_000);
-  }
+  await clickModule(page, 'cerebro');
 
   expect(approvalsRequestFired).toBe(true);
 });
@@ -170,11 +181,7 @@ test('5 — CerebroDashboard fires a real /api/cerebro/learning-approvals reques
 test('6 — UnifiedMasterDashboard loads and contains no known fake strings', async ({ page }) => {
   await page.goto(UI, { waitUntil: 'networkidle' });
 
-  const master = page.locator('nav button').filter({ hasText: /master|unified/i }).first();
-  if (await master.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await master.click();
-    await page.waitForTimeout(1_000);
-  }
+  await clickModule(page, 'master');
 
   const bodyText = await page.locator('body').innerText();
 

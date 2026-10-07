@@ -1,4 +1,6 @@
 import { db } from '../basevault/db';
+import { DAGLayoutSchema, type DAGNode, type HarnessProfile } from '../basevault/schema';
+export type { DAGNode } from '../basevault/schema';
 import { claimTask } from './queue';
 import { scoutEmitter } from '../scoutdaemon/sse';
 import { workerPool } from './worker-pool';
@@ -18,7 +20,14 @@ import type { WorkerOutput } from './worker';
  * has its own private ':memory:' DB and no shared singletons), so generic tasks are
  * executed here on the main thread instead of the worker pool. Null until wired.
  */
-type CoreExecGenerateFn = (prompt: string) => Promise<string>;
+export interface CoreExecGenerationRequest {
+  /** One isolated generation request; no conversational history is accepted. */
+  prompt: string;
+  harnessProfile: HarnessProfile;
+  /** Parsed Planner output_data for direct dependencies, keyed by Planner node id. */
+  plannerOutputs?: Record<string, unknown>;
+}
+type CoreExecGenerateFn = (request: CoreExecGenerationRequest) => Promise<string>;
 let _coreExecGenerateFn: CoreExecGenerateFn | null = null;
 
 /**
@@ -28,20 +37,6 @@ let _coreExecGenerateFn: CoreExecGenerateFn | null = null;
  */
 export function injectCoreExecGenerateFn(fn: CoreExecGenerateFn | null): void {
   _coreExecGenerateFn = fn;
-}
-
-export interface DAGNode {
-  id: string;
-  dependencies: string[];
-}
-
-/** §2.1 — Extended DAG node shape carrying the prompt that drives worker dispatch. */
-export interface PromptedDAGNode extends DAGNode {
-  prompt: string;
-}
-
-export interface DAGLayout {
-  nodes: DAGNode[];
 }
 
 let isDispatching = false;
@@ -140,19 +135,32 @@ async function dispatchLoop() {
   for (const run of runs) {
     const isTrackA = (run.track || 'track2') === 'track1';
 
+    let layout: ReturnType<typeof DAGLayoutSchema.parse>;
+    try {
+      const rawLayout = typeof run.dag_layout === 'string' ? JSON.parse(run.dag_layout) : run.dag_layout;
+      layout = DAGLayoutSchema.parse(rawLayout);
+    } catch (error) {
+      log.error(`[CoreExec] Refusing malformed DAG layout for run ${run.id}:`, error);
+      db.prepare("UPDATE workflow_runs SET status = 'failed', completed_at = ? WHERE id = ?").run(Date.now(), run.id);
+      const resolve = runResolvers.get(run.id);
+      if (resolve) { resolve(false); runResolvers.delete(run.id); }
+      continue;
+    }
+
     if (run.status === 'pending') {
       db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ?").run(run.id);
       scoutEmitter.emit('update', { type: 'RUN_STATUS', runId: run.id, status: 'running' });
       run.status = 'running';
-      
+
       const worktreePath = run.project_id ? WorktreeIsolation.createRunWorktree(run.project_id, run.id) : null;
       if (worktreePath) {
         log.info(`[CoreExec] Worktree created for run ${run.id}: ${worktreePath}`);
       }
     }
 
-    const layout = JSON.parse(run.dag_layout);
-    const tasks = db.prepare('SELECT id, status, claim_lease FROM tasks WHERE run_id = ?').all(run.id) as any[];
+    const tasks = db.prepare('SELECT id, status, claim_lease, output_data FROM tasks WHERE run_id = ?').all(run.id) as {
+      id: string; status: string; claim_lease: number | null; output_data: string | null;
+    }[];
     const completedTaskIds = new Set(tasks.filter(t => t.status === 'completed').map(t => t.id));
     const failedTaskIds = new Set(tasks.filter(t => t.status === 'failed').map(t => t.id));
 
@@ -172,7 +180,7 @@ async function dispatchLoop() {
       continue;
     }
 
-    const eligibleTasks = layout.nodes.filter((node: any) => {
+    const eligibleTasks = layout.nodes.filter((node: DAGNode) => {
       const taskObj = tasks.find(t => t.id === node.id);
       if (!taskObj) return false;
       const isUnclaimed = taskObj.status === 'unclaimed';
@@ -229,14 +237,15 @@ async function dispatchLoop() {
       scoutEmitter.emit('update', { type: 'TASK_STATUS', runId: run.id, taskId: node.id, status: 'claimed' });
       
       const prompt = node.prompt ?? '';
+      const harnessProfile = node.harness_profile;
       
       // Async IIFE execution for the task to avoid blocking the dispatch loop
       (async () => {
-        const parkTask = (errorMsg: string) => {
+        const parkTask = (errorMsg: string, retryable = true) => {
           const taskRow = db.prepare('SELECT retry_count FROM tasks WHERE id = ?').get(node.id) as { retry_count: number } | undefined;
           const retryCount = taskRow?.retry_count || 0;
 
-          if (retryCount < 3) {
+          if (retryable && retryCount < 3) {
             db.prepare("UPDATE tasks SET status = 'unclaimed', claim_lease = NULL, retry_count = retry_count + 1 WHERE id = ?").run(node.id);
             scoutEmitter.emit('update', { type: 'TASK_STATUS', runId: run.id, taskId: node.id, status: 'unclaimed', retryCount: retryCount + 1, error: errorMsg });
             triggerDispatch();
@@ -258,14 +267,66 @@ async function dispatchLoop() {
 
         try {
           const directive = classifyDirective(prompt);
-          const isLLMGeneric = directive.action === 'generic' && prompt.trim() !== '';
+          const isRoleGeneration = harnessProfile === 'planner' || harnessProfile === 'generator' || harnessProfile === 'scout';
+          const isLLMGeneric = isRoleGeneration || (directive.action === 'generic' && prompt.trim() !== '');
 
           let result: WorkerOutput;
+          if (harnessProfile === 'evaluator') {
+            // This is a capability/configuration failure, not a transient model
+            // error. Fail closed immediately rather than retrying an absent MCP
+            // bridge three times or silently running without evaluation tools.
+            parkTask('Evaluator harness unavailable: no local MCP protocol client/tool bridge is configured', false);
+            return;
+          }
           if (isLLMGeneric) {
             if (!_coreExecGenerateFn) {
               throw new Error('CoreExec generateFn not injected — cannot execute generic LLM task');
             }
-            const content = await _coreExecGenerateFn(prompt);
+
+            const plannerOutputs: Record<string, unknown> = {};
+            if (harnessProfile === 'generator') {
+              const plannerDependencies = node.dependencies.filter((dependencyId) => {
+                const dependencyNode = layout.nodes.find((candidate) => candidate.id === dependencyId);
+                return dependencyNode?.harness_profile === 'planner';
+              });
+              if (plannerDependencies.length === 0) {
+                parkTask(`Generator node ${node.id} must depend directly on at least one Planner node`, false);
+                return;
+              }
+              for (const dependencyId of plannerDependencies) {
+                const dependencyTask = tasks.find((task) => task.id === dependencyId && task.status === 'completed');
+                if (!dependencyTask?.output_data) {
+                  parkTask(`Generator node ${node.id} is missing completed Planner output_data for dependency ${dependencyId}`, false);
+                  return;
+                }
+                try {
+                  plannerOutputs[dependencyId] = JSON.parse(dependencyTask.output_data);
+                } catch {
+                  parkTask(`Generator node ${node.id} has invalid Planner output_data for dependency ${dependencyId}`, false);
+                  return;
+                }
+              }
+            }
+
+            // A new single-turn prompt is constructed for every role call.
+            // Generator receives only direct Planner output_data (never history).
+            const isolatedPrompt = harnessProfile === 'generator'
+              ? [
+                  'You are the Generator harness. This is a fresh, single-turn generation request. Do not assume or retain any previous conversation.',
+                  'Use only the structured Planner output_data supplied below as planning context.',
+                  `Planner output_data: ${JSON.stringify(plannerOutputs)}`,
+                  `Generation task: ${prompt}`,
+                ].join('\n\n')
+              : harnessProfile === 'planner'
+                ? `You are the Planner harness. This is a fresh, single-turn planning request. Return a concise structured plan as JSON.\n\nPlanning task: ${prompt}`
+                : harnessProfile === 'scout'
+                  ? `You are the Scout harness. This is a fresh, single-turn observation request. Report observations only; do not apply changes.\n\nObservation task: ${prompt}`
+                  : prompt;
+            const content = await _coreExecGenerateFn({
+              prompt: isolatedPrompt,
+              harnessProfile,
+              ...(harnessProfile === 'generator' ? { plannerOutputs } : {}),
+            });
             result = {
               status: 'success', action: 'generic',
               taskId: node.id,
@@ -279,8 +340,9 @@ async function dispatchLoop() {
               taskId: node.id,
               prompt,
               directive,
-              plugin: (node as any).plugin,
-              params: (node as any).params
+              harnessProfile,
+              plugin: node.plugin,
+              params: node.params
             }) as WorkerOutput;
 
             if (result && typeof result === 'object' && result.status === 'error') {

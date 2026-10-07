@@ -1,5 +1,15 @@
 import crypto from 'crypto';
 import { ValidatorLogic } from './validator';
+import type { HarnessProfile } from '../basevault/schema';
+
+export interface DAGProposalNode {
+  id: string;
+  dependencies: string[];
+  prompt: string;
+  harness_profile?: HarnessProfile;
+  plugin?: string;
+  params?: unknown;
+}
 
 export interface InterviewMessage {
   role: 'user' | 'system';
@@ -10,7 +20,7 @@ export interface InterviewMessage {
 export interface DAGProposal {
   id: string;
   status: 'draft';
-  nodes: { id: string; dependencies: string[]; prompt: string }[];
+  nodes: DAGProposalNode[];
   /**
    * Model self-reported confidence (0.0-1.0) that the DAG captures the user's
    * intent. Present ONLY on the LLM-driven generation path; left undefined on
@@ -77,6 +87,9 @@ const DAG_PROPOSAL_SCHEMA = {
           id: { type: 'string' },
           dependencies: { type: 'array', items: { type: 'string' } },
           prompt: { type: 'string' },
+          harness_profile: { type: 'string', enum: ['planner', 'generator', 'evaluator', 'scout', 'default'] },
+          plugin: { type: 'string' },
+          params: {},
         },
         required: ['id', 'dependencies', 'prompt'],
       },
@@ -218,6 +231,8 @@ Output ONLY a single JSON object of this exact shape:
 
 Rules:
 - Each node is one atomic step. "dependencies" lists the ids of nodes that must run first (use an empty array for entry nodes).
+- Optionally set "harness_profile" to planner, generator, evaluator, scout, or default. Nodes without the field default to the default harness.
+- Optionally set "plugin" and "params" for a registered deterministic plugin. Evaluator nodes require a configured local browser MCP bridge.
 - Tailor nodes and their wiring to the SPECIFIC requirements discussed in the transcript.
 - Do NOT reference internal system services (ScopeLogic, BaseVault, RouteSwitch, CoreExec, ScoutDaemon, PortGrid, Cerebro) as nodes.
 - Do NOT emit destructive SQL (INSERT/UPDATE/DELETE/DROP/...) or shell/exec commands.
@@ -279,6 +294,11 @@ ${conversationContext}`;
             ? n.dependencies.filter((d: any) => typeof d === 'string')
             : [],
           prompt: n.prompt,
+          ...(typeof n.harness_profile === 'string' && ['planner', 'generator', 'evaluator', 'scout', 'default'].includes(n.harness_profile)
+            ? { harness_profile: n.harness_profile as HarnessProfile }
+            : {}),
+          ...(typeof n.plugin === 'string' ? { plugin: n.plugin } : {}),
+          ...(Object.prototype.hasOwnProperty.call(n, 'params') ? { params: n.params as unknown } : {}),
         }));
 
       if (nodes.length === 0) return null;

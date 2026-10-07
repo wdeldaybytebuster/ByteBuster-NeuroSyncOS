@@ -14,6 +14,8 @@ export interface RouteRequest {
   prompt: string;
   estimatedTokens: number;
   responseSchema?: any;
+  /** Disable automatic OKF retrieval when a caller must provide explicit context only. */
+  useKnowledgeContext?: boolean;
   /**
    * OQ-001: Optional model-selection hints. When both are provided, RouteSwitchEngine
    * will call selectOptimalModel() to pick the best available model before routing.
@@ -267,7 +269,7 @@ export class RouteSwitchEngine {
 
     // OKF Context Injection: resolve relevant knowledge from the graph and prepend to prompt
     let enrichedPrompt = request.prompt;
-    if (request.prompt.length > 20) { // Skip trivial/test prompts
+    if (request.useKnowledgeContext !== false && request.prompt.length > 20) { // Skip trivial/test prompts or explicit context-isolated calls
       try {
         const contextChunks = OKFGraphQuery.resolveContext(request.prompt, request.projectId);
         if (contextChunks.length > 0) {

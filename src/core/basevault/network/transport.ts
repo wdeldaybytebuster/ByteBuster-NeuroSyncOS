@@ -139,9 +139,9 @@ export class NodeTransport {
 
   private handleSyncDelta(deltaPacket: SyncPacket) {
     if (!deltaPacket.deltas || deltaPacket.deltas.length === 0) return;
-    
+
     console.log(`[Transport] Applying ${deltaPacket.deltas.length} delta events`);
-    
+
     db.transaction(() => {
       // Prevent sync loop reflection
       db.prepare(`UPDATE sync_lock SET is_syncing = 1 WHERE rowid = 1`).run();
@@ -149,22 +149,42 @@ export class NodeTransport {
         for (const delta of deltaPacket.deltas!) {
           try {
             const payload = JSON.parse(delta.payload);
-          
-          if (delta.action === 'INSERT' || delta.action === 'UPDATE') {
-            const keys = Object.keys(payload);
-            const placeholders = keys.map(() => '?').join(', ');
-            const stmt = db.prepare(`INSERT OR REPLACE INTO ${delta.table_name} (${keys.join(', ')}) VALUES (${placeholders})`);
-            stmt.run(...Object.values(payload));
-          } else if (delta.action === 'DELETE') {
-            if (payload.id) {
-               db.prepare(`DELETE FROM ${delta.table_name} WHERE id = ?`).run(payload.id);
+
+            if (delta.action === 'INSERT' || delta.action === 'UPDATE') {
+              // MERGE for all tables: sync trigger payloads may carry only a subset
+              // of columns (e.g. sync_tasks_update omits output_data, started_at).
+              // A blind INSERT OR REPLACE would wipe those columns or trigger
+              // NOT NULL constraint failures (e.g. workflow_runs.dag_layout).
+              // Do a read-modify-write so existing columns are preserved.
+              const existing = db.prepare(`SELECT * FROM ${delta.table_name} WHERE id = ?`).get(payload.id) as Record<string, any> | undefined;
+              if (existing) {
+                // UPDATE: merge payload columns onto the existing row
+                const sets: string[] = [];
+                const params: any[] = [];
+                for (const [key, value] of Object.entries(payload)) {
+                  sets.push(`${key} = ?`);
+                  params.push(value);
+                }
+                params.push(payload.id);
+                db.prepare(`UPDATE ${delta.table_name} SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+                console.log(`[Transport] Merged UPDATE on ${delta.table_name} row ${payload.id}`);
+              } else {
+                // INSERT: full payload is safe here (no existing row to preserve)
+                const keys = Object.keys(payload);
+                const placeholders = keys.map(() => '?').join(', ');
+                db.prepare(`INSERT OR REPLACE INTO ${delta.table_name} (${keys.join(', ')}) VALUES (${placeholders})`).run(...Object.values(payload));
+                console.log(`[Transport] Inserted ${delta.table_name} row ${payload.id}`);
+              }
+            } else if (delta.action === 'DELETE') {
+              if (payload.id) {
+                db.prepare(`DELETE FROM ${delta.table_name} WHERE id = ?`).run(payload.id);
+              }
             }
+            console.log(`[Transport] Applied ${delta.action} on ${delta.table_name}`);
+          } catch (e) {
+            console.error(`[Transport] Failed to apply delta to ${delta.table_name}:`, e);
           }
-          console.log(`[Transport] Applied ${delta.action} on ${delta.table_name}`);
-        } catch (e) {
-          console.error(`[Transport] Failed to apply delta to ${delta.table_name}:`, e);
         }
-      }
       } finally {
         db.prepare(`UPDATE sync_lock SET is_syncing = 0 WHERE rowid = 1`).run();
       }
