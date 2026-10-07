@@ -17,6 +17,7 @@ import {
   SQL_INTERPOLATION_ALLOWLIST,
   scanForRawFetch,
   checkNoRawEgress,
+  RAW_EGRESS_ALLOWLIST,
   checkServerBindsLoopback,
 } from './audit-ground-rules';
 
@@ -436,6 +437,21 @@ describe('audit-ground-rules', () => {
       fs.writeFileSync(full, 'const r = await fetch(url);');
       const result = checkNoRawEgress(repo);
       expect(result.passed).toBe(false);
+    });
+
+    it('pins the allowlist: gate + adapters (§5-14) + gitnexus + system (§5-3) + browser api', () => {
+      // Guards against SILENT allowlist growth/shrink — mirrors the check-6
+      // pin. Deferred entries (§5-14 adapters/, §5-3 system.ts) stay visible
+      // here until their own reviewed change removes them; ANY addition needs
+      // a justification comment at the entry site + a negative-test update
+      // (plan ARCHITECT-ci-gating-cleanup §5, rules 1-2).
+      expect([...RAW_EGRESS_ALLOWLIST]).toEqual([
+        'src/core/routeswitch/egress.ts',
+        'src/core/routeswitch/adapters/', // §5-14 DEFERRED prefix — recorded, not fixed
+        'src/core/memory/gitnexus-client.ts',
+        'src/server/routes/system.ts', // §5-3 DEFERRED MCP probe — recorded, not fixed
+        'src/ui/lib/api.ts', // deliberate browser-side module (documented C10 deviation)
+      ]);
     });
   });
 
