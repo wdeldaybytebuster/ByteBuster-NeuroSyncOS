@@ -327,6 +327,264 @@ export function checkGlobalOKFSeedWired(repoRoot: string = REPO_ROOT): CheckResu
 }
 
 // ---------------------------------------------------------------------------
+// Check 6 (§4.4, C10): no untrusted SQL interpolation
+// ---------------------------------------------------------------------------
+
+/**
+ * Explicit, approved allowlist for backtick templates passed to
+ * `.prepare(` / `.exec(` that contain `${…}` interpolation. Update this
+ * (with a written justification) alongside any new deliberate exception.
+ * These three are the COMPLETE set of server-controlled fragment sites today:
+ * all build `updates`/`filters` fragments from code literals, never from
+ * request-supplied keys (plan §4.4 check 6).
+ */
+export const SQL_INTERPOLATION_ALLOWLIST: readonly string[] = [
+  // ${runFilter}, ${taskFilter} — literal fragments built by the route itself.
+  'src/server/routes/coreexec-router.ts',
+  // ${updates.join()} — push()ed literals only (never request keys).
+  'src/server/routes/llm.ts',
+  // ${updates.join()} — push()ed literals only (never request keys).
+  'src/server/routes/projects.ts',
+  // ── C10 discovery: the plan's §4.4 "complete set of 3" grep missed these
+  // (its pattern didn't span multi-line .prepare(` templates). Verified
+  // 2026-10-07 to be the SAME literal-fragment pattern as the entries above:
+  // WHERE/fragment strings are code literals and every request value is
+  // bound via `?` + params.push (graph-query.ts:55-77, okf.ts:378-394).
+  'src/core/okf/graph-query.ts',
+  'src/server/routes/okf.ts',
+  // §5-17 DEFERRED — `filterSQL = \`AND m.type = '${typeFilter}'\`` (vector.ts:130).
+  // Not exploitable today (every production call site passes a literal or
+  // undefined — plan §5-17), and the fix is a §5 item this plan forbids
+  // folding in. Allowlisted as a RECORDED deferral: the plan expected Check 6
+  // to miss this file entirely; catching it here keeps the exception visible
+  // rather than silent.
+  'src/core/memory/cerebro/vector.ts',
+  // NOTE: transport.ts and sync.ts are DELIBERATELY absent — C1/C2 removed
+  // their interpolation, and they leave this list by staying converted.
+];
+
+// Backtick template passed to .prepare( / .exec( AND containing ${
+// (`[^`]` also crosses newlines, but stops at the closing backtick so a
+// later unrelated template can't be matched by an earlier .prepare().
+const SQL_INTERPOLATION_PATTERNS: RegExp[] = [
+  /\.prepare\(\s*`[^`]*\$\{/,
+  /\.exec\(\s*`[^`]*\$\{/,
+];
+
+interface SqlInterpolationFinding {
+  relPath: string;
+  matchedPatterns: string[];
+}
+
+/** Pure scan logic — testable against a synthetic file list (no filesystem). */
+export function scanForSqlInterpolation(
+  files: { relPath: string; content: string }[],
+): SqlInterpolationFinding[] {
+  const findings: SqlInterpolationFinding[] = [];
+  for (const file of files) {
+    const matched: string[] = [];
+    for (const pattern of SQL_INTERPOLATION_PATTERNS) {
+      if (pattern.test(file.content)) matched.push(pattern.source);
+    }
+    if (matched.length > 0) findings.push({ relPath: file.relPath, matchedPatterns: matched });
+  }
+  return findings;
+}
+
+export function checkNoUntrustedSqlInterpolation(repoRoot: string = REPO_ROOT): CheckResult {
+  const files = walkFiles(path.join(repoRoot, 'src')).map((full) => ({
+    relPath: path.relative(repoRoot, full).split(path.sep).join('/'),
+    content: fs.readFileSync(full, 'utf8'),
+  }));
+
+  const findings = scanForSqlInterpolation(files);
+  const allowlistSet = new Set(SQL_INTERPOLATION_ALLOWLIST);
+  const unapproved = findings.filter((f) => !allowlistSet.has(f.relPath));
+  const approvedFound = findings.filter((f) => allowlistSet.has(f.relPath));
+
+  const describe = (f: SqlInterpolationFinding) => `${f.relPath} [${f.matchedPatterns.join(', ')}]`;
+
+  if (unapproved.length > 0) {
+    return {
+      passed: false,
+      message:
+        `No untrusted SQL interpolation — FOUND unapproved interpolation in: ${unapproved
+          .map(describe)
+          .join('; ')}` +
+        (approvedFound.length > 0
+          ? ` (approved usage also found in: ${approvedFound.map((f) => f.relPath).join(', ')})`
+          : ''),
+    };
+  }
+
+  return {
+    passed: true,
+    message:
+      approvedFound.length > 0
+        ? `No untrusted SQL interpolation (${approvedFound.length} approved file(s) found: ${approvedFound
+            .map((f) => f.relPath)
+            .join(', ')})`
+        : 'No untrusted SQL interpolation (no interpolated .prepare/.exec found in src/)',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Check 7 (§4.4, C10): no raw egress outside the governed door
+// ---------------------------------------------------------------------------
+
+/**
+ * Explicit, approved allowlist for BARE `fetch(` outside `egressFetch`.
+ * Mirrors CHILD_PROCESS_ALLOWLIST: every entry needs a written justification.
+ * Entries ending in `/` are directory prefixes (the adapters wildcard).
+ */
+export const RAW_EGRESS_ALLOWLIST: readonly string[] = [
+  // The governed door itself — the one place raw fetch is allowed (§2.3 C8-a).
+  'src/core/routeswitch/egress.ts',
+  // Provider adapters — the NEXT thing to route through egressFetch,
+  // recorded as deferred §5-14 (plan §4.4 check 7). Prefix entry.
+  'src/core/routeswitch/adapters/',
+  // Plan §4.4 lists this file; C9 converted all three eval-server sites to
+  // egressFetch — entry retained per the plan (matches nothing today, and
+  // documents the deliberate exception if raw fetch ever returns).
+  'src/core/memory/gitnexus-client.ts',
+  // §5-3 deferred MCP probe — raw fetch kept on purpose with a post-C9
+  // deferral comment (see system.ts probeMcpReachability).
+  'src/server/routes/system.ts',
+  // Deliberate BROWSER-side module: it intentionally re-issues the user's own
+  // request (including their headers) against the local API from inside the
+  // page — the browser is the trust boundary there, not this server process.
+  // Deviation from the plan's allowlist (documented in the C10 report).
+  'src/ui/lib/api.ts',
+];
+
+// Bare fetch( — not `egressFetch(` (word char before) and not `obj.fetch(`
+// (dot before). Same rationale as CHILD_PROCESS_PATTERNS' lookbehinds.
+const RAW_EGRESS_PATTERN = /(?<![.\w])fetch\s*\(/;
+
+/**
+ * Strip block + line comments so prose that merely MENTIONS `fetch(url)`
+ * (e.g. gate-order.ts's bug description) doesn't trip the control —
+ * allowlisting such a file instead would mask a real future violation.
+ * The line-comment lookbehind keeps `https://…` / `'//…'` string content
+ * intact (they are not comments).
+ */
+export function stripComments(content: string): string {
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(?<![:'"\\])\/\/[^\n]*/g, '');
+}
+
+interface RawEgressFinding {
+  relPath: string;
+  matchedPatterns: string[];
+}
+
+function isRawEgressAllowed(relPath: string): boolean {
+  return RAW_EGRESS_ALLOWLIST.some((entry) =>
+    entry.endsWith('/') ? relPath.startsWith(entry) : relPath === entry,
+  );
+}
+
+/** Pure scan logic — testable against a synthetic file list (no filesystem). */
+export function scanForRawFetch(files: { relPath: string; content: string }[]): RawEgressFinding[] {
+  const findings: RawEgressFinding[] = [];
+  for (const file of files) {
+    if (RAW_EGRESS_PATTERN.test(stripComments(file.content))) {
+      findings.push({ relPath: file.relPath, matchedPatterns: [RAW_EGRESS_PATTERN.source] });
+    }
+  }
+  return findings;
+}
+
+export function checkNoRawEgress(repoRoot: string = REPO_ROOT): CheckResult {
+  const files = walkFiles(path.join(repoRoot, 'src')).map((full) => ({
+    relPath: path.relative(repoRoot, full).split(path.sep).join('/'),
+    content: fs.readFileSync(full, 'utf8'),
+  }));
+
+  const findings = scanForRawFetch(files);
+  const unapproved = findings.filter((f) => !isRawEgressAllowed(f.relPath));
+  const approvedFound = findings.filter((f) => isRawEgressAllowed(f.relPath));
+
+  const describe = (f: RawEgressFinding) => `${f.relPath} [${f.matchedPatterns.join(', ')}]`;
+
+  if (unapproved.length > 0) {
+    return {
+      passed: false,
+      message:
+        `No raw egress outside the governed door — FOUND unapproved fetch( in: ${unapproved
+          .map(describe)
+          .join('; ')}` +
+        (approvedFound.length > 0
+          ? ` (approved usage also found in: ${approvedFound.map((f) => f.relPath).join(', ')})`
+          : ''),
+    };
+  }
+
+  return {
+    passed: true,
+    message:
+      approvedFound.length > 0
+        ? `No raw egress outside the governed door (${approvedFound.length} approved file(s) found: ${approvedFound
+            .map((f) => f.relPath)
+            .join(', ')})`
+        : 'No raw egress outside the governed door (no bare fetch( found in src/)',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Check 8 (§4.4, C10): server binds loopback only
+// ---------------------------------------------------------------------------
+
+/**
+ * C5 moved the HTTP server onto an explicit bind address. This asserts the
+ * `serve({ … })` literal in server-main.ts still declares `hostname:` —
+ * dropping it would silently regress the loopback-only bind (Bun/Node would
+ * default to all interfaces). Cheap structural proxy, per plan §4.4.
+ */
+export function checkServerBindsLoopback(repoRoot: string = REPO_ROOT): CheckResult {
+  const file = path.join(repoRoot, 'src/server/server-main.ts');
+  const label = 'Server binds loopback only';
+
+  if (!fs.existsSync(file)) {
+    return { passed: false, message: `${label} (src/server/server-main.ts not found)` };
+  }
+
+  const stripped = stripComments(fs.readFileSync(file, 'utf8'));
+  const m = /\bserve\s*\(\s*\{/.exec(stripped);
+  if (!m) {
+    return { passed: false, message: `${label} (no serve({ … }) literal found in server-main.ts)` };
+  }
+
+  // Walk the braces of the serve({ … }) literal to find its true extent, so
+  // an unrelated hostname: elsewhere in the file can't satisfy the check.
+  const braceStart = stripped.indexOf('{', m.index);
+  let depth = 0;
+  let braceEnd = -1;
+  for (let i = braceStart; i < stripped.length; i++) {
+    const ch = stripped[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        braceEnd = i;
+        break;
+      }
+    }
+  }
+  const block = stripped.slice(braceStart, braceEnd === -1 ? stripped.length : braceEnd + 1);
+
+  if (!/\bhostname\s*:/.test(block)) {
+    return {
+      passed: false,
+      message: `${label} (serve({ … }) literal in server-main.ts has no hostname: entry)`,
+    };
+  }
+
+  return { passed: true, message: `${label} (serve({ … }) literal declares hostname:)` };
+}
+
+// ---------------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------------
 
@@ -341,6 +599,10 @@ const CHECKS: NamedCheck[] = [
   { label: 'Tests never touch the real database', run: () => checkTestsUseInMemoryDb() },
   { label: 'No external database client dependencies', run: () => checkNoExternalDbDependencies() },
   { label: 'Global OKF seed mechanism is wired up', run: () => checkGlobalOKFSeedWired() },
+  // §4.4 checks 6-8 (C10):
+  { label: 'No untrusted SQL interpolation', run: () => checkNoUntrustedSqlInterpolation() },
+  { label: 'No raw egress outside the governed door', run: () => checkNoRawEgress() },
+  { label: 'Server binds loopback only', run: () => checkServerBindsLoopback() },
 ];
 
 export function main(): number {
