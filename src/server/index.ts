@@ -1,5 +1,3 @@
-import { spawn } from 'child_process';
-
 // §6.0 — Genesis Hardware Profiler integration
 // This bootstrapper runs the profiler if --profile is passed.
 // It outputs the hardware constraints as JSON and exits.
