@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Database, RefreshCw, CheckCircle, AlertTriangle, XCircle, FileText, Folder } from 'lucide-react';
 import { ModeLabel } from './ModeLabel';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface IndexedFile {
   id: string;
@@ -46,7 +46,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/api/okf/status?projectId=${encodeURIComponent(projectId)}`);
+      const res = await authFetch(`${API}/api/okf/status?projectId=${encodeURIComponent(projectId)}`);
       const data = await res.json();
       if (data.success) {
         setStatus(data);
@@ -69,7 +69,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setScanning(true);
     try {
-      const res = await fetch(`${API}/api/okf/scan-project`, {
+      const res = await authFetch(`${API}/api/okf/scan-project`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId }),
@@ -90,7 +90,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setConverting(filePath);
     try {
-      const res = await fetch(`${API}/api/okf/convert-document`, {
+      const res = await authFetch(`${API}/api/okf/convert-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, filePath }),
@@ -114,7 +114,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setSyncing(true);
     try {
-      const res = await fetch(`${API}/api/okf/sync`, {
+      const res = await authFetch(`${API}/api/okf/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId }),

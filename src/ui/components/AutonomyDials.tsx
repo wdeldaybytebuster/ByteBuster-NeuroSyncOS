@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sliders, Shield, Zap } from 'lucide-react';
+import { authFetch } from '../lib/api';
 
 export function AutonomyDials() {
   const [budget, setBudget] = useState(70);
   const [autonomy, setAutonomy] = useState(30);
 
   useEffect(() => {
-    fetch('/api/system/settings')
+    authFetch('/api/system/settings')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.settings) {
@@ -27,7 +28,7 @@ export function AutonomyDials() {
     }
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      fetch('/api/system/settings', {
+      authFetch('/api/system/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ budget, autonomy })

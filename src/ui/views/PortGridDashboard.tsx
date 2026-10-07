@@ -11,8 +11,8 @@ import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { ReactFlow, Controls, Background, BackgroundVariant, Handle, Position, useNodesState, useEdgesState } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
+import { API, authFetch, openEventSource } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#00FFCC';
 
 // Shared glow box (mint/teal glow)
@@ -66,7 +66,7 @@ function DashboardView() {
   // Fetch the Autonomy setting on mount so the approval split reflects
   // whatever the user last set on the CoreExec dashboard.
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings && d.settings.autonomy !== undefined) {
         setAutonomySetting(Number(d.settings.autonomy));
       }
@@ -75,7 +75,7 @@ function DashboardView() {
 
   // Fetch pending proposal on mount
   useEffect(() => {
-    fetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
       if (d.success && d.proposal) {
         setPendingProposal(d.proposal);
         setProposalId(d.id ?? null);
@@ -114,18 +114,18 @@ function DashboardView() {
     if (!pendingProposal) return;
     setApproving(true);
     try {
-      await fetch(`${API}/api/coreexec/approve`, {
+      await authFetch(`${API}/api/coreexec/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposal: pendingProposal, projectId: activeProjectId || undefined })
       });
       if (proposalId) {
-        await fetch(`${API}/api/system/proposals/resolve`, {
+        await authFetch(`${API}/api/system/proposals/resolve`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: proposalId })
         });
       } else {
         // Legacy path: no id (shouldn't happen post-migration) — fall back to clear.
-        await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' });
+        await authFetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' });
       }
       clearProposalState();
       navigate('coreexec');
@@ -136,12 +136,12 @@ function DashboardView() {
   // Reject proposal → mark rejected → clear → navigate back to ScopeLogic
   const handleRejectProposal = async () => {
     if (proposalId) {
-      await fetch(`${API}/api/system/proposals/reject`, {
+      await authFetch(`${API}/api/system/proposals/reject`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: proposalId })
       }).catch(() => {});
     } else {
-      await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
+      await authFetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
     }
     clearProposalState();
     navigate('scopelogic');
@@ -149,7 +149,7 @@ function DashboardView() {
 
   // Subscribe to ScoutDaemon SSE for live tool call telemetry
   useEffect(() => {
-    const es = new EventSource(`${API}/api/scout/events`);
+    const es = openEventSource(`${API}/api/scout/events`);
     es.addEventListener('scout-update', (e: any) => {
       try {
         const data = JSON.parse(e.data);
@@ -197,7 +197,7 @@ function DashboardView() {
   const [peerNotice, setPeerNotice] = useState<string | null>(null);
 
   const refreshSyncPeers = useCallback(() => {
-    fetch(`${API}/api/sync/peers`, {
+    authFetch(`${API}/api/sync/peers`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'list' }),
     }).then(r => r.json()).then(d => {
@@ -209,7 +209,7 @@ function DashboardView() {
 
   // Approve = persist to consent list + connect; Reject = drop from pending.
   const peerAction = async (action: 'approve' | 'reject', ip: string, port: number) => {
-    const r = await fetch(`${API}/api/sync/peers`, {
+    const r = await authFetch(`${API}/api/sync/peers`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, ip, port }),
     }).catch(() => null);
@@ -226,7 +226,7 @@ function DashboardView() {
   // written to the SAME consent list used by discovery approvals.
   const addManualPeer = async () => {
     const port = Number(manualPort);
-    const r = await fetch(`${API}/api/sync/manual`, {
+    const r = await authFetch(`${API}/api/sync/manual`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip: manualIp.trim(), port }),
     }).catch(() => null);
@@ -257,7 +257,7 @@ function DashboardView() {
   // project's runs into this widget regardless of which one was active)
   useEffect(() => {
     const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
-    fetch(`${API}/api/basevault/runs${qs}`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/basevault/runs${qs}`).then(r => r.json()).then(d => {
       if (d.runs) setRuns(d.runs);
     }).catch(() => {});
   }, [activeProjectId]);
@@ -265,7 +265,7 @@ function DashboardView() {
   // Fetch DAG nodes when a run is selected — convert to ReactFlow nodes/edges
   useEffect(() => {
     if (!selectedRunId) { setDagNodes([]); setFlowNodes([]); setFlowEdges([]); return; }
-    fetch(`${API}/api/coreexec/run/${selectedRunId}/status`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/coreexec/run/${selectedRunId}/status`).then(r => r.json()).then(d => {
       if (d.tasks) {
         setDagNodes(d.tasks);
         // Convert tasks to ReactFlow nodes (vertical layout)
@@ -291,7 +291,7 @@ function DashboardView() {
 
   // Fetch approval queue (os_todos)
   useEffect(() => {
-    fetch(`${API}/api/todos`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/todos`).then(r => r.json()).then(d => {
       if (d.success && d.todos) setApprovalQueue(d.todos);
       else if (Array.isArray(d)) setApprovalQueue(d);
     }).catch(() => {});
@@ -303,7 +303,7 @@ function DashboardView() {
   // keep the original cyan-active / gray-inactive color logic.
   const [rawBadges, setRawBadges] = useState<{ label: string; active: boolean }[]>([]);
   useEffect(() => {
-    fetch(`${API}/api/system/proof-badges?projectId=${activeProjectId || ''}`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/proof-badges?projectId=${activeProjectId || ''}`).then(r => r.json()).then(d => {
       if (d.success) setRawBadges(d.badges);
     }).catch(() => {});
   }, [activeProjectId, approvalQueue]);
@@ -316,14 +316,14 @@ function DashboardView() {
 
   const handleApprove = async (todoId: string) => {
     try {
-      await fetch(`${API}/api/todos/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId, resolutionData: 'approved' }) });
+      await authFetch(`${API}/api/todos/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId, resolutionData: 'approved' }) });
       setApprovalQueue(prev => prev.filter(t => t.id !== todoId));
     } catch {}
   };
 
   const handleDecline = async (todoId: string) => {
     try {
-      await fetch(`${API}/api/todos/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId }) });
+      await authFetch(`${API}/api/todos/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId }) });
       setApprovalQueue(prev => prev.filter(t => t.id !== todoId));
     } catch {}
   };
@@ -350,11 +350,11 @@ function DashboardView() {
     const { todoIds, proposals } = partitionByKind(approvalItems, ids);
     try {
       if (todoIds.length > 0) {
-        await fetch(`${API}/api/todos/resolve-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+        await authFetch(`${API}/api/todos/resolve-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
       }
       for (const p of proposals) {
-        await fetch(`${API}/api/coreexec/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposal: p.proposal, projectId: activeProjectId || undefined }) });
-        await fetch(`${API}/api/system/proposals/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
+        await authFetch(`${API}/api/coreexec/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposal: p.proposal, projectId: activeProjectId || undefined }) });
+        await authFetch(`${API}/api/system/proposals/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
       }
       if (todoIds.length > 0) setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
       if (proposals.some(p => p.id === proposalId)) clearProposalState();
@@ -365,10 +365,10 @@ function DashboardView() {
     const { todoIds, proposals } = partitionByKind(approvalItems, ids);
     try {
       if (todoIds.length > 0) {
-        await fetch(`${API}/api/todos/reject-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+        await authFetch(`${API}/api/todos/reject-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
       }
       for (const p of proposals) {
-        await fetch(`${API}/api/system/proposals/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
+        await authFetch(`${API}/api/system/proposals/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
       }
       if (todoIds.length > 0) setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
       if (proposals.some(p => p.id === proposalId)) clearProposalState();
@@ -730,14 +730,14 @@ function SetupView() {
 
   // Fetch tools and permissions from backend
   useEffect(() => {
-    fetch(`${API}/api/system/tools`).then(r => r.json()).then(d => { if (d.success) setTools(d.tools); }).catch(() => {});
-    fetch(`${API}/api/system/agents/permissions`).then(r => r.json()).then(d => { if (d.success) setPermissions(d.permissions); }).catch(() => {});
+    authFetch(`${API}/api/system/tools`).then(r => r.json()).then(d => { if (d.success) setTools(d.tools); }).catch(() => {});
+    authFetch(`${API}/api/system/agents/permissions`).then(r => r.json()).then(d => { if (d.success) setPermissions(d.permissions); }).catch(() => {});
   }, []);
 
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ smart_tips: smartTips, reduced_motion: reducedMotion, aria_enforcement: ariaEnforcement, env_stripping: envStripping, directory_lock: directoryLock, file_arg_validation: fileArgValidation })
       });

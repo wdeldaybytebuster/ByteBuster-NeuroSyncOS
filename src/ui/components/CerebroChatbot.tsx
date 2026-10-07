@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigation } from '../layouts/OSLayout';
 import { Bot, Send, Minus, X, Navigation } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -39,7 +39,7 @@ export function CerebroChatbot() {
       // Route through NeuroSync's backend Cerebro chat — never a raw LLM endpoint
       // and never a hardcoded credential. The backend owns provider routing and the
       // tri-modal context router.
-      const res = await fetch(`${API}/api/cerebro/chat`, {
+      const res = await authFetch(`${API}/api/cerebro/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

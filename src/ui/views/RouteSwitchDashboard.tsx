@@ -5,8 +5,8 @@ import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plu
 import { PathBrowser } from '../components/PathBrowser';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#FFB300';
 
 // Shared glow box (amber glow)
@@ -56,7 +56,7 @@ function DashboardView() {
   // Poll usage every 5s
   useEffect(() => {
     const fetchUsage = () => {
-      fetch(`${API}/api/llm/usage`).then(r => r.json()).then(d => { if (d.success && d.usage24h) setUsage(d.usage24h); }).catch(() => {});
+      authFetch(`${API}/api/llm/usage`).then(r => r.json()).then(d => { if (d.success && d.usage24h) setUsage(d.usage24h); }).catch(() => {});
     };
     fetchUsage();
     const iv = setInterval(fetchUsage, 5000);
@@ -67,7 +67,7 @@ function DashboardView() {
   // Fetch config for provider status and forecasting alerts
   useEffect(() => {
     const fetchConfig = () => {
-      fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
+      authFetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
         if (d.success) {
           setConfig(d);
           
@@ -102,7 +102,7 @@ function DashboardView() {
   // Fetch real provider registry for the Fleet Health widget (was 3 hardcoded rows)
   useEffect(() => {
     const fetchProviders = () => {
-      fetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setFleetProviders(d.providers); }).catch(() => {});
+      authFetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setFleetProviders(d.providers); }).catch(() => {});
     };
     fetchProviders();
     const iv = setInterval(fetchProviders, 10000);
@@ -111,7 +111,7 @@ function DashboardView() {
 
   // Fetch recent Council Mode (high-risk arbitration) decisions
   useEffect(() => {
-    fetch(`${API}/api/llm/council-log?limit=10`).then(r => r.json()).then(d => { if (d.success) setCouncilDecisions(d.decisions); }).catch(() => {});
+    authFetch(`${API}/api/llm/council-log?limit=10`).then(r => r.json()).then(d => { if (d.success) setCouncilDecisions(d.decisions); }).catch(() => {});
   }, []);
 
   const currentMode = config?.config?.provider === 'mock' ? 'Offline Mode' : config?.config?.provider === 'openai-compatible' ? 'Free-Cloud Mode' : 'Local Mode';
@@ -229,8 +229,8 @@ function DashboardView() {
 
         {/* Quick-fix Buttons */}
         <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
-          <button onClick={() => { fetch(`${API}/api/routeswitch/provider`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'mock' }) }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Switch to Local Mock</button>
-          <button onClick={() => { fetch(`${API}/api/llm/clear-error`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Clear Last Provider Error</button>
+          <button onClick={() => { authFetch(`${API}/api/routeswitch/provider`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'mock' }) }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Switch to Local Mock</button>
+          <button onClick={() => { authFetch(`${API}/api/llm/clear-error`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Clear Last Provider Error</button>
         </div>
       </section>
 
@@ -312,11 +312,11 @@ function SetupView() {
 
   // Load providers, rules, MCP, settings, projects
   useEffect(() => {
-    fetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setProviders(d.providers); }).catch(() => {});
-    fetch(`${API}/api/llm/routing-rules`).then(r => r.json()).then(d => { if (d.success) setRules(d.rules); }).catch(() => {});
-    fetch(`${API}/api/system/mcp/connections`).then(r => r.json()).then(d => { if (d.success && d.connections) setMcpConnections(d.connections); }).catch(() => {});
-    fetch(`${API}/api/projects`).then(r => r.json()).then(d => { if (d.projects) setProjects(d.projects); }).catch(() => {});
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setProviders(d.providers); }).catch(() => {});
+    authFetch(`${API}/api/llm/routing-rules`).then(r => r.json()).then(d => { if (d.success) setRules(d.rules); }).catch(() => {});
+    authFetch(`${API}/api/system/mcp/connections`).then(r => r.json()).then(d => { if (d.success && d.connections) setMcpConnections(d.connections); }).catch(() => {});
+    authFetch(`${API}/api/projects`).then(r => r.json()).then(d => { if (d.projects) setProjects(d.projects); }).catch(() => {});
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.daily_cost_ceiling) setDailyCeiling(Number(d.settings.daily_cost_ceiling));
         if (d.settings.external_calls_enabled !== undefined) setExternalEnabled(d.settings.external_calls_enabled === 'true' || d.settings.external_calls_enabled === true);
@@ -343,12 +343,12 @@ function SetupView() {
     const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true, isPaidTier: formIsPaidTier };
     try {
       if (editingId) {
-        await fetch(`${API}/api/llm/providers/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        await authFetch(`${API}/api/llm/providers/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       } else {
-        await fetch(`${API}/api/llm/providers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        await authFetch(`${API}/api/llm/providers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
       // Refresh list
-      const d = await fetch(`${API}/api/llm/providers`).then(r => r.json());
+      const d = await authFetch(`${API}/api/llm/providers`).then(r => r.json());
       if (d.success) setProviders(d.providers);
       setShowAddForm(false); setEditingId(null); setFormName(''); setFormApiKey(''); setTestResult(null);
     } catch {}
@@ -357,7 +357,7 @@ function SetupView() {
 
   const handleDeleteProvider = async (id: string) => {
     try {
-      const res = await fetch(`${API}/api/llm/providers/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`${API}/api/llm/providers/${id}`, { method: 'DELETE' });
       const d = await res.json();
       if (d.success) {
         setProviders(prev => prev.filter(p => p.id !== id));
@@ -373,7 +373,7 @@ function SetupView() {
     setTestResult(null);
     setTestingProviderId(id);
     try {
-      const d = await fetch(`${API}/api/llm/providers/${id}/test`, { method: 'POST' }).then(r => r.json());
+      const d = await authFetch(`${API}/api/llm/providers/${id}/test`, { method: 'POST' }).then(r => r.json());
       setTestResult(d.test || { connected: false, error: 'Unknown error' });
     } catch { setTestResult({ connected: false, error: 'Network error' }); }
   };
@@ -392,8 +392,8 @@ function SetupView() {
     setRuleSaving(true);
     const scopeId = (activeScope === 'global' || activeScope === 'cerebro') ? null : activeScopeId || null;
     try {
-      await fetch(`${API}/api/llm/routing-rules`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: activeScope, scopeId, providerChain: currentChain }) });
-      const d = await fetch(`${API}/api/llm/routing-rules`).then(r => r.json());
+      await authFetch(`${API}/api/llm/routing-rules`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: activeScope, scopeId, providerChain: currentChain }) });
+      const d = await authFetch(`${API}/api/llm/routing-rules`).then(r => r.json());
       if (d.success) setRules(d.rules);
     } catch {}
     setRuleSaving(false);
@@ -415,8 +415,8 @@ function SetupView() {
     const match = rules.find(r => r.scope === activeScope && (r.scopeId || '') === (scopeId || ''));
     if (!match) return;
     try {
-      await fetch(`${API}/api/llm/routing-rules/${match.id}`, { method: 'DELETE' });
-      const d = await fetch(`${API}/api/llm/routing-rules`).then(r => r.json());
+      await authFetch(`${API}/api/llm/routing-rules/${match.id}`, { method: 'DELETE' });
+      const d = await authFetch(`${API}/api/llm/routing-rules`).then(r => r.json());
       if (d.success) setRules(d.rules);
       setCurrentChain([]);
     } catch {}
@@ -426,7 +426,7 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ daily_cost_ceiling: dailyCeiling, external_calls_enabled: externalEnabled, grammar_constrained: grammarEnabled }) });
+      await authFetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ daily_cost_ceiling: dailyCeiling, external_calls_enabled: externalEnabled, grammar_constrained: grammarEnabled }) });
     } catch {}
     setSaving(false);
   };
@@ -437,7 +437,7 @@ function SetupView() {
   const handleToggleFreeModeLock = async (unlocked: boolean) => {
     setFreeModeUnlocked(unlocked);
     try {
-      await fetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ free_mode_unlocked: unlocked ? 'true' : 'false' }) });
+      await authFetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ free_mode_unlocked: unlocked ? 'true' : 'false' }) });
     } catch {}
   };
 

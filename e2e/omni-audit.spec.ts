@@ -19,6 +19,18 @@ import { test, expect, Page } from '@playwright/test';
 const API = 'http://localhost:3743';
 const UI  = 'http://localhost:3742';
 
+// §2.2(i) — inject the session token minted by e2e/global-setup.ts before any
+// page script runs, so AuthGate sees an authenticated operator (no UI login).
+test.beforeEach(async ({ page }) => {
+  const token = process.env.NEUROSYNC_E2E_TOKEN;
+  if (token) {
+    await page.addInitScript(
+      (t: string) => window.localStorage.setItem('neurosync.session', t),
+      token
+    );
+  }
+});
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /** Navigate to the OS layout and click a sidebar module */

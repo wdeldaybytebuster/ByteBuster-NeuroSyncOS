@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Clock, RefreshCw } from 'lucide-react';
+import { authFetch } from '../lib/api';
 
 interface ScheduleJob {
   id: string;
@@ -45,7 +46,7 @@ export function CronSummary() {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await fetch('/api/scheduler/jobs');
+      const res = await authFetch('/api/scheduler/jobs');
       const json: ScheduleResponse = await res.json();
       setData(json);
     } catch (e) {

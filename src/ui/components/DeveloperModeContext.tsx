@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface DeveloperModeContextType {
   isDeveloperMode: boolean;
@@ -28,7 +28,7 @@ export function DeveloperModeProvider({ children }: { children: React.ReactNode 
     localStorage.setItem('ns-developer-mode', 'true');
     const syncDefault = async () => {
       try {
-        await fetch(`${API}/api/system/settings`, {
+        await authFetch(`${API}/api/system/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ developer_mode: true }),
@@ -46,7 +46,7 @@ export function DeveloperModeProvider({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    fetch(`${API}/api/system/settings`)
+    authFetch(`${API}/api/system/settings`)
       .then(r => r.json())
       .then(d => {
         if (d.settings?.hardware_tier) {
@@ -60,7 +60,7 @@ export function DeveloperModeProvider({ children }: { children: React.ReactNode 
     setIsDeveloperMode(value);
     localStorage.setItem('ns-developer-mode', String(value));
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ developer_mode: value }),

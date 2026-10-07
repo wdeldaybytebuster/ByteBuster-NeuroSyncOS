@@ -7,8 +7,8 @@ import { Activity, Brain, Zap, Clock, Trash2, Sun, Moon, Monitor, MessageSquare,
 import { useTheme } from '../components/ThemeContext';
 import { usePreferences } from '../components/PreferencesContext';
 import { ModeLabel } from '../components/ModeLabel';
+import { API, authFetch, openEventSource } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#D4AF37';
 
 // Shared glow box (sovereign gold glow)
@@ -23,7 +23,7 @@ function DashboardView() {
 
   // SSE for live KPI
   useEffect(() => {
-    const es = new EventSource(`${API}/api/system/metrics`);
+    const es = openEventSource(`${API}/api/system/metrics`);
     es.addEventListener('telemetry', (e: any) => {
       try {
         const d = JSON.parse(e.data);
@@ -42,8 +42,8 @@ function DashboardView() {
   // Fetch usage + cerebro on mount and poll
   useEffect(() => {
     const fetchAll = () => {
-      fetch(`${API}/api/llm/usage`).then(r => r.json()).then(d => { if (d.success && d.usage24h) setUsage(d.usage24h); }).catch(() => {});
-      fetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => { if (d.success) setCerebro({ vectorCount: d.vectorCount, status: d.status, lastReflection: d.lastReflection }); }).catch(() => {});
+      authFetch(`${API}/api/llm/usage`).then(r => r.json()).then(d => { if (d.success && d.usage24h) setUsage(d.usage24h); }).catch(() => {});
+      authFetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => { if (d.success) setCerebro({ vectorCount: d.vectorCount, status: d.status, lastReflection: d.lastReflection }); }).catch(() => {});
     };
     fetchAll();
     const iv = setInterval(fetchAll, 10000);
@@ -115,7 +115,7 @@ function DashboardView() {
             </div>
           </div>
 
-          <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }).catch(() => {}); }} className="w-full px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-xs font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2">
+          <button onClick={() => { authFetch(`${API}/api/cerebro/habituate`, { method: 'POST' }).catch(() => {}); }} className="w-full px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-xs font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-2">
             <Trash2 size={12} /> <ModeLabel simple="Refresh Memory Scores" dev="Trigger Memory Consolidation Sweep" />
           </button>
         </section>
@@ -150,7 +150,7 @@ function SetupView() {
 
   // Load settings
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.polling_interval) setPollingInterval(Number(d.settings.polling_interval));
         if (d.settings.max_concurrent) setMaxConcurrent(Number(d.settings.max_concurrent));
@@ -163,7 +163,7 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ polling_interval: pollingInterval, max_concurrent: maxConcurrent, claim_batch_size: claimBatch, log_level: logLevel })
       });

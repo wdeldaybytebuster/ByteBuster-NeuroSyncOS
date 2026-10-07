@@ -4,8 +4,8 @@ import { useNavigation } from '../layouts/OSLayout';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { Database, Shield, Trash2, HardDrive, Upload, Download, ScanLine, Clock, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
+import { API, authFetch, openEventSource } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#D4AF37';
 
 // Shared glow box for BaseVault (gold glow)
@@ -27,7 +27,7 @@ function DashboardView() {
   // Fetch redaction events from backend
   useEffect(() => {
     const fetchRedaction = () => {
-      fetch(`${API}/api/system/redaction-log`).then(r => r.json()).then(d => {
+      authFetch(`${API}/api/system/redaction-log`).then(r => r.json()).then(d => {
         if (d.success && d.events) {
           setRedactionLog(d.events.map((e: any) => `[${e.tier}] ${e.patternType}: ${e.context}`));
         }
@@ -40,7 +40,7 @@ function DashboardView() {
 
   // Fetch retention stats
   useEffect(() => {
-    fetch(`${API}/api/system/retention-stats`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/retention-stats`).then(r => r.json()).then(d => {
       if (d.success && d.stats) {
         setRetentionStats(d.stats);
         setDbStats(prev => ({ ...prev, size: `${d.stats.dbSizeMB} MB` }));
@@ -50,7 +50,7 @@ function DashboardView() {
 
   // Fetch OKF node stats
   useEffect(() => {
-    fetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
       if (d.success) setOkfStats(prev => ({ ...prev, nodes: d.count || 0 }));
     }).catch(() => {});
   }, [activeProjectId]);
@@ -61,7 +61,7 @@ function DashboardView() {
   useEffect(() => {
     setLoadingRuns(true);
     const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
-    fetch(`${API}/api/basevault/runs${qs}`)
+    authFetch(`${API}/api/basevault/runs${qs}`)
       .then(r => r.json())
       .then(data => { if (data.runs) setRuns(data.runs); })
       .catch(() => {})
@@ -72,7 +72,7 @@ function DashboardView() {
   // checkpoint count from /api/system/db-health (was Math.random() jitter).
   useEffect(() => {
     const fetchDbHealth = () => {
-      fetch(`${API}/api/system/db-health`).then(r => r.json()).then(d => {
+      authFetch(`${API}/api/system/db-health`).then(r => r.json()).then(d => {
         if (d.success) {
           setDbStats(prev => ({
             ...prev,
@@ -200,7 +200,7 @@ function SetupView() {
 
   // Load settings
   useEffect(() => {
-    fetch(`${API}/api/system/settings`)
+    authFetch(`${API}/api/system/settings`)
       .then(r => r.json())
       .then(data => {
         if (data.success && data.settings) {
@@ -215,7 +215,7 @@ function SetupView() {
   // Backup via SSE
   const triggerBackup = () => {
     setBackupProgress(0);
-    const es = new EventSource(`${API}/api/system/backup`);
+    const es = openEventSource(`${API}/api/system/backup`);
     es.addEventListener('backup-progress', (e: any) => {
       try {
         const data = JSON.parse(e.data);
@@ -238,7 +238,7 @@ function SetupView() {
     const formData = new FormData();
     formData.append('backup_file', file);
     try {
-      await fetch(`${API}/api/system/restore`, { method: 'POST', body: formData });
+      await authFetch(`${API}/api/system/restore`, { method: 'POST', body: formData });
     } catch {}
   };
 
@@ -246,7 +246,7 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ redaction_level: redactionLevel, retention_max_runs: retentionRuns, retention_max_days: retentionDays })
@@ -357,7 +357,7 @@ function SetupView() {
             <h3 className="text-xs font-bold text-gray-300">Schema Migrations</h3>
             <p className="text-[10px] text-gray-500">Run introspective migrations to upgrade the schema idempotently when updating NeuroSync versions.</p>
             <button
-              onClick={async () => { setMigrating(true); setMigrationResult(null); try { const res = await fetch(`${API}/api/system/migrate`, { method: 'POST' }); const d = await res.json(); setMigrationResult(d.success ? d.message : d.error); } catch { setMigrationResult('Error: could not reach backend.'); } finally { setMigrating(false); } }}
+              onClick={async () => { setMigrating(true); setMigrationResult(null); try { const res = await authFetch(`${API}/api/system/migrate`, { method: 'POST' }); const d = await res.json(); setMigrationResult(d.success ? d.message : d.error); } catch { setMigrationResult('Error: could not reach backend.'); } finally { setMigrating(false); } }}
               disabled={migrating}
               className={`w-full px-4 py-2.5 rounded-lg font-bold text-xs transition-all border ${migrating ? 'opacity-50 border-white/10 text-gray-400' : 'border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}
             >

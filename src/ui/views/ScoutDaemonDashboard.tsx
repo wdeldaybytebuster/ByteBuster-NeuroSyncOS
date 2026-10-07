@@ -5,8 +5,8 @@ import { Radar, Activity, Inbox, Cpu, Thermometer, Power, Zap, Rss, Clock, Shiel
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { SensoryMode, normalizeSensoryMode, startTelemetrySubscription } from './scoutTelemetry';
+import { API, authFetch, openEventSource } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#8E24AA';
 const ACCENT_LIGHT = '#d05ce3';
 
@@ -41,7 +41,7 @@ function DashboardView() {
   // Resolve the real Sensory Modality (ScoutDaemon Set-up, Control B) once on
   // mount, defaulting to 'sse' (today's only real behavior) until it resolves.
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       setSensoryMode(normalizeSensoryMode(d?.success ? d.settings?.scout_sensory_mode : undefined));
     }).catch(() => setSensoryMode('sse'));
   }, []);
@@ -53,8 +53,8 @@ function DashboardView() {
   useEffect(() => {
     if (sensoryMode === null) return; // still resolving the setting
     const sub = startTelemetrySubscription(sensoryMode, {
-      openEventSource: () => new EventSource(`${API}/api/system/metrics`) as any,
-      fetchSnapshot: () => fetch(`${API}/api/system/metrics/snapshot`).then(r => r.json()).then(d => d.success ? d.metrics : null),
+      openEventSource: () => openEventSource(`${API}/api/system/metrics`) as any,
+      fetchSnapshot: () => authFetch(`${API}/api/system/metrics/snapshot`).then(r => r.json()).then(d => d.success ? d.metrics : null),
       onUpdate: applyTelemetry,
     });
     refreshNowRef.current = sub.refreshNow;
@@ -68,19 +68,19 @@ function DashboardView() {
 
   // Fetch quarantine discoveries (from cerebro learning approvals as proxy)
   useEffect(() => {
-    fetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
       if (d.success && d.queue) {
         setDiscoveries(d.queue.map((q: any) => ({ id: q.id, title: q.fact, type: 'learning', created: new Date(q.created_at).toLocaleString() })));
       }
     }).catch(() => {});
-    fetch(`${API}/api/todos`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/todos`).then(r => r.json()).then(d => {
       if (d.success && d.todos) setTodos(d.todos);
     }).catch(() => {});
   }, [activeProjectId]);
 
   // Fetch OKF scout drafts
   useEffect(() => {
-    fetch(`${API}/api/okf/scout-drafts`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/okf/scout-drafts`).then(r => r.json()).then(d => {
       if (d.success && d.drafts) setScoutDrafts(d.drafts);
     }).catch(() => {});
   }, [activeProjectId]);
@@ -114,7 +114,7 @@ function DashboardView() {
             <div className="text-xs font-bold text-white">{state.label}</div>
             <div className="text-[10px] text-gray-500 font-mono">ScoutDaemon is operating as a respectful guest on your hardware.</div>
           </div>
-          <button onClick={() => { fetch(`${API}/api/scout/heartbeat`, { method: 'POST' }).catch(() => {}); }} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-white/10 transition-all">
+          <button onClick={() => { authFetch(`${API}/api/scout/heartbeat`, { method: 'POST' }).catch(() => {}); }} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-white/10 transition-all">
             Decision Node Audit
           </button>
         </div>
@@ -149,7 +149,7 @@ function DashboardView() {
                   <div className="text-xs font-bold text-white truncate">{d.title}</div>
                   <div className="text-[10px] text-gray-500 font-mono">{d.type} • {d.created}</div>
                 </div>
-                <button onClick={async () => { try { await fetch(`${API}/api/todos/promote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fact: d.title, sourceId: d.id }) }); setDiscoveries(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="shrink-0 px-2 py-1 rounded text-[9px] font-bold border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all" style={{ color: ACCENT_LIGHT }}>
+                <button onClick={async () => { try { await authFetch(`${API}/api/todos/promote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fact: d.title, sourceId: d.id }) }); setDiscoveries(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="shrink-0 px-2 py-1 rounded text-[9px] font-bold border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all" style={{ color: ACCENT_LIGHT }}>
                   Send to PortGrid
                 </button>
               </div>
@@ -190,8 +190,8 @@ function DashboardView() {
                   <div className="text-[10px] text-gray-500 font-mono">{d.type} • conf: {d.confidence.toFixed(2)} • {new Date(d.createdAt).toLocaleDateString()}</div>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
-                  <button onClick={async () => { try { await fetch(`${API}/api/okf/scout-drafts/${d.id}/promote`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Promote</button>
-                  <button onClick={async () => { try { await fetch(`${API}/api/okf/scout-drafts/${d.id}/reject`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
+                  <button onClick={async () => { try { await authFetch(`${API}/api/okf/scout-drafts/${d.id}/promote`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Promote</button>
+                  <button onClick={async () => { try { await authFetch(`${API}/api/okf/scout-drafts/${d.id}/reject`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
                 </div>
               </div>
             ))}
@@ -265,7 +265,7 @@ function SetupView() {
 
   // Load settings
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.agent_stop_threshold) setAgentStopThreshold(Number(d.settings.agent_stop_threshold));
         if (d.settings.scout_max_token_burn) setMaxTokenBurn(Number(d.settings.scout_max_token_burn));
@@ -276,7 +276,7 @@ function SetupView() {
     }).catch(() => {});
     // Whether AgentStop can actually run preemptively depends on the active
     // provider — surface it honestly rather than implying it always works.
-    fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
       if (d.success && d.agentStop) setAgentStopMode({ mode: d.agentStop.mode, activeProviderId: d.agentStop.activeProviderId });
     }).catch(() => {});
   }, []);
@@ -284,7 +284,7 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent_stop_threshold: agentStopThreshold, scout_max_token_burn: maxTokenBurn, scout_temp_ceiling: tempCeiling, scout_load_ceiling: loadCeiling, scout_sensory_mode: sensoryMode })
       });
@@ -417,10 +417,10 @@ function SetupView() {
           <button
             onClick={async () => {
               if (killSwitchActive) {
-                await fetch(`${API}/api/system/daemon/restart`, { method: 'POST' }).catch(() => {});
+                await authFetch(`${API}/api/system/daemon/restart`, { method: 'POST' }).catch(() => {});
                 setKillSwitchActive(false);
               } else {
-                await fetch(`${API}/api/system/daemon/kill`, { method: 'POST' }).catch(() => {});
+                await authFetch(`${API}/api/system/daemon/kill`, { method: 'POST' }).catch(() => {});
                 setKillSwitchActive(true);
               }
             }}

@@ -4,8 +4,8 @@ import type { Node, Edge } from '@xyflow/react';
 import { useNavigation } from '../layouts/OSLayout';
 import { X, Brain, Globe, User, FolderOpen } from 'lucide-react';
 import { ModeLabel } from './ModeLabel';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 // Tier colors
 const TIER_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
@@ -49,7 +49,7 @@ export function OKFMindmap({ isOpen, onClose }: OKFMindmapProps) {
 
   const handleNodeSelect = useCallback(async (nodeId: string) => {
     try {
-      const res = await fetch(`${API}/api/okf/file-content?nodeId=${encodeURIComponent(nodeId)}`);
+      const res = await authFetch(`${API}/api/okf/file-content?nodeId=${encodeURIComponent(nodeId)}`);
       const data = await res.json();
       if (data.success) {
         setSelectedFile(data);
@@ -64,7 +64,7 @@ export function OKFMindmap({ isOpen, onClose }: OKFMindmapProps) {
       if (activeTier !== 'ALL') url += `tier=${activeTier}&`;
       if (activeProjectId) url += `projectId=${encodeURIComponent(activeProjectId)}`;
 
-      const res = await fetch(url);
+      const res = await authFetch(url);
       const data = await res.json();
       if (data.success) {
         // Layout nodes in a radial/grid pattern

@@ -5,8 +5,8 @@ import { useDeveloperMode } from '../components/DeveloperModeContext';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { MessageSquare, Container, AlertTriangle, Binary, FileText, Users, Shield, CheckCircle, XCircle, Send } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#00E5FF';
 
 // Shared glow box (cyan glow — ScopeLogic uses the same stealth-cyan as CoreExec)
@@ -29,7 +29,7 @@ function DashboardView() {
   // server-side, so pass the active project (nullable → the shared Global scope).
   useEffect(() => {
     const projectQuery = activeProjectId ? `?projectId=${encodeURIComponent(activeProjectId)}` : '';
-    fetch(`${API}/api/scopelogic/history${projectQuery}`)
+    authFetch(`${API}/api/scopelogic/history${projectQuery}`)
       .then(r => r.json())
       .then(data => {
         if (data.history && data.history.length > 0) {
@@ -38,7 +38,7 @@ function DashboardView() {
           if (data.isComplete) {
             setIsComplete(true);
             // Check if there's a persisted proposal
-            fetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
+            authFetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
               if (d.success && d.proposal) setProposal(d.proposal);
             }).catch(() => {});
           }
@@ -56,7 +56,7 @@ function DashboardView() {
     setMessages(prev => [...prev, { role: 'user', text: msg }]);
     setInput('');
     try {
-      const res = await fetch(`${API}/api/scopelogic/prompt`, {
+      const res = await authFetch(`${API}/api/scopelogic/prompt`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg, projectId: activeProjectId || null })
       });
@@ -71,7 +71,7 @@ function DashboardView() {
           setProposal(prop);
           // Persist to backend so it survives navigation. Scope it to the
           // active project (nullable — "Global"/no active project is valid).
-          await fetch(`${API}/api/system/proposals/stage`, {
+          await authFetch(`${API}/api/system/proposals/stage`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             // Forward the LLM's self-reported confidence when present; the server
             // defaults to 0.5 when it's absent (e.g. the template fallback path).
@@ -88,11 +88,11 @@ function DashboardView() {
 
   // Reset interview
   const handleReset = async () => {
-    await fetch(`${API}/api/scopelogic/reset`, {
+    await authFetch(`${API}/api/scopelogic/reset`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectId: activeProjectId || null })
     }).catch(() => {});
-    await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
+    await authFetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
     setMessages([{ role: 'assistant', text: 'Interview reset. What is the primary objective of the workflow DAG we are building?' }]);
     setRound(1);
     setIsComplete(false);
@@ -236,7 +236,7 @@ function SetupView() {
   // string constant in interview.ts), so this is the one honest fact
   // available in place of the fabricated "v3.2.1" / "PASSING (398 tests)".
   useEffect(() => {
-    fetch(`${API}/api/scopelogic/prompt-info`)
+    authFetch(`${API}/api/scopelogic/prompt-info`)
       .then(r => r.json())
       .then(data => { if (typeof data.lastModifiedMs === 'number') setPromptLastModifiedMs(data.lastModifiedMs); })
       .catch(() => {});
@@ -274,7 +274,7 @@ function SetupView() {
 
   // Load settings
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.grammar_constrained !== undefined) setGrammarEnabled(d.settings.grammar_constrained === 'true' || d.settings.grammar_constrained === true);
         if (d.settings.max_disagreement) setMaxDisagreement(Number(d.settings.max_disagreement));
@@ -301,7 +301,7 @@ function SetupView() {
       for (const code of Object.keys(ASSERTION_SETTING_KEY)) {
         assertionPayload[ASSERTION_SETTING_KEY[code]!] = assertions[code as keyof typeof assertions].enabled;
       }
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ grammar_constrained: grammarEnabled, rationale_first: rationaleFirst, thinking_tokens: thinkingTokens, max_disagreement: maxDisagreement, high_stakes_threshold: highStakesThreshold, ...assertionPayload })
       });

@@ -6,8 +6,8 @@ import { OKFMindmap } from '../components/OKFMindmap';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { useDeveloperMode } from '../components/DeveloperModeContext';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#2DD4BF';
 const ACCENT_GOLD = '#D4AF37';
 
@@ -38,7 +38,7 @@ function DashboardView() {
 
   // Fetch approvals queue
   useEffect(() => {
-    fetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
       if (d.success && d.queue) {
         // API/DB rows use snake_case (conflict_with_id / conflict_reasoning);
         // normalize to the camelCase fields the LearningApproval interface expects.
@@ -54,21 +54,21 @@ function DashboardView() {
 
   // Fetch health
   useEffect(() => {
-    fetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => {
       if (d.success) setHealth({ vectorCount: d.vectorCount, status: d.status, lastReflection: d.lastReflection });
     }).catch(() => {});
   }, []);
 
   // Fetch OKF node count
   useEffect(() => {
-    fetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
       if (d.success) setOkfNodeCount(d.count || 0);
     }).catch(() => {});
   }, [activeProjectId]);
 
   // Fetch real "Nearing Decay" count (was hardcoded 0)
   const refreshDecayStats = () => {
-    fetch(`${API}/api/cerebro/decay-stats`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/cerebro/decay-stats`).then(r => r.json()).then(d => {
       if (d.success) setDecayStats({ nearingDecay: d.nearingDecay });
     }).catch(() => {});
   };
@@ -76,7 +76,7 @@ function DashboardView() {
 
   // Fetch real "Pruned (30d)" rolling sum (was hardcoded 0)
   const refreshPruneHistory = () => {
-    fetch(`${API}/api/cerebro/prune-history`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/cerebro/prune-history`).then(r => r.json()).then(d => {
       if (d.success) setPruned30d(d.pruned30d ?? 0);
     }).catch(() => {});
   };
@@ -86,7 +86,7 @@ function DashboardView() {
   // candidate list. Step 2: user confirms → destructive delete → refresh counters.
   const handlePrunePreview = async () => {
     try {
-      const res = await fetch(`${API}/api/cerebro/prune-preview`);
+      const res = await authFetch(`${API}/api/cerebro/prune-preview`);
       const d = await res.json();
       if (d.success) setPruneCandidates(d.candidates || []);
     } catch { setPruneCandidates([]); }
@@ -94,12 +94,12 @@ function DashboardView() {
   const handlePruneConfirm = async () => {
     setPruning(true);
     try {
-      await fetch(`${API}/api/cerebro/prune-confirm`, { method: 'POST' });
+      await authFetch(`${API}/api/cerebro/prune-confirm`, { method: 'POST' });
       setPruneCandidates(null);
       refreshDecayStats();
       refreshPruneHistory();
       // Active-memory count lives in health — refresh it too.
-      fetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => {
+      authFetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => {
         if (d.success) setHealth({ vectorCount: d.vectorCount, status: d.status, lastReflection: d.lastReflection });
       }).catch(() => {});
     } catch {}
@@ -110,7 +110,7 @@ function DashboardView() {
   const handleSearch = async () => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     try {
-      const res = await fetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) });
+      const res = await authFetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) });
       const d = await res.json();
       if (d.success) setSearchResults(d.results || []);
     } catch { setSearchResults([]); }
@@ -119,7 +119,7 @@ function DashboardView() {
   // Approve/reject a learning
   const handleApproval = async (id: string, action: 'approve' | 'reject') => {
     try {
-      await fetch(`${API}/api/cerebro/learning-approvals/${id}/${action}`, { method: 'POST' });
+      await authFetch(`${API}/api/cerebro/learning-approvals/${id}/${action}`, { method: 'POST' });
       setApprovals(prev => prev.filter(a => a.id !== id));
     } catch {}
   };
@@ -238,10 +238,10 @@ function DashboardView() {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
+          <button onClick={() => { authFetch(`${API}/api/cerebro/habituate`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
             <Trash2 size={12} /> <ModeLabel simple="Refresh Memory Scores" dev="Trigger Consolidation Sweep" />
           </button>
-          <button onClick={() => { fetch(`${API}/api/cerebro/pin-high-confidence`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
+          <button onClick={() => { authFetch(`${API}/api/cerebro/pin-high-confidence`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
             <Pin size={12} /> <ModeLabel simple="Keep All Trusted Memories" dev="Pin All High-Confidence" />
           </button>
           <button onClick={handlePrunePreview} disabled={pruning} className="flex-1 px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/5 text-[10px] font-bold text-red-300 hover:bg-red-500/10 hover:text-red-200 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
@@ -303,10 +303,10 @@ function DashboardView() {
         {/* Search */}
         <div className="flex gap-2 mb-4">
           <input type="text" value={okfSearch} onChange={e => setOkfSearch(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { fetch(`${API}/api/okf/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: okfSearch, projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success) setOkfResults(d.chunks || []); }).catch(() => {}); } }}
+            onKeyDown={e => { if (e.key === 'Enter') { authFetch(`${API}/api/okf/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: okfSearch, projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success) setOkfResults(d.chunks || []); }).catch(() => {}); } }}
             placeholder="Search knowledge graph..."
             className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500/50" />
-          <button onClick={() => { setOkfIndexing(true); fetch(`${API}/api/okf/index`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success && d.result) setOkfNodeCount(prev => prev + d.result.indexed); }).catch(() => {}).finally(() => setOkfIndexing(false)); }}
+          <button onClick={() => { setOkfIndexing(true); authFetch(`${API}/api/okf/index`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success && d.result) setOkfNodeCount(prev => prev + d.result.indexed); }).catch(() => {}).finally(() => setOkfIndexing(false)); }}
             disabled={okfIndexing}
             className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
             {okfIndexing ? 'Indexing...' : 'Re-index'}
@@ -354,7 +354,7 @@ function SetupView() {
   const [globalFiles, setGlobalFiles] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.cerebro_min_similarity) setMinSimilarity(Number(d.settings.cerebro_min_similarity));
         if (d.settings.cerebro_decay_multiplier) setDecayMultiplier(Number(d.settings.cerebro_decay_multiplier));
@@ -371,7 +371,7 @@ function SetupView() {
 
   // Real Global Knowledge Base file listing (was a 3-name hardcoded array)
   useEffect(() => {
-    fetch(`${API}/api/okf/global-files`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/okf/global-files`).then(r => r.json()).then(d => {
       if (d.success) setGlobalFiles(d.files);
     }).catch(() => {});
   }, []);
@@ -379,7 +379,7 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cerebro_min_similarity: minSimilarity, cerebro_keyword_fallback: keywordFallback, cerebro_keyword_base: keywordBaseScore, cerebro_keyword_boost: keywordMatchBoost, cerebro_decay_multiplier: decayMultiplier, cerebro_access_boost: accessBoost })
       });

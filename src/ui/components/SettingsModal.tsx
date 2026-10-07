@@ -3,6 +3,7 @@ import { RouteSwitchConfig } from './RouteSwitchConfig';
 import { RoutingDials } from './RoutingDials';
 import { useDeveloperMode } from './DeveloperModeContext';
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
+import { authFetch, openEventSource } from '../lib/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   // Load from localStorage and backend on mount
   useEffect(() => {
-    fetch('/api/system/settings')
+    authFetch('/api/system/settings')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.settings && data.settings.llm_api_key) {
@@ -61,7 +62,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         payload.config = { modelPath };
       }
 
-      const res = await fetch('http://localhost:3743/api/routeswitch/provider', {
+      const res = await authFetch('http://localhost:3743/api/routeswitch/provider', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -70,7 +71,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       
       if (data.success) {
         if (provider === 'openai-compatible' && apiKey) {
-          await fetch('/api/system/settings', {
+          await authFetch('/api/system/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ llm_api_key: apiKey })
@@ -103,7 +104,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleBackup = () => {
     setBackupProgress(0);
-    const eventSource = new EventSource('/api/system/backup');
+    const eventSource = openEventSource('/api/system/backup');
     eventSource.addEventListener('backup-progress', (e) => {
       const data = JSON.parse(e.data);
       setBackupProgress(data.progress);
@@ -129,7 +130,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     formData.append('backup_file', restoreFile);
 
     try {
-      const res = await fetch('/api/system/restore', {
+      const res = await authFetch('/api/system/restore', {
         method: 'POST',
         body: formData
       });
