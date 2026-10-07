@@ -1,6 +1,8 @@
-import mdns from 'multicast-dns';
+import defaultMdns from 'multicast-dns';
 import os from 'os';
 import { EventEmitter } from 'events';
+import { db } from '../db';
+import { isSyncEnabled } from './sync-consent';
 
 export interface DiscoveredNode {
   hostname: string;
@@ -8,20 +10,47 @@ export interface DiscoveredNode {
   port: number;
 }
 
+/** Factory seam so tests can drive the module without opening a UDP socket. */
+export type MdnsFactory = () => any;
+
+/**
+ * §2.1-C4 — mDNS is opt-in and no longer auto-trusts anyone.
+ *
+ * - `start()` reads `system_settings.sync_enabled` (default false): when off
+ *   it does NOT create the socket, does NOT answer queries and does NOT start
+ *   the 5 s beacon (removes both the always-live accept path and the beacon).
+ * - When on, `start()` is idempotent (one socket, one interval — no stacking).
+ * - `stop()` clears the beacon interval (previously leaked) and is idempotent.
+ * - Discovering a peer only EMITS `peer-discovered`; connection is decided by
+ *   server-main (pending list → PortGrid consent), never by this module.
+ */
 export class MDNSDiscovery extends EventEmitter {
-  private m: any;
+  private m: any = null;
   private nodes: Map<string, DiscoveredNode> = new Map();
   private serviceName = 'neurosync._webrtc._udp.local';
   private port: number;
+  private beacon: ReturnType<typeof setInterval> | null = null;
+  private running = false;
+  private readonly dnsFactory: MdnsFactory;
 
-  constructor(port: number) {
+  constructor(port: number, dnsFactory: MdnsFactory = () => defaultMdns()) {
     super();
     this.port = port;
-    this.m = mdns();
+    this.dnsFactory = dnsFactory;
   }
 
   start() {
+    // §2.1-C4: absent/false sync_enabled => total no-op (not even a socket).
+    if (!isSyncEnabled(db)) {
+      console.log('[mDNS] Sync disabled (system_settings.sync_enabled) — beacon not started.');
+      return;
+    }
+    if (this.running) return; // idempotent: never stack listeners/intervals
+    this.running = true;
+    if (!this.m) this.m = this.dnsFactory();
+
     this.m.on('query', (query: any) => {
+      if (!this.running) return;
       // Respond to queries for our service
       if (query.questions[0] && query.questions[0].name === this.serviceName) {
         this.m.respond({
@@ -44,6 +73,7 @@ export class MDNSDiscovery extends EventEmitter {
     });
 
     this.m.on('response', (response: any) => {
+      if (!this.running) return;
       // Parse answers to discover other nodes
       let srvData: any = null;
       let aData: any = null;
@@ -66,13 +96,17 @@ export class MDNSDiscovery extends EventEmitter {
             port: srvData.port
           };
           this.nodes.set(nodeId, newNode);
+          // ScoutDaemon spirit: we only EMIT — connection requires PortGrid
+          // consent via POST /api/sync/peers (§2.1-C4).
           this.emit('peer-discovered', newNode);
         }
       }
     });
 
-    // Broadcast our presence periodically
-    setInterval(() => {
+    // Broadcast our presence periodically (stored so stop() can clear it —
+    // this interval previously leaked at :75).
+    this.beacon = setInterval(() => {
+      if (!this.running) return;
       this.m.query({
         questions: [{
           name: this.serviceName,
@@ -83,7 +117,16 @@ export class MDNSDiscovery extends EventEmitter {
   }
 
   stop() {
-    this.m.destroy();
+    this.running = false;
+    if (this.beacon) {
+      clearInterval(this.beacon);
+      this.beacon = null;
+    }
+    if (this.m) {
+      try {
+        this.m.destroy();
+      } catch { /* already destroyed */ }
+    }
   }
 
   getDiscoveredNodes(): DiscoveredNode[] {

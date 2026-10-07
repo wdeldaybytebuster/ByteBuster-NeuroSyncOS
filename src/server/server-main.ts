@@ -7,7 +7,7 @@ import { instantiateProvider } from '../core/routeswitch/provider-factory';
 import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns, type CoreExecGenerationRequest } from '../core/coreexec/engine';
 import { db, initDB } from '../core/basevault/db';
 import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
-import { scoutRouter } from '../core/scoutdaemon/sse';
+import { scoutRouter, scoutEmitter } from '../core/scoutdaemon/sse';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { injectLLMGenerator, ReflectionExecutor } from '../core/memory/cerebro/reflection';
 import path from 'path';
@@ -19,6 +19,14 @@ import { bootstrapGlobalOKFSeed } from '../core/okf/global-seed';
 
 import { MDNSDiscovery } from '../core/basevault/network/mdns-discovery';
 import { NodeTransport } from '../core/basevault/network/transport';
+import {
+  validateManualPeer,
+  isSyncEnabled,
+  isSyncAllowPublic,
+  getApprovedPeers,
+  addApprovedPeer,
+} from '../core/basevault/network/sync-consent';
+import type { DiscoveredNode } from '../core/basevault/network/mdns-discovery';
 
 const app = new Hono();
 
@@ -28,10 +36,21 @@ app.use('/*', cors());
 const transport = new NodeTransport();
 const mdnsDiscovery = new MDNSDiscovery(3743);
 
-mdnsDiscovery.on('peer-discovered', (node) => {
-  transport.connectToPeer(node);
+/**
+ * §2.1-C4 — mDNS discovery no longer auto-connects (PortGrid consent boundary).
+ * A discovered peer is staged as PENDING and announced over scoutEmitter;
+ * only POST /api/sync/peers {action:'approve'} may call transport.connectToPeer.
+ */
+const pendingPeers = new Map<string, DiscoveredNode>();
+
+mdnsDiscovery.on('peer-discovered', (node: DiscoveredNode) => {
+  const nodeId = `${node.ip}:${node.port}`;
+  pendingPeers.set(nodeId, node);
+  console.log(`[Sync] Peer discovered — staged as PENDING (consent required): ${nodeId}`);
+  scoutEmitter.emit('update', { type: 'PEER_DISCOVERED', node, timestamp: Date.now() });
 });
 
+// start() self-gates on system_settings.sync_enabled (default false).
 mdnsDiscovery.start();
 
 
@@ -255,17 +274,78 @@ app.get(
   })
 );
 
+/**
+ * §2.1-C4 — manual pairing: validate ip/port, default-deny non-private
+ * targets (closes the §0-V1-5 delta-exfil chain), and append the target to
+ * the SAME consent list used by discovery approvals (one list, one guard).
+ * Session auth on this route lands with C6 (server-main middleware swap).
+ */
 app.post('/api/sync/manual', async (c) => {
   try {
-    const { ip, port } = await c.req.json();
-    if (!ip || !port) {
-      return c.json({ error: 'IP and port required' }, 400);
+    const body = await c.req.json().catch(() => null);
+    const check = validateManualPeer(body?.ip, body?.port, isSyncAllowPublic(db));
+    if (!check.ok) {
+      return c.json({ error: check.error }, 400);
     }
-    await transport.connectToManualPeer(ip, Number(port));
+    const ip: string = body.ip;
+    const port: number = body.port;
+    const added = addApprovedPeer(db, ip, port);
+    if (!added.ok) {
+      return c.json({ error: added.error }, 409);
+    }
+    await transport.connectToManualPeer(ip, port);
     return c.json({ success: true, message: `Connected to ${ip}:${port}` });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
+});
+
+/**
+ * §2.1-C4 — PortGrid consent surface: list pending/approved peers, approve
+ * (validated + capped + connect), reject (drop from pending).
+ * Session auth on this route lands with C6 (server-main middleware swap).
+ */
+app.post('/api/sync/peers', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const action = body?.action;
+
+  if (action === 'list') {
+    return c.json({
+      enabled: isSyncEnabled(db),
+      allowPublic: isSyncAllowPublic(db),
+      pending: [...pendingPeers.values()],
+      approved: getApprovedPeers(db),
+    });
+  }
+
+  if (action !== 'approve' && action !== 'reject') {
+    return c.json({ error: 'invalid-action' }, 400);
+  }
+
+  const check = validateManualPeer(body?.ip, body?.port, isSyncAllowPublic(db));
+  if (!check.ok) {
+    return c.json({ error: check.error }, 400);
+  }
+  const ip: string = body.ip;
+  const port: number = body.port;
+  const nodeId = `${ip}:${port}`;
+
+  if (action === 'reject') {
+    pendingPeers.delete(nodeId);
+    scoutEmitter.emit('update', { type: 'PEER_REJECTED', node: { ip, port }, timestamp: Date.now() });
+    return c.json({ success: true, pending: [...pendingPeers.values()] });
+  }
+
+  // approve → persist to the consent list, then connect (§2.1-C4: ONLY this
+  // route and /api/sync/manual may call connect*).
+  const added = addApprovedPeer(db, ip, port);
+  if (!added.ok) {
+    return c.json({ error: added.error }, 409);
+  }
+  pendingPeers.delete(nodeId);
+  await transport.connectToPeer({ hostname: ip, ip, port });
+  scoutEmitter.emit('update', { type: 'PEER_APPROVED', node: { ip, port }, timestamp: Date.now() });
+  return c.json({ success: true, approved: getApprovedPeers(db) });
 });
 
 

@@ -167,6 +167,10 @@ function DashboardView() {
               : 'Project scanned after terminal close — no new docs found.'
           );
         }
+        // §2.1-C4: peer consent events re-render the Sync Peers lists live.
+        if (data.type === 'PEER_DISCOVERED' || data.type === 'PEER_APPROVED' || data.type === 'PEER_REJECTED') {
+          refreshSyncPeers();
+        }
       } catch {}
     });
     return () => es.close();
@@ -178,6 +182,69 @@ function DashboardView() {
     const t = setTimeout(() => setAutoScanNotice(null), 8000);
     return () => clearTimeout(t);
   }, [autoScanNotice]);
+
+  // ─── Sync Peers (§2.1-C4: consent BEFORE any connection) ──────────────────
+  // Discovered mDNS nodes land in `pending` and are NOT connected — the
+  // transport only dials after Approve (or a validated manual add) persists
+  // the peer to the single consent list in BaseVault.
+  const [syncPeers, setSyncPeers] = useState<{
+    enabled: boolean; allowPublic: boolean;
+    pending: { hostname?: string; ip: string; port: number }[];
+    approved: { ip: string; port: number; fingerprint?: string }[];
+  }>({ enabled: false, allowPublic: false, pending: [], approved: [] });
+  const [manualIp, setManualIp] = useState('');
+  const [manualPort, setManualPort] = useState('3743');
+  const [peerNotice, setPeerNotice] = useState<string | null>(null);
+
+  const refreshSyncPeers = useCallback(() => {
+    fetch(`${API}/api/sync/peers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list' }),
+    }).then(r => r.json()).then(d => {
+      if (d && Array.isArray(d.pending)) setSyncPeers(d);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => { refreshSyncPeers(); }, [refreshSyncPeers]);
+
+  // Approve = persist to consent list + connect; Reject = drop from pending.
+  const peerAction = async (action: 'approve' | 'reject', ip: string, port: number) => {
+    const r = await fetch(`${API}/api/sync/peers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ip, port }),
+    }).catch(() => null);
+    const d = r ? await r.json().catch(() => null) : null;
+    if (d?.success) {
+      setPeerNotice(action === 'approve' ? `Approved ${ip}:${port} — connected.` : `Rejected ${ip}:${port}.`);
+      refreshSyncPeers();
+    } else {
+      setPeerNotice(`${action === 'approve' ? 'Approve' : 'Reject'} failed: ${d?.error || 'network error'}`);
+    }
+  };
+
+  // Manual peer: validated server-side (private-range rule, cap, dedupe) and
+  // written to the SAME consent list used by discovery approvals.
+  const addManualPeer = async () => {
+    const port = Number(manualPort);
+    const r = await fetch(`${API}/api/sync/manual`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip: manualIp.trim(), port }),
+    }).catch(() => null);
+    const d = r ? await r.json().catch(() => null) : null;
+    if (d?.success) {
+      setPeerNotice(d.message || `Connected to ${manualIp.trim()}:${port}`);
+      setManualIp('');
+      refreshSyncPeers();
+    } else {
+      setPeerNotice(`Manual add failed: ${d?.error || 'network error'}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!peerNotice) return;
+    const t = setTimeout(() => setPeerNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [peerNotice]);
 
   // DAG Canvas state
   const [runs, setRuns] = useState<{id:string;status:string;created_at:number}[]>([]);
@@ -539,6 +606,98 @@ function DashboardView() {
               </div>
             )}
           </>
+        )}
+      </section>
+
+      {/* Widget D3: Sync Peers — consent BEFORE any connection (§2.1-C4).
+          Discovered nodes sit pending until approved; manual adds validate
+          against the same private-range rule + consent list server-side. */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Users size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Sync Peers" dev="Sync Peer Consent (mDNS Discovery)" />
+          </h2>
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${syncPeers.enabled ? 'border-green-500/20 bg-green-500/10 text-green-400' : 'border-white/10 bg-white/5 text-gray-500'}`}>
+            {syncPeers.enabled ? 'SYNC ON' : 'SYNC OFF'}
+          </span>
+        </div>
+        <p className="text-[10px] text-gray-500 mb-3">
+          Nothing connects until you approve it. Discovered devices wait here; approved ones join your trusted list.
+        </p>
+
+        {peerNotice && (
+          <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-white/[0.03] border border-white/10 text-[10px] text-gray-300">
+            <Sparkles size={12} className="shrink-0" style={{ color: ACCENT }} /> {peerNotice}
+          </div>
+        )}
+
+        {/* Pending discovered peers */}
+        <div className="mb-3">
+          <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2">
+            Waiting For Approval ({syncPeers.pending.length})
+          </div>
+          {syncPeers.pending.length === 0 ? (
+            <div className="text-[10px] text-gray-600 p-3 rounded-lg bg-black/20 border border-white/5">No discovered peers.</div>
+          ) : (
+            <div className="space-y-2 max-h-[140px] overflow-y-auto">
+              {syncPeers.pending.map(p => (
+                <div key={`${p.ip}:${p.port}`} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-black/30 border border-amber-500/20">
+                  <div>
+                    <div className="text-xs font-bold text-white font-mono">{p.hostname || p.ip}</div>
+                    <div className="text-[10px] text-gray-500 font-mono">{p.ip}:{p.port}</div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => peerAction('approve', p.ip, p.port)} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Approve</button>
+                    <button onClick={() => peerAction('reject', p.ip, p.port)} className="px-2 py-1 rounded text-[9px] font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">Reject</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Approved peers */}
+        <div className="mb-3">
+          <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2">
+            Approved ({syncPeers.approved.length}{syncPeers.approved.length >= 32 ? ' — limit reached' : ''})
+          </div>
+          {syncPeers.approved.length === 0 ? (
+            <div className="text-[10px] text-gray-600 p-3 rounded-lg bg-black/20 border border-white/5">No approved peers yet.</div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {syncPeers.approved.map(p => (
+                <span key={`${p.ip}:${p.port}`} className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                  {p.ip}:{p.port}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Manual peer entry — validated server-side (private range / cap) */}
+        <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+          <input
+            value={manualIp}
+            onChange={e => setManualIp(e.target.value)}
+            placeholder="IP address"
+            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs text-white font-mono placeholder:text-gray-600 focus:border-teal-500/40 outline-none"
+          />
+          <input
+            value={manualPort}
+            onChange={e => setManualPort(e.target.value)}
+            placeholder="Port"
+            className="w-20 px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs text-white font-mono placeholder:text-gray-600 focus:border-teal-500/40 outline-none"
+          />
+          <button
+            onClick={addManualPeer}
+            disabled={!manualIp.trim()}
+            className="px-3 py-1.5 rounded-lg text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add Peer
+          </button>
+        </div>
+        {syncPeers.allowPublic && (
+          <div className="text-[9px] text-amber-500/70 mt-2">⚠ Public-range peers allowed (sync_allow_public enabled).</div>
         )}
       </section>
 
