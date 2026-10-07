@@ -1,6 +1,5 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import { RouteSwitchEngine } from '../core/routeswitch/engine';
 import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
 import { instantiateProvider } from '../core/routeswitch/provider-factory';
@@ -30,8 +29,11 @@ import type { DiscoveredNode } from '../core/basevault/network/mdns-discovery';
 
 const app = new Hono();
 
-// Global CORS to allow Vite frontend to access API
-app.use('/*', cors());
+// §2.1-C5 — explicit CORS allowlist (replaces the wildcard cors(); closes T1:
+// a foreign origin never receives Access-Control-Allow-Origin). Registered
+// before auth so OPTIONS preflight short-circuits ahead of the 401.
+import { perimeterCors, rateLimitMiddleware } from './perimeter';
+app.use('/*', perimeterCors);
 
 const transport = new NodeTransport();
 const mdnsDiscovery = new MDNSDiscovery(3743);
@@ -54,30 +56,13 @@ mdnsDiscovery.on('peer-discovered', (node: DiscoveredNode) => {
 mdnsDiscovery.start();
 
 
-// Rate Limiter Memory Store
-const rateLimits = new Map<string, { count: number, resetTime: number }>();
+// §2.1-C5 — payload cap + bounded per-peer-address rate limit, extracted to
+// ./perimeter so the sweep/evict logic and getIp TRUST_PROXY gate are testable
+// without importing this file (it binds a port).
+app.use('/*', rateLimitMiddleware);
 
 app.use('/*', async (c, next) => {
-  // 1. Payload Size Limit (64 KB)
-  const contentLength = c.req.header('content-length');
-  if (contentLength && parseInt(contentLength, 10) > 64 * 1024) {
-    return c.json({ error: 'Payload Too Large' }, 413);
-  }
-
-  // 2. Rate Limiting (120 req/min per client)
-  const ip = c.req.header('x-forwarded-for') || '127.0.0.1';
-  const now = Date.now();
-  let limit = rateLimits.get(ip);
-  if (!limit || limit.resetTime < now) {
-    limit = { count: 0, resetTime: now + 60000 };
-  }
-  if (limit.count >= 120) {
-    return c.json({ error: 'Too Many Requests' }, 429);
-  }
-  limit.count++;
-  rateLimits.set(ip, limit);
-
-  // 3. Authentication & Exemptions
+  // 3. Authentication & Exemptions (§2.1-C6 replaces this block wholesale)
   const path = c.req.path;
   if (path.startsWith('/health') || path.startsWith('/api/config')) {
     return next();
@@ -622,7 +607,23 @@ app.get('/api/basevault/run/:runId', (c) => {
 // ─── Server Start ─────────────────────────────────────────────────────────────
 
 const port = 3743;
-log.info(`[NeuroSync] API Gateway running on http://localhost:${port}`);
+
+/**
+ * §2.1-C5 — loopback bind (closes T2/T6: LAN + all-interfaces exposure).
+ * NEUROSYNC_BIND env wins, then the operator-set `bind_address` row in
+ * system_settings (settable via PortGrid), else fail-closed to 127.0.0.1.
+ * An empty string / garbage value falls through to the loopback default.
+ */
+function dbSetting(key: string): string | undefined {
+  try {
+    const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key) as { value: string } | undefined;
+    return row?.value;
+  } catch {
+    return undefined;
+  }
+}
+const bindAddress = process.env.NEUROSYNC_BIND || dbSetting('bind_address') || '127.0.0.1';
+log.info(`[NeuroSync] API Gateway running on http://${bindAddress === '127.0.0.1' ? 'localhost' : bindAddress}:${port} (bind ${bindAddress})`);
 
 import { ModelDiscovery } from '../core/routeswitch/discovery';
 ModelDiscovery.fetchModels().then(() => {
@@ -633,7 +634,8 @@ ModelDiscovery.fetchModels().then(() => {
 
 const server = serve({
   fetch: app.fetch,
-  port
+  port,
+  hostname: bindAddress,
 });
 
 // Attach the WebSocket upgrade handler to the underlying http.Server so the
