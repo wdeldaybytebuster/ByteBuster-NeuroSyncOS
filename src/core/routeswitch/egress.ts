@@ -73,6 +73,12 @@ export interface EgressResult {
   text: string;
   /** Bytes actually read off the wire (0 for blocked-before-fetch). */
   bytes: number;
+  /**
+   * Final response headers (lowercased keys; `{}` for blocked results and
+   * requests that never completed). Surfaced so converted callers keep their
+   * rate-limit / telemetry reads (§2.3 C9 — router.ts:48).
+   */
+  headers: Record<string, string>;
   /** Present iff the request was stopped by a security/limit gate. */
   blocked?: EgressBlockedReason;
 }
@@ -86,6 +92,19 @@ export interface EgressOptions {
   internal?: boolean;
   /** Opt in to private addresses (RFC-1918/metadata). Address gate only. */
   allowPrivate?: boolean;
+  /**
+   * HTTP method (default `'GET'`, case-insensitive). POST/PUT JSON bodies are
+   * a first-class passthrough (§2.3 C9) — the chat routers converted to egress
+   * would otherwise silently degrade to bodiless GETs. Bodies are never sent
+   * with GET/HEAD (spec behaviour is a throw; we drop, because egress never
+   * throws). See the redirect hop rules in the fetch loop for how method/body
+   * survive (or don't) a 3xx.
+   */
+  method?: string;
+  /** Extra request headers. Forwarded cross-origin on redirects NEVER (see loop). */
+  headers?: Record<string, string>;
+  /** Request body (string payloads only — every converted caller sends JSON). */
+  body?: string;
 }
 
 export interface EgressContext {
@@ -214,6 +233,17 @@ async function killSwitchBlocks(): Promise<boolean> {
   }
 }
 
+/**
+ * §2.3 C9 — public kill-switch predicate. TRUE = external calls currently
+ * ALLOWED. Callers that would otherwise initiate egress *unconditionally*
+ * (boot-time model discovery, server-main.ts:630) use this to skip the whole
+ * operation: zero DNS, zero socket, zero boot-time cost on eMMC (Axiom 6),
+ * instead of paying the full gate chain just to be blocked.
+ */
+export async function externalCallsAllowed(): Promise<boolean> {
+  return !(await killSwitchBlocks());
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function isAbortError(err: unknown): boolean {
@@ -257,6 +287,7 @@ export async function egressFetch(
       status: extra.status ?? 0,
       text: '',
       bytes: extra.bytes ?? 0,
+      headers: {},
       blocked: reason,
     };
   };
@@ -290,16 +321,28 @@ export async function egressFetch(
   // ONE budget for the whole operation — redirect chains can't multiply it.
   const signal = AbortSignal.timeout(timeoutMs);
   let redirects = 0;
+  // §2.3 C9 request passthrough — mutable across redirect hops (see below).
+  let reqMethod = (opts.method ?? 'GET').toUpperCase();
+  let reqHeaders = opts.headers;
+  let reqBody = opts.body;
+
+  /** Final response headers as a plain record (lowercased keys). */
+  const captureHeaders = (res: Response): Record<string, string> =>
+    Object.fromEntries(res.headers.entries());
 
   for (;;) {
     let res: Response;
     try {
-      res = await fetch(current.toString(), { redirect: 'manual', signal });
+      const init: RequestInit = { redirect: 'manual', signal, method: reqMethod };
+      if (reqHeaders) init.headers = reqHeaders;
+      // Bodies never ride GET/HEAD (the spec throws; egress never does — drop).
+      if (reqBody !== undefined && reqMethod !== 'GET' && reqMethod !== 'HEAD') init.body = reqBody;
+      res = await fetch(current.toString(), init);
     } catch (err) {
       if (isAbortError(err) || signal.aborted) return fail('timeout');
       // Connection refused / reset / TLS failure — a transport failure, not a
       // security verdict. status 0 = "the request never completed".
-      return { ok: false, status: 0, text: '', bytes: 0 };
+      return { ok: false, status: 0, text: '', bytes: 0, headers: {} };
     }
 
     const location = res.headers.get('location');
@@ -319,19 +362,34 @@ export async function egressFetch(
       if (hopHostGate) return fail(hopHostGate);
       const hopAddrGate = await validateAddress(next.hostname, opts);
       if (hopAddrGate) return fail(hopAddrGate);
+      // §2.3 C9 redirect semantics (mirrors fetch's own): preserve method+body
+      // ONLY for 307/308 same-origin; every other status downgrades to GET,
+      // and custom headers (Authorization!) are never forwarded cross-origin.
+      const sameOrigin = next.origin === current.origin;
+      const preserveMethod = (res.status === 307 || res.status === 308) && sameOrigin;
+      if (!preserveMethod) {
+        reqMethod = 'GET';
+        reqBody = undefined;
+      } else if (reqMethod === 'GET' || reqMethod === 'HEAD') {
+        reqBody = undefined;
+      }
+      if (!sameOrigin) reqHeaders = undefined;
       current = next;
       continue;
     }
 
+    const headers = captureHeaders(res);
     if (res.status < 200 || res.status >= 300) {
       // Transport/HTTP failure — NOT a block. Body discarded (never needed for
-      // a failure verdict, and capped reads are the whole point).
+      // a failure verdict, and capped reads are the whole point). Headers are
+      // still surfaced: a 429's rate-limit state is exactly what router.ts
+      // needs to read off a failed response.
       await discardBody(res);
-      return { ok: false, status: res.status, text: '', bytes: 0 };
+      return { ok: false, status: res.status, text: '', bytes: 0, headers };
     }
 
     const body = res.body;
-    if (!body) return { ok: true, status: res.status, text: '', bytes: 0 };
+    if (!body) return { ok: true, status: res.status, text: '', bytes: 0, headers };
 
     const reader = body.getReader();
     const chunks: Uint8Array[] = [];
@@ -352,7 +410,7 @@ export async function egressFetch(
       }
     } catch (err) {
       if (isAbortError(err) || signal.aborted) return fail('timeout', { bytes });
-      return { ok: false, status: res.status, text: '', bytes };
+      return { ok: false, status: res.status, text: '', bytes, headers };
     }
 
     return {
@@ -360,6 +418,7 @@ export async function egressFetch(
       status: res.status,
       text: Buffer.concat(chunks).toString('utf8'),
       bytes,
+      headers,
     };
   }
 }

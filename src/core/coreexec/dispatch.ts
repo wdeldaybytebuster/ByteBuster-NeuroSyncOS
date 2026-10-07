@@ -3,7 +3,9 @@
  *
  * Reduces a free-form DAG-node prompt to one of three execution actions:
  *   - shell  → CommandSandbox.execute(payload)        (allowlisted bash)
- *   - scrape → StealthScraper.scrape(payload, true)   (Python + Cloak fetch)
+ *   - scrape → StealthScraper.scrape(payload, true)   (governed HTTP egress by
+ *     default; `system_settings.scrape_backend='browser'` selects the
+ *     Python + Cloak sandbox path — §2.3 C9 / §5-9)
  *   - generic → metadata echo                        (legacy/no-op fallback)
  *
  * Detection is intentionally conservative — false negatives fall back to

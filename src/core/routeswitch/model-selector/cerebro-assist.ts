@@ -1,4 +1,5 @@
 import { ZenDiscoveryService, ModelInfo } from '../discovery';
+import { egressFetch } from '../egress';
 
 export class CerebroAssistPipeline {
   private static SYSTEM_PROMPT = `You are Cerebro Assist, the ethereal onboarding chatbot for NeuroSync.
@@ -25,6 +26,11 @@ Do not provide general-purpose knowledge or external hallucinations. Your univer
     return freeModels[0]!.id;
   }
 
+  /**
+   * @deprecated DEAD CODE — do not import; kept for tests (zero production
+   * callers confirmed via grep + stale GitNexus impact, §2.3 C9). Still
+   * converted to governed egress so the kept caller exercises the single door.
+   */
   public static async generateResponse(userMessage: string): Promise<string> {
     const targetModelId = await this.getTargetModelId();
     
@@ -39,20 +45,32 @@ Do not provide general-purpose knowledge or external hallucinations. Your univer
       temperature: 0.7,
     };
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`
+    // §2.3 C9 — through the governed egress door (address gates, kill switch,
+    // timeout, byte cap); POST/headers/body ride through EgressOptions.
+    const res = await egressFetch(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        allowPrivate: false,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`
+        },
+        body: JSON.stringify(payload)
       },
-      body: JSON.stringify(payload)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.statusText}`);
+      { action: 'fetch', owner: 'routeswitch/cerebro-assist' },
+    );
+
+    if (res.blocked) {
+      // Security/limit gate verdict — kept distinct from an API failure.
+      throw new Error(`Egress blocked (${res.blocked}) for OpenRouter API`);
     }
-    
-    const data = await response.json();
+    if (!res.ok) {
+      // statusText no longer travels with EgressResult (§2.3 C9 deviation).
+      throw new Error(`OpenRouter API error: ${res.status}`);
+    }
+
+    const data = JSON.parse(res.text);
     return data.choices?.[0]?.message?.content || "The quantum nexus is currently silent.";
   }
 }
