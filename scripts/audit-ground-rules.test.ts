@@ -11,6 +11,13 @@ import {
   checkNoExternalDbDependencies,
   findForbiddenDependencies,
   checkGlobalOKFSeedWired,
+  // §4.4 checks 6-8 (C10):
+  scanForSqlInterpolation,
+  checkNoUntrustedSqlInterpolation,
+  SQL_INTERPOLATION_ALLOWLIST,
+  scanForRawFetch,
+  checkNoRawEgress,
+  checkServerBindsLoopback,
 } from './audit-ground-rules';
 
 // Each check function under test accepts an explicit repoRoot, so these tests
@@ -240,6 +247,200 @@ describe('audit-ground-rules', () => {
       const result = checkGlobalOKFSeedWired(repo);
       expect(result.passed).toBe(false);
       expect(result.message).toContain('no .md files');
+    });
+  });
+
+  // ── §4.4 check 6 (C10): no untrusted SQL interpolation ────────────────────
+
+  describe('scanForSqlInterpolation (pure)', () => {
+    it('flags .prepare/.exec backtick templates containing ${', () => {
+      const files = [
+        { relPath: 'a.ts', content: 'db.prepare(`SELECT * FROM t WHERE id = ${id}`);' },
+        { relPath: 'b.ts', content: 'db.exec(`UPDATE t SET x = 1${updates.join(",")}`);' },
+      ];
+      const findings = scanForSqlInterpolation(files);
+      expect(findings.map((f) => f.relPath)).toEqual(['a.ts', 'b.ts']);
+      expect(findings[0]?.matchedPatterns.length).toBeGreaterThan(0);
+    });
+
+    it('does not flag parameterised string literals, interpolation-free templates, or plain db.exec', () => {
+      const files = [
+        { relPath: 'c.ts', content: "db.prepare('SELECT * FROM t WHERE id = ?').get(id);" },
+        { relPath: 'd.ts', content: 'db.prepare(`SELECT * FROM t WHERE id = ?`);' },
+        { relPath: 'e.ts', content: "db.exec('BEGIN IMMEDIATE');" },
+        { relPath: 'f.ts', content: "const sql = `SELECT ${x}`; // not passed to prepare/exec" },
+      ];
+      expect(scanForSqlInterpolation(files)).toEqual([]);
+    });
+  });
+
+  describe('checkNoUntrustedSqlInterpolation', () => {
+    it('passes when the only interpolating file is allowlisted', () => {
+      const repo = newTempRepo(tempDirs);
+      const allowed = 'src/server/routes/coreexec-router.ts';
+      const fullPath = path.join(repo, allowed);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, 'db.prepare(`SELECT 1 WHERE a = ${runFilter}`);');
+      const result = checkNoUntrustedSqlInterpolation(repo);
+      expect(result.passed).toBe(true);
+      expect(result.message).toContain(allowed);
+    });
+
+    it('fails when a non-allowlisted file interpolates into .prepare', () => {
+      const repo = newTempRepo(tempDirs);
+      const rogueFile = path.join(repo, 'src/core/some-new-feature/rogue.ts');
+      fs.mkdirSync(path.dirname(rogueFile), { recursive: true });
+      fs.writeFileSync(rogueFile, 'db.prepare(`DELETE FROM t WHERE id = ${req.query.id}`);');
+      const result = checkNoUntrustedSqlInterpolation(repo);
+      expect(result.passed).toBe(false);
+      expect(result.message).toContain('src/core/some-new-feature/rogue.ts');
+    });
+
+    it('excludes .test.ts files from the scan', () => {
+      const repo = newTempRepo(tempDirs);
+      const testFile = path.join(repo, 'src/core/some-new-feature/rogue.test.ts');
+      fs.mkdirSync(path.dirname(testFile), { recursive: true });
+      fs.writeFileSync(testFile, 'db.prepare(`SELECT ${x}`);');
+      const result = checkNoUntrustedSqlInterpolation(repo);
+      expect(result.passed).toBe(true);
+    });
+
+    it('keeps transport.ts and sync.ts OFF the allowlist (C1/C2 removed their interpolation)', () => {
+      const repo = newTempRepo(tempDirs);
+      for (const rel of ['src/core/routeswitch/transport.ts', 'src/core/routeswitch/sync.ts']) {
+        const full = path.join(repo, rel);
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        // Interpolating content proves the allowlist entry is absent (would
+        // pass if the file had silently crept back onto the allowlist).
+        fs.writeFileSync(full, 'db.prepare(`SELECT ${x}`);');
+      }
+      const result = checkNoUntrustedSqlInterpolation(repo);
+      expect(result.passed).toBe(false);
+    });
+
+    it('pins the allowlist: plan §4.4 initial three + C10-discovered literal fragments + §5-17 deferral', () => {
+      // Guards against SILENT allowlist growth/shrink — every entry must be
+      // justified in a comment next to its definition (plan §4.4).
+      expect([...SQL_INTERPOLATION_ALLOWLIST]).toEqual([
+        'src/server/routes/coreexec-router.ts',
+        'src/server/routes/llm.ts',
+        'src/server/routes/projects.ts',
+        'src/core/okf/graph-query.ts',
+        'src/server/routes/okf.ts',
+        'src/core/memory/cerebro/vector.ts', // §5-17 deferred — recorded, not fixed
+      ]);
+    });
+  });
+
+  // ── §4.4 check 7 (C10): no raw egress outside the governed door ──────────
+
+  describe('scanForRawFetch (pure)', () => {
+    it('flags bare fetch( calls', () => {
+      const files = [
+        { relPath: 'a.ts', content: 'const res = await fetch(url, { method: "GET" });' },
+        { relPath: 'b.ts', content: 'fetch(url);' },
+      ];
+      const findings = scanForRawFetch(files);
+      expect(findings.map((f) => f.relPath)).toEqual(['a.ts', 'b.ts']);
+    });
+
+    it('does not flag egressFetch( or method-style obj.fetch(', () => {
+      const files = [
+        { relPath: 'c.ts', content: 'const r = await egressFetch(url, {}, ctx);' },
+        { relPath: 'd.ts', content: 'client.fetch(payload);' },
+      ];
+      expect(scanForRawFetch(files)).toEqual([]);
+    });
+
+    it('does not flag fetch( mentions that only appear in comments', () => {
+      const files = [
+        {
+          relPath: 'e.ts',
+          content: '/**\n * THE BUG: raw `fetch(url)` fired here.\n */\nexport const x = 1;',
+        },
+        { relPath: 'f.ts', content: '// we used to call fetch(url) here\nexport const y = 2;' },
+      ];
+      expect(scanForRawFetch(files)).toEqual([]);
+    });
+  });
+
+  describe('checkNoRawEgress', () => {
+    it('passes when the only raw fetches are allowlisted (gate, adapters, system, gitnexus, ui api)', () => {
+      const repo = newTempRepo(tempDirs);
+      const allowlisted = [
+        'src/core/routeswitch/egress.ts',
+        'src/core/routeswitch/adapters/openai-compatible.ts', // adapters/*.ts prefix entry
+        'src/server/routes/system.ts',
+        'src/core/memory/gitnexus-client.ts',
+        'src/ui/lib/api.ts',
+      ];
+      for (const rel of allowlisted) {
+        const full = path.join(repo, rel);
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, 'const r = await fetch(url);');
+      }
+      const result = checkNoRawEgress(repo);
+      expect(result.passed).toBe(true);
+    });
+
+    it('fails when a non-allowlisted file calls raw fetch', () => {
+      const repo = newTempRepo(tempDirs);
+      const rogueFile = path.join(repo, 'src/core/some-new-feature/rogue.ts');
+      fs.mkdirSync(path.dirname(rogueFile), { recursive: true });
+      fs.writeFileSync(rogueFile, 'const r = await fetch("https://example.invalid");');
+      const result = checkNoRawEgress(repo);
+      expect(result.passed).toBe(false);
+      expect(result.message).toContain('src/core/some-new-feature/rogue.ts');
+    });
+
+    it('excludes .test.ts files from the scan', () => {
+      const repo = newTempRepo(tempDirs);
+      const testFile = path.join(repo, 'src/core/some-new-feature/rogue.test.ts');
+      fs.mkdirSync(path.dirname(testFile), { recursive: true });
+      fs.writeFileSync(testFile, 'const r = await fetch(url);');
+      const result = checkNoRawEgress(repo);
+      expect(result.passed).toBe(true);
+    });
+
+    it('does not allowlist transport.ts/sync.ts (their raw fetches were C1/C2 conversions)', () => {
+      const repo = newTempRepo(tempDirs);
+      const full = path.join(repo, 'src/core/routeswitch/transport.ts');
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, 'const r = await fetch(url);');
+      const result = checkNoRawEgress(repo);
+      expect(result.passed).toBe(false);
+    });
+  });
+
+  // ── §4.4 check 8 (C10): server binds loopback only ────────────────────────
+
+  describe('checkServerBindsLoopback', () => {
+    it('passes when server-main.ts declares hostname: inside the serve({ … }) literal', () => {
+      const repo = newTempRepo(tempDirs);
+      const file = path.join(repo, 'src/server/server-main.ts');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(
+        file,
+        "const server = serve({\n  hostname: bindAddress,\n  port: 3000,\n  fetch(req) { return handle(req); },\n});\n",
+      );
+      const result = checkServerBindsLoopback(repo);
+      expect(result.passed).toBe(true);
+    });
+
+    it('fails when the serve({ … }) literal has no hostname: entry (would bind 0.0.0.0)', () => {
+      const repo = newTempRepo(tempDirs);
+      const file = path.join(repo, 'src/server/server-main.ts');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, "const server = serve({\n  port: 3000,\n  fetch(req) { return handle(req); },\n});\n");
+      const result = checkServerBindsLoopback(repo);
+      expect(result.passed).toBe(false);
+      expect(result.message).toContain('hostname:');
+    });
+
+    it('fails when server-main.ts does not exist', () => {
+      const repo = newTempRepo(tempDirs);
+      const result = checkServerBindsLoopback(repo);
+      expect(result.passed).toBe(false);
     });
   });
 });
