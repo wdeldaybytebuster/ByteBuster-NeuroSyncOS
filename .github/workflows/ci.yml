@@ -29,6 +29,43 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Plan: docs/security/ARCHITECT-ci-gating-cleanup.md §2.2 (Phase A).
+      # The audit runner CORRECTLY exits 1 while checks #2/#5 are red (6/8), so
+      # this gate asserts on label-anchored PARSED OUTPUT, not bare exit status:
+      # it requires the 6 must-pass labels, tolerates exactly the two known
+      # FAIL labels, and rejects any other FAIL line. Same gate passes at
+      # 6/8 -> 7/8 -> 8/8 with no edits (see §6.1).
+      # `set -o pipefail`: without it `npm run … | tee` returns tee's exit code
+      # and a failing audit looks green (Auditor requirement).
+      # `|| AUDIT_RC=$?`: GitHub runs `run:` blocks under `bash -e`; with
+      # pipefail set, the (expected) exit-1 audit would abort the step before
+      # any assertion runs. Capturing the status keeps `-e` from firing while
+      # the raw code is still echoed for the log.
+      - name: Ground-rule audit (transitional parsed-output gate)
+        run: |
+          mkdir -p /tmp/opencode
+          set -o pipefail
+          npm run audit:ground-rules 2>&1 | tee /tmp/opencode/audit.log || AUDIT_RC=$?
+          # --- hard expectations: checks 1,3,4,6,7,8 MUST pass ---
+          for label in \
+            "PortGrid/CoreExec dashboards remain separate" \
+            "Tests never touch the real database" \
+            "No external database client dependencies" \
+            "No untrusted SQL interpolation" \
+            "No raw egress outside the governed door" \
+            "Server binds loopback only" ; do
+            grep -q "^\[PASS\] ${label}" /tmp/opencode/audit.log \
+              || { echo "AUDIT GATE: expected PASS missing for: ${label}"; exit 1; }
+          done
+          # --- the only permitted FAILs during transition ---
+          grep -q "^\[FAIL\] No unapproved shell-exec surface" /tmp/opencode/audit.log && KNOWN_FAIL_2=1 || KNOWN_FAIL_2=0
+          grep -q "^\[FAIL\] Global OKF seed mechanism is wired up" /tmp/opencode/audit.log && KNOWN_FAIL_5=1 || KNOWN_FAIL_5=0
+          # --- nothing else may fail ---
+          if grep -E "^\[FAIL\]" /tmp/opencode/audit.log | grep -v -e "No unapproved shell-exec surface" -e "Global OKF seed mechanism is wired up"; then
+            echo "AUDIT GATE: unexpected FAIL line present"; exit 1
+          fi
+          echo "AUDIT GATE (transitional): 6 must-pass checks green; known FAILs: #2=${KNOWN_FAIL_2} #5=${KNOWN_FAIL_5} (audit raw exit: ${AUDIT_RC:-0})"
+
       - name: Test
         run: npm test
 
