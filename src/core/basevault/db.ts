@@ -245,6 +245,54 @@ export function initDB() {
       );
     END;
 
+    -- Audit triggers for quarantine table (tainted/unverified content).
+    -- Mirrors the cerebro_memories_meta audit chain so any mutation of
+    -- quarantine content is also hash-chained for provenance.
+    CREATE TRIGGER IF NOT EXISTS audit_memory_insert 
+    AFTER INSERT ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'INSERT',
+        NULL,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_update_quarantine 
+    AFTER UPDATE ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'UPDATE',
+        OLD.content,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_delete_quarantine 
+    AFTER DELETE ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        OLD.id,
+        'DELETE',
+        OLD.content,
+        NULL,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
 
     CREATE TABLE IF NOT EXISTS cerebro_learning_approvals (
       id TEXT PRIMARY KEY,
@@ -682,7 +730,7 @@ export function initDB() {
       WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
       BEGIN
         INSERT INTO sync_event_log (table_name, action, timestamp, payload)
-        VALUES ('workflow_runs', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status));
+        VALUES ('workflow_runs', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status, 'dag_layout', NEW.dag_layout, 'track', NEW.track, 'created_at', NEW.created_at, 'completed_at', NEW.completed_at));
       END;
 
       DROP TRIGGER IF EXISTS sync_workflow_runs_update;
@@ -690,7 +738,7 @@ export function initDB() {
       WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
       BEGIN
         INSERT INTO sync_event_log (table_name, action, timestamp, payload)
-        VALUES ('workflow_runs', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status));
+        VALUES ('workflow_runs', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status, 'dag_layout', NEW.dag_layout, 'track', NEW.track, 'created_at', NEW.created_at, 'completed_at', NEW.completed_at));
       END;
 
       DROP TRIGGER IF EXISTS sync_tasks_insert;

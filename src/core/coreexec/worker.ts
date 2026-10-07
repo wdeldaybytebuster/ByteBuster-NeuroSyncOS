@@ -2,6 +2,7 @@ import { ThreadWorker } from 'poolifier';
 import { CommandSandbox } from '../portgrid/sandbox';
 import { StealthScraper } from './scraping';
 import { classifyDirective, NodeDirective } from './dispatch';
+import { HarnessProfileEnum, type HarnessProfile } from '../basevault/schema';
 import { checkActionPermission } from './permission-gate';
 import { RouteSwitchEngine } from '../routeswitch/engine';
 // SA-01: all gitnexus CLI invocation goes through this audited bridge
@@ -21,6 +22,7 @@ export interface WorkerInput {
   taskId?: string;
   prompt?: string;
   directive?: NodeDirective;
+  harnessProfile?: HarnessProfile;
   data?: unknown;
   plugin?: string;
   params?: any;
@@ -247,6 +249,9 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
 
           const taskId = input?.taskId;
           const prompt = input?.prompt ?? '';
+          const harnessParse = HarnessProfileEnum.safeParse(input?.harnessProfile ?? 'default');
+          if (!harnessParse.success) return errEnvelope('invalid harness profile', taskId);
+          const harnessProfile = harnessParse.data;
           const directive = input?.directive ?? classifyDirective(prompt);
 
           if (!taskId) {
@@ -273,6 +278,14 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
             }
           } catch (err) {
             console.error('Failed to resolve project_id for task', taskId, err);
+          }
+
+          if (harnessProfile === 'evaluator') {
+            return errEnvelope('Evaluator harness unavailable: local Chrome DevTools/Playwright MCP protocol client is not configured', taskId);
+          }
+
+          if (harnessProfile === 'planner' || harnessProfile === 'generator' || harnessProfile === 'scout') {
+            return errEnvelope(`${harnessProfile} harness must run through CoreExec's isolated main-thread generation path`, taskId);
           }
 
           if (input.plugin) {

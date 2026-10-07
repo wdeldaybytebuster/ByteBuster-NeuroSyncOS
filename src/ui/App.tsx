@@ -22,6 +22,7 @@ import { NodeOutputInspector } from './components/NodeOutputInspector';
 import { isReservedDAGPrompt } from '../core/system-reserved';
 import { Statusline } from './components/Statusline';
 import { useHardwareTier } from '../core/scoutdaemon/hardware-context';
+import { WorkflowDAGLayoutSchema } from '../core/basevault/schema';
 
 // ── Custom Node ────────────────────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ export default function App() {
   const handleProposal = useCallback((proposal: DAGProposalPayload) => {
     // §1.2 — Defense-in-depth: filter reserved system-service labels that the
     // validator should have already rejected. Belt-and-suspenders.
-    const filteredNodes = proposal.nodes.filter(n => !isReservedDAGPrompt(n.prompt));
+    const filteredNodes = proposal.nodes.filter(n => !isReservedDAGPrompt(n.prompt ?? ''));
     const cleanedProposal: DAGProposalPayload = { ...proposal, nodes: filteredNodes };
 
     setCurrentProposal(cleanedProposal);
@@ -166,9 +167,9 @@ export default function App() {
         id:   `dag-${pNode.id}`,
         type: 'custom',
         data: {
-          label:       pNode.prompt.length > 32 ? pNode.prompt.slice(0, 32) + '…' : pNode.prompt,
+          label:       (pNode.prompt ?? pNode.id).length > 32 ? (pNode.prompt ?? pNode.id).slice(0, 32) + '…' : (pNode.prompt ?? pNode.id),
           icon:        dagIcons[i % dagIcons.length],
-          description: pNode.prompt,
+          description: pNode.prompt ?? pNode.id,
           status:      'pending',
         },
         position: { x: xStart + layerIdx * xSpacing, y: yStart + depth * ySpacing },
@@ -212,11 +213,20 @@ export default function App() {
       if (!data.run) return;
       if (seq !== rehydrateSeqRef.current) return; // superseded
 
-      const layout = JSON.parse(data.run.dag_layout) as { nodes: { id: string; dependencies: string[]; prompt: string }[] };
+      const parsedLayout = WorkflowDAGLayoutSchema.parse(data.run.dag_layout);
+      const demoIds = new Set(initialNodes.map(n => n.id));
+      if (!('nodes' in parsedLayout)) {
+        setNodes(prev => prev.filter(n => demoIds.has(n.id) || !n.id.startsWith('dag-')));
+        setEdges(prev => prev.filter(e => demoIds.has(e.source) || demoIds.has(e.target) || (!e.source.startsWith('dag-') && !e.target.startsWith('dag-'))));
+        setCurrentProposal({ id: runId, status: data.run.status, nodes: [] });
+        setActiveRunId(runId);
+        setRunStatus('error');
+        return;
+      }
+      const layout = parsedLayout;
       const proposalPayload: DAGProposalPayload = { id: runId, status: data.run.status, nodes: layout.nodes };
 
       // Strip demo nodes and re-render only the archived DAG
-      const demoIds = new Set(initialNodes.map(n => n.id));
       snapshotNodes = nodes;
       snapshotEdges = edges;
       setNodes(prev => prev.filter(n => demoIds.has(n.id) || !n.id.startsWith('dag-')));
@@ -260,9 +270,9 @@ export default function App() {
           id:   `dag-${pNode.id}`,
           type: 'custom',
           data: {
-            label:       pNode.prompt.length > 32 ? pNode.prompt.slice(0, 32) + '…' : pNode.prompt,
+            label:       (pNode.prompt ?? pNode.id).length > 32 ? (pNode.prompt ?? pNode.id).slice(0, 32) + '…' : (pNode.prompt ?? pNode.id),
             icon:        dagIcons[i % dagIcons.length],
-            description: pNode.prompt,
+            description: pNode.prompt ?? pNode.id,
             status,
             __runId:     runId,
             __task:      task ?? null,

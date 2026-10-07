@@ -92,6 +92,15 @@ export class LlamaCppProvider implements LLMProvider {
       contextWindowTokens: config.contextSize || 4096,
       inputTypes: ['text'],
     };
+    // Local GGUF adapter — no cloud dependence (Axiom 2).
+    // Vision support is conditional on the loaded model; declare false
+    // conservatively here since node-llama-cpp does not attest it.
+    this.capabilities = {
+      ...this.capabilities,
+      supportsVision: false,
+      supportsStructuredOutput: true,
+      contextWindowTokens: config.contextSize || 4096,
+    };
   }
 
   async generate(

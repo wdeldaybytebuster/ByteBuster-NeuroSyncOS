@@ -41,9 +41,9 @@ describe('ScopeLogic LLM-driven DAG proposal', () => {
     // A schema-shaped response with a distinctive 3-node structure and confidence.
     const llmDag = {
       nodes: [
-        { id: 'ingest', dependencies: [], prompt: 'Ingest the daily sales CSV export' },
-        { id: 'dedupe', dependencies: ['ingest'], prompt: 'Deduplicate rows by order id' },
-        { id: 'report', dependencies: ['dedupe'], prompt: 'Email a summary report to ops' },
+        { id: 'ingest', dependencies: [], prompt: 'Ingest the daily sales CSV export', harness_profile: 'planner' },
+        { id: 'dedupe', dependencies: ['ingest'], prompt: 'Deduplicate rows by order id', harness_profile: 'generator', params: { mode: 'strict' } },
+        { id: 'report', dependencies: ['dedupe'], prompt: 'Email a summary report to ops', plugin: 'report_writer' },
       ],
       confidence: 0.87,
     };
@@ -60,6 +60,10 @@ describe('ScopeLogic LLM-driven DAG proposal', () => {
     expect(reply.dagProposal?.nodes.some(n => /Deduplicate rows by order id/.test(n.prompt))).toBe(true);
     // Model self-reported confidence is threaded through.
     expect(reply.dagProposal?.confidence).toBe(0.87);
+    expect(reply.dagProposal?.nodes[0]?.harness_profile).toBe('planner');
+    expect(reply.dagProposal?.nodes[1]?.harness_profile).toBe('generator');
+    expect(reply.dagProposal?.nodes[1]?.params).toEqual({ mode: 'strict' });
+    expect(reply.dagProposal?.nodes[2]?.plugin).toBe('report_writer');
   });
 
   it('falls back to the template DAG (no confidence) when the LLM call throws', async () => {
