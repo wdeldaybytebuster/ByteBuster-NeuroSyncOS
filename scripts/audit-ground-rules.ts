@@ -268,9 +268,21 @@ export function checkNoExternalDbDependencies(repoRoot: string = REPO_ROOT): Che
 // Check 5: Global OKF seed mechanism is wired up
 // ---------------------------------------------------------------------------
 
+/**
+ * Canonical server entrypoint that owns runtime wiring (NOT the index.ts
+ * bootstrapper). `src/server/index.ts` only runs the Genesis `--profile`
+ * probe or dynamic-imports server-main.js — it never touches OKF. Asserting
+ * against the bootstrapper tests the wrong file: it fails on a correct tree
+ * AND would pass on a broken tree that moved the call into the bootstrapper.
+ * Do NOT "fix" a check-5 failure by pointing this back at index.ts — fix the
+ * wiring in server-main.ts instead. Path drift fails LOUD (…not found), never
+ * silently. Plan: docs/security/ARCHITECT-ci-gating-cleanup.md §4.
+ */
+const SERVER_ENTRY = 'src/server/server-main.ts';
+
 export function checkGlobalOKFSeedWired(repoRoot: string = REPO_ROOT): CheckResult {
   const seedDir = path.join(repoRoot, 'resources/global_okf_seed');
-  const serverIndex = path.join(repoRoot, 'src/server/index.ts');
+  const serverEntry = path.join(repoRoot, SERVER_ENTRY);
   const seedModule = path.join(repoRoot, 'src/core/okf/global-seed.ts');
 
   const problems: string[] = [];
@@ -301,16 +313,16 @@ export function checkGlobalOKFSeedWired(repoRoot: string = REPO_ROOT): CheckResu
     }
   }
 
-  if (!fs.existsSync(serverIndex)) {
-    problems.push('src/server/index.ts not found');
+  if (!fs.existsSync(serverEntry)) {
+    problems.push(`${SERVER_ENTRY} not found`);
   } else {
-    const serverContent = fs.readFileSync(serverIndex, 'utf8');
+    const serverContent = fs.readFileSync(serverEntry, 'utf8');
     const importsIt = /import\s*\{[^}]*\bbootstrapGlobalOKFSeed\b[^}]*\}\s*from\s*['"][^'"]*global-seed['"]/.test(
       serverContent,
     );
     const callsIt = /\bbootstrapGlobalOKFSeed\s*\(/.test(serverContent);
-    if (!importsIt) problems.push('src/server/index.ts does not import bootstrapGlobalOKFSeed from global-seed');
-    if (!callsIt) problems.push('src/server/index.ts does not call bootstrapGlobalOKFSeed()');
+    if (!importsIt) problems.push(`${SERVER_ENTRY} does not import bootstrapGlobalOKFSeed from global-seed`);
+    if (!callsIt) problems.push(`${SERVER_ENTRY} does not call bootstrapGlobalOKFSeed()`);
   }
 
   if (problems.length > 0) {
