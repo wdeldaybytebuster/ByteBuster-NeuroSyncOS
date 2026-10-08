@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { db } from '../basevault/db';
-import { scoutEmitter } from './sse';
+import { stagePendingRun } from './stage-run';
 import crypto from 'crypto';
 import * as si from 'systeminformation';
 import { ScoutResearch } from './research';
@@ -107,44 +107,24 @@ function scanDirectory(dir: string, fileList: string[] = []): string[] {
 // When idle, trigger the built-in system maintenance DAG
 idleDetector.on('idle', async () => {
   log.info('[ScoutDaemon] System is idle. Triggering autonomous maintenance...');
-  try {
-    const runId = crypto.randomUUID();
-    
-    // A synthetic DAG layout for maintenance
-    const dagLayout = {
-      nodes: [
-        { id: crypto.randomUUID(), dependencies: [] } // e.g., "Knowledge Graph Pruning"
-      ]
-    };
-
-    db.transaction(() => {
-      db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
-        'system-maintenance', 'System Maintenance', Date.now()
-      );
-
-      db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(
-        runId, 'system-maintenance', JSON.stringify(dagLayout), 'pending', Date.now()
-      );
-
-      const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
-      for (const node of dagLayout.nodes) {
-        insertTask.run(node.id, runId, 'unclaimed');
-      }
-    })();
-
-    // ScoutDaemon boundary: ONLY stage a pending run in BaseVault.
+  // P3-S9 — staged via the shared chokepoint (track 'track2' was previously
+  // the implicit schema default; now explicit). Pure staging: the redundant
+  // self-UPDATE to 'pending' is dropped — the row is born pending.
+  const runId = stagePendingRun({
+    projectId: 'system-maintenance',
+    ensureProjectName: 'System Maintenance',
+    // A synthetic DAG layout for maintenance, e.g. "Knowledge Graph Pruning"
+    nodes: [{ id: crypto.randomUUID(), dependencies: [] }],
+    track: 'track2',
+    stagedEvent: 'MAINTENANCE_STAGED',
+  });
+  if (runId) {
+    // ScoutDaemon boundary: ONLY a pending run is staged in BaseVault.
     // CoreExec's dispatchLoop watchdog (5s interval) picks it up organically.
     // ScoutDaemon must NEVER call executeRun directly — that crosses the
-    // Watcher→Orchestrator module boundary.
-    db.prepare("UPDATE workflow_runs SET status='pending' WHERE id=?").run(runId);
-    scoutEmitter.emit('update', {
-      type: 'MAINTENANCE_STAGED',
-      runId,
-      timestamp: Date.now(),
-    });
+    // Watcher→Orchestrator module boundary. (stagePendingRun already emitted
+    // MAINTENANCE_STAGED; log only here.)
     log.info(`[ScoutDaemon] Maintenance run ${runId} staged for CoreExec pickup.`);
-  } catch (err) {
-    log.error('[ScoutDaemon] Failed to stage maintenance run:', err);
   }
 
   // During idle, review pending scout drafts and log their count
@@ -197,46 +177,27 @@ export function queueForIndexing(filePath: string) {
 export function flushIndexingQueue() {
   if (indexingQueue.length === 0) return;
   log.info(`[ScoutDaemon] Flushing ${indexingQueue.length} files to indexing queue in CoreExec...`);
-  
+
   const filesToProcess = [...indexingQueue];
   indexingQueue.length = 0; // Clear queue
-  
-  try {
-    const runId = crypto.randomUUID();
-    const dagLayout = {
-      nodes: [
-        { 
-          id: crypto.randomUUID(), 
-          plugin: 'okf_indexer',
-          dependencies: [],
-          params: { files: filesToProcess }
-        }
-      ]
-    };
 
-    db.transaction(() => {
-      db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
-        'system-maintenance', 'System Maintenance', Date.now()
-      );
-
-      db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at, track) VALUES (?, ?, ?, ?, ?, ?)').run(
-        runId, 'system-maintenance', JSON.stringify(dagLayout), 'pending', Date.now(), 'track2'
-      );
-
-      const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
-      for (const node of dagLayout.nodes) {
-        insertTask.run(node.id, runId, 'unclaimed');
-      }
-    })();
-
-    scoutEmitter.emit('update', {
-      type: 'INDEXING_STAGED',
-      runId,
-      timestamp: Date.now(),
-    });
+  // P3-S9 — staged via the shared chokepoint (Track 2). Pure staging only.
+  const runId = stagePendingRun({
+    projectId: 'system-maintenance',
+    ensureProjectName: 'System Maintenance',
+    nodes: [
+      {
+        id: crypto.randomUUID(),
+        plugin: 'okf_indexer',
+        dependencies: [],
+        params: { files: filesToProcess },
+      },
+    ],
+    track: 'track2',
+    stagedEvent: 'INDEXING_STAGED',
+  });
+  if (runId) {
     log.info(`[ScoutDaemon] Indexing run ${runId} staged for CoreExec pickup (Track 2).`);
-  } catch (err) {
-    log.error('[ScoutDaemon] Failed to stage indexing run:', err);
   }
 }
 

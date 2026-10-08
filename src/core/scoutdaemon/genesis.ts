@@ -1,6 +1,6 @@
 import { db } from '../basevault/db';
 import { log } from '../observability/logger';
-import { scoutEmitter } from './sse';
+import { stagePendingRun } from './stage-run';
 import crypto from 'crypto';
 
 /**
@@ -34,38 +34,27 @@ export class GenesisBootstrapper {
       }
 
       // We'll queue a task in ScopeLogic (via workflow_runs) to evaluate these nodes
-      // and auto-generate the 'Best Skills'.
-      const runId = crypto.randomUUID();
-      const dagLayout = {
+      // and auto-generate the 'Best Skills'. P3-S9 — staged via the shared
+      // ScoutDaemon chokepoint (no ensureProjectName: the caller owns this
+      // project's lifecycle — see stage-run.ts divergence note).
+      const runId = stagePendingRun({
+        projectId,
         nodes: [
           {
             id: crypto.randomUUID(),
             plugin: 'skill_evaluator',
             dependencies: [],
-            params: { targetNodes: nodes.map(n => n.id), limit: 3 } // Find top 3 skills to generate
-          }
-        ]
-      };
-
-      db.transaction(() => {
-        db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at, track) VALUES (?, ?, ?, ?, ?, ?)').run(
-          runId, projectId, JSON.stringify(dagLayout), 'pending', Date.now(), 'track2'
-        );
-
-        const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
-        for (const node of dagLayout.nodes) {
-          insertTask.run(node.id, runId, 'unclaimed');
-        }
-      })();
-
-      scoutEmitter.emit('update', {
-        type: 'GENESIS_BOOTSTRAP_STAGED',
-        runId,
-        projectId,
-        timestamp: Date.now(),
+            params: { targetNodes: nodes.map(n => n.id), limit: 3 }, // Find top 3 skills to generate
+          },
+        ],
+        track: 'track2',
+        stagedEvent: 'GENESIS_BOOTSTRAP_STAGED',
+        eventExtra: { projectId },
       });
 
-      log.info(`[GenesisBootstrapper] Staged Genesis Skill Evaluation run ${runId} for project ${projectId}.`);
+      if (runId) {
+        log.info(`[GenesisBootstrapper] Staged Genesis Skill Evaluation run ${runId} for project ${projectId}.`);
+      }
     } catch (err) {
       log.error(`[GenesisBootstrapper] Bootstrapping failed:`, err);
     }
