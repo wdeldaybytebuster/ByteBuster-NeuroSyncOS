@@ -117,12 +117,46 @@ function boundRateLimits(now: number): void {
 /**
  * Payload cap (64 KB) + rate limit (120/min per real peer address), in that
  * order: a giant body is refused before any per-IP bookkeeping.
- * Note: the chunked-body (no content-length) gap is §5-11 — deferred by plan.
+ * §5-11 LANDED: bodies without content-length (chunked/streamed) are measured
+ * by tee-reading a clone of the request body up to 64 KB + 1 byte; anything
+ * larger is refused with 413. The clone preserves the original body for
+ * downstream handlers (c.req.json() etc.).
  */
+export const PAYLOAD_MAX_BYTES = 64 * 1024;
+
 export const rateLimitMiddleware: MiddlewareHandler = async (c, next) => {
   const contentLength = c.req.header('content-length');
-  if (contentLength && parseInt(contentLength, 10) > 64 * 1024) {
+  if (contentLength && parseInt(contentLength, 10) > PAYLOAD_MAX_BYTES) {
     return c.json({ error: 'Payload Too Large' }, 413);
+  }
+
+  // §5-11: no content-length + a streaming body (chunked transfer) → measure
+  // the stream. Read the CLONE so the original body stays intact for the
+  // route handler. Fail-open to next() if the body cannot be cloned/read
+  // (no body at all, already-disturbed stream) — today's behavior preserved.
+  if (!contentLength) {
+    try {
+      const raw = c.req.raw as Request | undefined;
+      if (raw?.body) {
+        const clone = raw.clone();
+        const reader = clone.body!.getReader();
+        let total = 0;
+        let over = false;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          if (total > PAYLOAD_MAX_BYTES) {
+            over = true;
+            break;
+          }
+        }
+        try { await reader.cancel(); } catch { /* already closed */ }
+        if (over) {
+          return c.json({ error: 'Payload Too Large' }, 413);
+        }
+      }
+    } catch { /* unmeasurable body — fall through to rate limiting */ }
   }
 
   const ip = getIp(c);
@@ -143,5 +177,27 @@ export const rateLimitMiddleware: MiddlewareHandler = async (c, next) => {
   // newest, so eviction from the head never removes it.
   if (rateLimits.size > RATE_LIMIT_MAX_KEYS) boundRateLimits(now);
 
+  await next();
+};
+
+/**
+ * §2.3-P1-1 — fail-closed WebSocket upgrade gate. Mounts ONLY ahead of the
+ * two upgradeWebSocket routes in server-main.ts (terminal :178, sync :236).
+ *
+ * If the request is a WS upgrade attempt
+ * (`upgrade: websocket`) AND there is no live socket backing the context
+ * (`c.env?.incoming` undefined — @hono/node-server and @hono/node-ws always
+ * supply `c.env.incoming.socket` for a real TCP/WS connection) → refuse with
+ * a deliberate HTTP 401 instead of sailing into the upgrade machinery (which
+ * today surfaces as an incidental 500 TypeError inside @hono/node-ws).
+ * Everything else falls through: non-upgrade requests keep today's behavior,
+ * env-bearing requests proceed to the upgrade path.
+ */
+export const wsUpgradeGuard: MiddlewareHandler = async (c, next) => {
+  const upgrade = c.req.header('upgrade')?.toLowerCase();
+  const incoming = (c.env as unknown as { incoming?: unknown } | undefined)?.incoming;
+  if (upgrade === 'websocket' && incoming === undefined) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
   await next();
 };

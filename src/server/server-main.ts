@@ -31,7 +31,7 @@ const app = new Hono();
 // §2.1-C5 — explicit CORS allowlist (replaces the wildcard cors(); closes T1:
 // a foreign origin never receives Access-Control-Allow-Origin). Registered
 // before auth so OPTIONS preflight short-circuits ahead of the 401.
-import { perimeterCors, rateLimitMiddleware } from './perimeter';
+import { perimeterCors, rateLimitMiddleware, wsUpgradeGuard } from './perimeter';
 // §2.2-C6 — the operator credential gate replaces the old anonymous block
 // (readiness-derived gating + header-presence-only check both failed open).
 import { authMiddleware } from './auth/middleware';
@@ -173,13 +173,60 @@ import {
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 installTerminalShutdownHooks();
 
+/**
+ * §2.3-P1-2 — RFC 6455 heartbeat (30 s ping/terminate sweep). server-main.ts
+ * owns the ONLY interval: every 30 s each tracked WS peer that failed to
+ * answer the previous ping (isAlive === false) is terminated; the rest are
+ * marked unanswered and pinged. Pong responses re-arm isAlive via the
+ * listener attached in trackWsHeartbeat. Peers are added on upgrade onOpen
+ * and removed on close/error so the set never grows past live sockets.
+ *
+ * wsHeartbeatSweep takes the peer set as an optional parameter (defaulting
+ * to the live set) so the sweep logic is unit-testable with fake
+ * { isAlive, ping(), terminate() } peers without importing this module
+ * (it binds a port — §4.2). transport.handleIncomingMessage is untouched.
+ */
+export const WS_HEARTBEAT_MS = 30_000;
+export const wsHeartbeatPeers = new Set<any>();
+export function wsHeartbeatSweep(peers: Set<any> = wsHeartbeatPeers): void {
+  for (const ws of [...peers]) {
+    try {
+      if (ws.isAlive === false) {
+        try { ws.terminate(); } catch { /* socket already gone */ }
+        peers.delete(ws);
+      } else {
+        ws.isAlive = false;
+        try { ws.ping(); } catch { /* socket already gone */ }
+      }
+    } catch {
+      try { peers.delete(ws); } catch { /* ignore */ }
+    }
+  }
+}
+function trackWsHeartbeat(ws: any): void {
+  ws.isAlive = true;
+  wsHeartbeatPeers.add(ws);
+  try {
+    ws.on?.('pong', () => { ws.isAlive = true; });
+  } catch { /* non-ws socket — sweep still terminates it on silence */ }
+}
+function untrackWsHeartbeat(ws: any): void {
+  wsHeartbeatPeers.delete(ws);
+}
+const wsHeartbeatTimer = setInterval(wsHeartbeatSweep, WS_HEARTBEAT_MS);
+(wsHeartbeatTimer as unknown as { unref?: () => void })?.unref?.();
+
 app.get(
   '/api/portgrid/terminal/:projectId',
+  wsUpgradeGuard,
   upgradeWebSocket((c) => {
     const projectId = c.req.param('projectId');
     let session: TerminalSession | null = null;
+    let rawWs: any = null;
     return {
       onOpen(_evt, ws) {
+        rawWs = ws;
+        trackWsHeartbeat(ws);
         try {
           if (!projectId) throw new Error('Terminal unavailable: no project selected.');
           session = createTerminalSession(projectId, { cols: 80, rows: 24 });
@@ -220,10 +267,14 @@ app.get(
         session.write(raw);
       },
       onClose() {
+        untrackWsHeartbeat(rawWs);
+        rawWs = null;
         session?.dispose('ws-close');
         session = null;
       },
       onError() {
+        untrackWsHeartbeat(rawWs);
+        rawWs = null;
         session?.dispose('ws-error');
         session = null;
       },
@@ -233,10 +284,14 @@ app.get(
 
 app.get(
   '/api/sync',
+  wsUpgradeGuard,
   upgradeWebSocket((c) => {
-    const peerId = `incoming-${Math.random().toString(36).substring(7)}`;
+    const peerId = `incoming-${crypto.randomUUID()}`;
+    let rawWs: any = null;
     return {
       onOpen(_evt, ws) {
+        rawWs = ws;
+        trackWsHeartbeat(ws);
         transport.addIncomingConnection(peerId, ws);
       },
       onMessage(evt, ws) {
@@ -244,9 +299,13 @@ app.get(
         transport.handleIncomingMessage(raw, peerId, ws as any);
       },
       onClose() {
+        untrackWsHeartbeat(rawWs);
+        rawWs = null;
         console.log(`[Transport] Incoming peer ${peerId} disconnected`);
       },
       onError() {
+        untrackWsHeartbeat(rawWs);
+        rawWs = null;
         console.log(`[Transport] Incoming peer ${peerId} error`);
       }
     };

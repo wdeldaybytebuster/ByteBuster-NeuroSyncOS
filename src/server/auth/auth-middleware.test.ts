@@ -37,6 +37,7 @@ const PASSWORD = 'operator-grade-passphrase';
 /** Scratch app mirroring server-main's mount order (rate limit → auth → routes). */
 function scratchApp() {
   const app = new Hono();
+  app.use('*', rateLimitMiddleware);
   app.use('*', authMiddleware);
   registerAuthRoutes(app);
   app.post('/api/cerebro/query', (c) => c.json({ ok: true }));
@@ -226,8 +227,8 @@ describe('C6 authMiddleware (§4.2 tests 1–9)', () => {
     expect(rateLimits.size).toBeGreaterThan(0);
   });
 
-  // ── 9: chunked body — CURRENT behaviour asserted, fix deferred to §5-11 ───
-  it('#9 chunked request with NO content-length over 64 KB → current behaviour is NOT 413 (§5-11 defers the cap)', async () => {
+  // ── 9: chunked body — §5-11 cap LANDED: chunked > 64 KB → 413 ───
+  it('#9 chunked request with NO content-length over 64 KB → 413 (§5-11 cap landed in rateLimitMiddleware)', async () => {
     seedCredential(); // normal mode, otherwise the middleware 401s before the body is read
     const app = scratchApp();
     const token = createSession();
@@ -246,11 +247,9 @@ describe('C6 authMiddleware (§4.2 tests 1–9)', () => {
     // precondition: no content-length header at all (this is what makes it "chunked")
     expect(req.headers.get('content-length')).toBeNull();
     const res = await app.request(req, undefined, LOOPBACK);
-    // §5-11: the 64 KB cap only inspects content-length, so a chunked body is
-    // NOT refused today. This assertion documents the CURRENT behaviour and
-    // must be flipped to 413 when §5-11 lands — do not "fix" it in C6/C7.
-    expect(res.status).not.toBe(413);
-    expect(res.status).toBe(200);
+    // §5-11 LANDED: rateLimitMiddleware tee-reads the chunked body and
+    // refuses anything over 64 KB with 413 before auth/body parsing.
+    expect(res.status).toBe(413);
   });
 
   // ── loopback classification (used by tests 4/5 and the setup route) ───────

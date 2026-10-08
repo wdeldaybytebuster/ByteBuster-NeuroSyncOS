@@ -38,7 +38,7 @@ beforeAll(async () => {
   app.get(
     '/api/sync',
     upgradeWebSocket((c) => {
-      const peerId = `incoming-${Math.random().toString(36).substring(7)}`;
+      const peerId = `incoming-${crypto.randomUUID()}`;
       return {
         onOpen(_evt, ws) {
           transport.addIncomingConnection(peerId, ws);
