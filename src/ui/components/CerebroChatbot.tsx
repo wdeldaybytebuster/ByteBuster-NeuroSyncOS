@@ -42,7 +42,6 @@ export function CerebroChatbot() {
       const res = await authFetch(`${API}/api/cerebro/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg, history: messages.slice(-6), projectId: activeProjectId }),
         body: JSON.stringify({
           message: msg,
           history: messages.slice(-6).map(m => ({ role: m.role, text: m.text })),
