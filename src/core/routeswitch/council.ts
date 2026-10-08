@@ -1,10 +1,49 @@
 import { LLMProvider } from './providers';
+import type { GenerationStreamHooks } from './providers';
 
 export interface ConsensusResult {
   content: string;
   /** Numeric confidence, 0.0-1.0. Derived from disagreementScore as 1 - min(disagreementScore, 1). */
   confidence: number;
   disagreementScore: number;
+}
+
+/**
+ * P2-B1 — council-level deadline (default 60 s, `COUNCIL_TIMEOUT_MS` override).
+ *
+ * Derivation: a single provider leg is budgeted 30 s (OPENAI_COMPAT_TIMEOUT_MS,
+ * openai-compatible.ts:51-52). A hung council of 3 legs would worst-case burn
+ * 90 s (the min worst-case sum; 5 legs = 150 s upper bound) with NO bound at
+ * all before this change — executeCouncilMode awaited Promise.all forever.
+ * 60 s sits above one 30 s leg (a single slow-but-alive leg never trips the
+ * council) and below the 90 s min worst-case sum (a fully-hung council always
+ * resolves first). Env override lets constrained hardware (Axiom 6) tighten it.
+ */
+export const DEFAULT_COUNCIL_TIMEOUT_MS = 60_000;
+
+function resolveCouncilTimeoutMs(): number {
+  const n = Number(process.env.COUNCIL_TIMEOUT_MS);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_COUNCIL_TIMEOUT_MS;
+}
+
+/**
+ * Link several signals into one (mirrors combineSignals,
+ * openai-compatible.ts:82-98 — the engine keeps AbortController ownership,
+ * derivatives never create competing controllers except for this fallback).
+ */
+function anySignals(signals: AbortSignal[]): AbortSignal {
+  const anyFn = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === 'function') return anyFn.call(AbortSignal, signals);
+  const controller = new AbortController();
+  const forward = (): void => {
+    try {
+      const culprit = signals.find((s) => s.aborted);
+      controller.abort(culprit ? culprit.reason : undefined);
+    } catch { /* already aborted */ }
+  };
+  if (signals.some((s) => s.aborted)) forward();
+  else for (const s of signals) s.addEventListener('abort', forward, { once: true });
+  return controller.signal;
 }
 
 /**
@@ -90,17 +129,68 @@ export class ConsensusSynthesizer {
     prompt: string,
     estimatedTokens: number,
     providers: LLMProvider[],
-    schema?: any
+    schema?: any,
+    hooks?: GenerationStreamHooks,
   ): Promise<ConsensusResult> {
 
-    // Execute all providers in parallel (limited by network/threads)
-    const promises = providers.map(p => p.generate(prompt, estimatedTokens, schema).catch(e => null));
-    const results = await Promise.all(promises);
+    // P2-B1 — two-layer bound. Layer 1 (per-leg signals): every leg derives
+    // its signal from the council controller + its own timeout + the caller's
+    // hooks.signal, so providers that honour abort (openai-compatible via
+    // combineSignals, llama-cpp via its streaming isAborted plumbing) stop
+    // burning budget the instant the council is done with them. Layer 2
+    // (Promise.race): bounds how long the CALLER waits even for providers
+    // that IGNORE abort — a race alone would leak the loser legs (abandoned
+    // promises keep burning inference), so the deadline ALSO aborts the
+    // council controller; the race is just how we stop waiting.
+    const timeoutMs = resolveCouncilTimeoutMs();
+    const councilController = new AbortController();
+    const legSignals = providers.map(() => {
+      const parts: AbortSignal[] = [councilController.signal, AbortSignal.timeout(timeoutMs)];
+      if (hooks?.signal) parts.push(hooks.signal);
+      return anySignals(parts);
+    });
+
+    // Settle markers let the deadline salvage legs that finished before it
+    // fired, instead of discarding a mostly-complete council.
+    const settled: Array<{ done: boolean; value: string | null }> =
+      providers.map(() => ({ done: false, value: null }));
+    const legPromises = providers.map((p, i) => {
+      const legHooks: GenerationStreamHooks = { signal: legSignals[i]! };
+      if (hooks?.onTokenConfidence) legHooks.onTokenConfidence = hooks.onTokenConfidence;
+      return p.generate(prompt, estimatedTokens, schema, legHooks).then(
+        (r) => {
+          settled[i] = { done: true, value: r };
+          return r;
+        },
+        () => {
+          settled[i] = { done: true, value: null };
+          return null;
+        },
+      );
+    });
+    const fanout = Promise.all(legPromises);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<'timed-out'>((resolve) => {
+      timer = setTimeout(() => {
+        councilController.abort(new Error(`Council deadline exceeded after ${timeoutMs}ms`));
+        resolve('timed-out');
+      }, timeoutMs);
+    });
+    const raced = await Promise.race([fanout.then(() => 'settled' as const), deadline]);
+    if (timer !== undefined) clearTimeout(timer);
+
+    const results: Array<string | null> = raced === 'settled'
+      ? await fanout
+      : settled.filter((s) => s.done).map((s) => s.value);
 
     const validResults = results.filter((r): r is string => r !== null && r.trim() !== '');
 
     if (validResults.length === 0) {
-      throw new Error('All council providers failed to generate a response.');
+      throw new Error(
+        raced === 'settled'
+          ? 'All council providers failed to generate a response.'
+          : `Council deadline exceeded after ${timeoutMs}ms with no usable leg result.`,
+      );
     }
 
     if (validResults.length === 1) {

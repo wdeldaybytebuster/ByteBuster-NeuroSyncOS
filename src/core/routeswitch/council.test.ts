@@ -296,3 +296,97 @@ describe('Council Mode — Free Mode Governor paid-provider lock', () => {
     expect(after).toBe(before);
   });
 });
+
+describe('P2-B1 — council deadline (4th hooks param: omit-or-real, never explicit undefined)', () => {
+  it('no-hooks callers keep working (3-arg compat — deadline still bounds the fan-out)', async () => {
+    const result = await ConsensusSynthesizer.executeCouncilMode('p', 10, [
+      new DummyProvider('a', 'apply the database migration in a transaction'),
+      new DummyProvider('b', 'apply the database migration in a transaction'),
+    ]);
+    expect(result.confidence).toBeCloseTo(1.0, 5);
+  });
+
+  it('abort-mid-fanout: every leg receives a REAL combined signal carrying the caller abort', async () => {
+    const seen: Array<AbortSignal | undefined> = [];
+    class SignalledProvider implements LLMProvider {
+      id = 'sig';
+      async generate(_p: string, _n: number, _s?: any, hooks?: { signal?: AbortSignal }): Promise<string> {
+        seen.push(hooks?.signal);
+        return 'apply the database migration in a transaction';
+      }
+    }
+    const controller = new AbortController();
+    controller.abort(new Error('operator stop'));
+    const result = await ConsensusSynthesizer.executeCouncilMode(
+      'p',
+      10,
+      [new SignalledProvider(), new SignalledProvider()],
+      undefined,
+      { signal: controller.signal },
+    );
+    // legs got a real (non-undefined) signal that already reflects the abort …
+    expect(seen).toHaveLength(2);
+    for (const s of seen) {
+      expect(s).toBeInstanceOf(AbortSignal);
+      expect(s!.aborted).toBe(true);
+    }
+    // … and providers that ignore it still produce consensus (abort only
+    // short-circuits providers that honour their signal).
+    expect(result.confidence).toBeCloseTo(1.0, 5);
+  });
+
+  it('deadline-fires: hung legs cannot hang the council past COUNCIL_TIMEOUT_MS', async () => {
+    class HungProvider implements LLMProvider {
+      id = 'hung';
+      public legSignal: AbortSignal | null = null;
+      generate(_p: string, _n: number, _s?: any, hooks?: { signal?: AbortSignal }): Promise<string> {
+        this.legSignal = hooks?.signal ?? null;
+        return new Promise(() => {}); // never settles — worst case
+      }
+    }
+    const legs = [new HungProvider(), new HungProvider()];
+    const prev = process.env.COUNCIL_TIMEOUT_MS;
+    process.env.COUNCIL_TIMEOUT_MS = '60';
+    try {
+      await expect(
+        ConsensusSynthesizer.executeCouncilMode('p', 10, legs),
+      ).rejects.toThrow(/Council deadline exceeded after 60ms/);
+    } finally {
+      if (prev === undefined) delete process.env.COUNCIL_TIMEOUT_MS;
+      else process.env.COUNCIL_TIMEOUT_MS = prev;
+    }
+    // the deadline aborted the council controller, which each leg signal
+    // derives from — the abort is the real bound (the race just stops waiting).
+    for (const leg of legs) {
+      expect(leg.legSignal).toBeInstanceOf(AbortSignal);
+      expect(leg.legSignal!.aborted).toBe(true);
+    }
+  }, 10000);
+
+  it('deadline salvages legs that finished before it fired', async () => {
+    class MixedProvider implements LLMProvider {
+      constructor(public id: string, private ms: number | null) {}
+      async generate(): Promise<string> {
+        const ms = this.ms;
+        if (ms === null) return new Promise(() => {});
+        await new Promise((r) => setTimeout(r, ms));
+        return 'apply the database migration in a transaction';
+      }
+    }
+    const prev = process.env.COUNCIL_TIMEOUT_MS;
+    process.env.COUNCIL_TIMEOUT_MS = '120';
+    try {
+      // one fast leg finishes well before the 120 ms deadline; one hangs.
+      // Single-voice degenerate contract still applies (confidence 0).
+      const result = await ConsensusSynthesizer.executeCouncilMode('p', 10, [
+        new MixedProvider('fast', 10),
+        new MixedProvider('hung', null),
+      ]);
+      expect(result.content).toBe('apply the database migration in a transaction');
+      expect(result.confidence).toBe(0);
+    } finally {
+      if (prev === undefined) delete process.env.COUNCIL_TIMEOUT_MS;
+      else process.env.COUNCIL_TIMEOUT_MS = prev;
+    }
+  }, 10000);
+});

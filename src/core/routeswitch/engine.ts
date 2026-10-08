@@ -341,7 +341,14 @@ export class RouteSwitchEngine {
     if (isCouncilTriggered) {
       log.info('High-risk prompt detected. Triggering Council Mode.');
       const allProviders = eligibleCouncilProviders;
-      const consensus = await ConsensusSynthesizer.executeCouncilMode(enrichedPrompt, request.estimatedTokens, allProviders, request.responseSchema);
+      // P2-B1: pass a REAL hooks object (never explicit-undefined under
+      // exactOptionalPropertyTypes) so legs take budgeted provider paths.
+      // The engine owns this controller; the council owns the deadline and
+      // combines this signal per-leg via AbortSignal.any — a future
+      // RouteRequest abort has a propagation seam without touching council.
+      const councilAbort = new AbortController();
+      const councilHooks: GenerationStreamHooks = { signal: councilAbort.signal };
+      const consensus = await ConsensusSynthesizer.executeCouncilMode(enrichedPrompt, request.estimatedTokens, allProviders, request.responseSchema, councilHooks);
       responseContent = consensus.content;
       confidence = consensus.confidence;
       finalProvider = 'Council Consensus';

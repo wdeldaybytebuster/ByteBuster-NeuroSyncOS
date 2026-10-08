@@ -110,13 +110,19 @@ export class LlamaCppProvider implements LLMProvider {
     streamHooks?: GenerationStreamHooks,
   ): Promise<string> {
     // Preemptive path: real per-token confidence + genuine mid-stream abort.
-    // RouteSwitchEngine always passes streamHooks, so this is the normal path.
+    // RouteSwitchEngine always passes streamHooks, and Council Mode passes a
+    // per-leg signal (council.ts), so this is the normal path — including for
+    // council legs, whose deadline aborts the leg signal via the streaming
+    // isAborted plumbing below (P2-B1: the local adapter is deadline-budgeted).
     if (streamHooks && (streamHooks.onTokenConfidence || streamHooks.signal)) {
       return this._generateStreaming(prompt, estimatedTokens, schema, streamHooks);
     }
 
-    // Fallback path (no hooks — e.g. Council mode / direct callers): the proven
-    // high-level chat-session API. No per-token confidence available here.
+    // Fallback path (no hooks — direct callers only): the proven high-level
+    // chat-session API. No per-token confidence available here, and no abort
+    // plumbing — session.prompt cannot be cancelled, so callers that need a
+    // bound must pass a signal (any signal, even without onTokenConfidence)
+    // to take the streaming path above.
     return this._generateWithSession(prompt, estimatedTokens, schema);
   }
 
