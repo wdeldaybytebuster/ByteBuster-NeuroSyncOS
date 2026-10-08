@@ -110,6 +110,7 @@ function DashboardView() {
   const handleSearch = async () => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     try {
+      const res = await fetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) });
       const res = await authFetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) });
       const d = await res.json();
       if (d.success) setSearchResults(d.results || []);

@@ -78,6 +78,15 @@ export class CerebroVectorStore {
    * If embedding is null, it relies entirely on the Keyword Fallback Engine for retrieval.
    * projectId null/undefined = GLOBAL/USER-tier memory, visible to every project.
    */
+  public static insert(content: string, type: string, embedding?: Float32Array, projectId?: string | null): string {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+
+    // 1. Insert Meta
+    db.prepare(`
+      INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, content, type, projectId ?? null, now, 0, now);
   public static insert(content: string, type: string, embedding?: Float32Array, projectId?: string | null, isAutoIngested: boolean = false, sourceTool?: string): string {
     const id = crypto.randomUUID();
     const now = Date.now();
@@ -158,6 +167,7 @@ export class CerebroVectorStore {
 
   private static _keywordFallbackSearch(query: string, typeFilter?: string, limit: number = 5, projectId?: string): MemoryRecord[] {
     // Deterministic fallback: Token filter length > 3
+    // Formula: Similarity = 0.7 + (matchCount * 0.05)
     // Formula: Similarity = baseScore + (matchCount * matchBoost), read from
     // CerebroDashboard's "Base Score" / "Match Boost" settings (defaults
     // 0.7 / 0.05, matching the pre-existing hardcoded formula).
