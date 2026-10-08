@@ -52,6 +52,39 @@ export interface ProviderCapabilities {
   inputTypes?: Array<'text' | 'image' | 'audio' | 'video'>;
 }
 
+/**
+ * A4 (Fusion) — optional per-request body additions merged into the outgoing
+ * OpenAI-compatible chat request.
+ *
+ * RouteSwitchEngine carries this on `RouteRequest`; the adapter merges it AFTER
+ * building the canonical body and then re-pins `model`. `model`, `messages` and
+ * `response_format` are refused by the adapter's denylist (see
+ * `sanitizeExtraBody` in `adapters/openai-compatible.ts`), so a caller can
+ * extend a request but can never hijack routing identity or the
+ * structured-output contract.
+ */
+export type ExtraBody = Record<string, unknown>;
+
+/**
+ * Out-of-band metadata reported by a provider for a single generation call.
+ * Today it only carries the upstream `X-Routed-Via` value the FreeLLMAPI router
+ * returns; it stays absent for providers that expose no such header.
+ */
+export interface GenerationMeta {
+  routedVia?: string;
+}
+
+/**
+ * Richer result for callers that need observability data alongside the
+ * generated text (currently PortGrid's provider self-test). Additive:
+ * `generate()` keeps returning a bare string so every existing caller is
+ * untouched.
+ */
+export interface ProviderGenerationResult {
+  content: string;
+  routedVia?: string;
+}
+
 export interface LLMProvider {
   id: string;
   /**
@@ -74,7 +107,25 @@ export interface LLMProvider {
     estimatedTokens: number,
     schema?: any,
     streamHooks?: GenerationStreamHooks,
+    /**
+     * Optional per-request body additions (A4 Fusion seam). Additive and
+     * optional, exactly like `streamHooks` before it: every existing call site
+     * keeps compiling and behaving unchanged.
+     */
+    extraBody?: ExtraBody,
   ): Promise<string>;
+  /**
+   * Optional richer variant of {@link generate}. Providers that can report
+   * per-call observability (e.g. FreeLLMAPI's `X-Routed-Via` header) implement
+   * this; callers MUST fall back to `generate()` when it is absent.
+   */
+  generateWithMeta?(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
+  ): Promise<ProviderGenerationResult>;
   generateEmbedding?(text: string): Promise<Float32Array>;
 }
 

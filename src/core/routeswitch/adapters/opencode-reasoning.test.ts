@@ -207,6 +207,12 @@ describe('reasoning-model empty-content handling (openai-compatible adapters)', 
 describe('P3-S1: opencode factory gate — explicit retired-type error while disabled', () => {
   beforeAll(() => {
     initDB();
+    // Defensive: a crash or timeout mid-test skips this describe's `afterEach`
+    // cleanup, and `db` is a module-level singleton, so a leaked 'true' would
+    // silently enable the retired provider for the rest of the worker process.
+    try {
+      db.prepare('DELETE FROM system_settings WHERE key = ?').run(OPENCODE_ZEN_FLAG_KEY);
+    } catch { /* uninitialized db — flag is trivially absent */ }
   });
 
   afterEach(() => {
@@ -236,6 +242,80 @@ describe('P3-S1: opencode factory gate — explicit retired-type error while dis
     expect(isOpencodeZenEnabled()).toBe(true);
     const p = instantiateProvider('opencode', { modelId: 'x' }, undefined);
     expect(p).toBeInstanceOf(OpenCodeProvider);
+  });
+
+  it("the 'opencode' arm carries a persisted config_json.extraBody onto the wire", async () => {
+    // A4 four-arm parity: the factory's `opencode` arm spreads `staticExtraBody`,
+    // so a durable row value must reach the request body. This is asserted HERE
+    // rather than in provider-factory.test.ts because that arm throws unless the
+    // Zen flag is on, and this file already owns `initDB()` plus the flag seed;
+    // provider-factory.test.ts only proves the propagation by direct construction.
+    // Remove `...opencodeExtra` (from `staticExtraBody(config, 'opencode')`) in
+    // the arm and this goes red.
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run(OPENCODE_ZEN_FLAG_KEY, 'true');
+    // Assert the gate is genuinely open before constructing: if the seed ever
+    // regresses, this fails with a clear assertion instead of surfacing as the
+    // retired-type throw from `instantiateProvider`.
+    expect(isOpencodeZenEnabled()).toBe(true);
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }),
+    );
+
+    const provider = instantiateProvider(
+      'opencode',
+      // Explicit non-'auto' model id: `generate` then takes the explicit-model
+      // path and never reaches free-model discovery, so no live catalog call.
+      { modelId: 'named/model', extraBody: { fusion: { panels: 3 }, preset: 'durable' } },
+      undefined,
+    );
+    expect(provider).toBeInstanceOf(OpenCodeProvider);
+
+    await provider.generate('Test prompt', 10);
+
+    const sentBody = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(sentBody.fusion).toEqual({ panels: 3 });
+    expect(sentBody.preset).toBe('durable');
+    expect(sentBody.model).toBe('named/model');
+    // The wider A.4 contract on this arm: the canonical prompt survives the merge.
+    expect(sentBody.messages).toEqual([{ role: 'user', content: 'Test prompt' }]);
+  });
+
+  it("attributes a refused persisted key to 'opencode' when it reports one", () => {
+    // Attribution on THIS arm is the one swap no other test can catch: the
+    // factory's other three supported arms assert their own type label in
+    // provider-factory.test.ts, but this arm cannot be driven from that file
+    // (the gate throws unless the Zen flag is seeded), so the label is asserted
+    // here instead. Change `staticExtraBody(config, 'opencode')` to another type
+    // literal and this goes red while the rest of the suite stays green.
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run(OPENCODE_ZEN_FLAG_KEY, 'true');
+    expect(isOpencodeZenEnabled()).toBe(true);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // `constructor` is on the six-key denylist and its name appears NOWHERE in
+    // the warning's fixed boilerplate, so asserting on it proves the refused
+    // list itself was rendered rather than passing on boilerplate. A refused key
+    // means nothing survives to be sent, so no fetch stub is needed — provider
+    // construction performs no I/O.
+    const p = instantiateProvider(
+      'opencode',
+      { modelId: 'named/model', extraBody: { constructor: 'hostile', fusion: { panels: 1 } } },
+      undefined,
+    );
+    expect(p).toBeInstanceOf(OpenCodeProvider);
+
+    const refusal = warn.mock.calls
+      .map((call) => call.join(' '))
+      .find((message) => message.includes('provider row config'));
+    expect(refusal).toBeDefined();
+    expect(refusal).toContain("provider row config for type 'opencode'");
+    expect(refusal).toContain('constructor');
+    expect(refusal).not.toContain('hostile'); // names only — never the value
   });
 
   it('unknown types get an explicit error instead of a silent Mock fallback', () => {

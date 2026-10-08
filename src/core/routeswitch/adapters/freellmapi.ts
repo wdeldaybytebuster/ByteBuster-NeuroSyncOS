@@ -1,4 +1,4 @@
-import { GenerationStreamHooks, LLMProvider, ProviderCapabilities } from '../providers';
+import { ExtraBody, GenerationMeta, GenerationStreamHooks, LLMProvider, ProviderCapabilities, ProviderGenerationResult } from '../providers';
 import { OpenAICompatibleProvider } from './openai-compatible';
 
 /**
@@ -62,6 +62,13 @@ export interface FreeLLMProviderConfig {
    * needed.
    */
   modelId?: string;
+  /**
+   * A4 — optional static body additions applied to every request from this
+   * provider instance (e.g. a Fusion panel preference persisted with the
+   * provider row). Forwarded to the parent config, where it is merged BEFORE any
+   * per-call `extraBody` and subject to the same denylist.
+   */
+  extraBody?: ExtraBody;
 }
 
 export class FreeLLMProvider extends OpenAICompatibleProvider {
@@ -89,6 +96,7 @@ export class FreeLLMProvider extends OpenAICompatibleProvider {
         baseUrl: config.baseUrl || FREELLMAPI_BASE_URL,
         ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
         modelId: config.modelId || 'auto',
+        ...(config.extraBody !== undefined ? { extraBody: config.extraBody } : {}),
       },
       customId || 'freellmapi'
     );
@@ -105,22 +113,75 @@ export class FreeLLMProvider extends OpenAICompatibleProvider {
     };
   }
 
+  /**
+   * A5 — the bare-string entry point. Delegates to `generateWithMeta` so there
+   * is exactly ONE request path in this adapter (they used to duplicate ~20
+   * lines); the returned content is identical.
+   *
+   * A5: `streamHooks` is now FORWARDED. It used to be accepted as
+   * `_streamHooks` and then dropped on the floor, so an AgentStop abort for an
+   * in-flight FreeLLMAPI (Fusion) call never reached the fetch signal. The
+   * parent combines it with the adapter-owned timeout via AbortSignal.any.
+   */
   override async generate(
     prompt: string,
     estimatedTokens: number,
     schema?: any,
-    _streamHooks?: GenerationStreamHooks,
+    streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
   ): Promise<string> {
-    const response = await this._generateWithConfig(prompt, estimatedTokens, schema, this.config);
-    // Best-effort observability: surface which upstream provider/model actually
-    // served the request. FreeLLMAPI returns a non-empty `X-Routed-Via` header
-    // on every response (<platform>/<model>); when the user has set an explicit
-    // model id the served model is already known, so logging is only actionable
-    // for the auto-routed case. Harmless when the header is absent (non-FreeLLM
-    // compatible upstream) — we never throw on its absence.
+    const { content } = await this.generateWithMeta(prompt, estimatedTokens, schema, streamHooks, extraBody);
+    return content;
+  }
+
+  /**
+   * A7 — the header-capturing variant. `_generateWithConfig` writes the upstream
+   * `X-Routed-Via` value into this call's own `meta` object, so concurrent
+   * generations never share captured state and nothing is ever stored on `this`.
+   * This is the single implementation; `generate` delegates here.
+   */
+  override async generateWithMeta(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
+  ): Promise<ProviderGenerationResult> {
+    const meta: GenerationMeta = {};
+    const options: { extraBody?: ExtraBody; meta: GenerationMeta } = { meta };
+    if (extraBody !== undefined) options.extraBody = extraBody;
+    const content = await this._generateWithConfig(
+      prompt,
+      estimatedTokens,
+      schema,
+      this.config,
+      streamHooks,
+      false,
+      options,
+    );
+    this._logRoutedVia(meta.routedVia);
+    return meta.routedVia !== undefined ? { content, routedVia: meta.routedVia } : { content };
+  }
+
+  /**
+   * Best-effort observability: surface which upstream provider/model actually
+   * served the request. FreeLLMAPI returns a non-empty `X-Routed-Via` header
+   * (<platform>/<model>) on every response; when the user has set an explicit
+   * model id the served model is already known, so logging is only actionable
+   * for the auto-routed case. Harmless when the header is absent (non-FreeLLM
+   * compatible upstream) — we never throw on its absence.
+   *
+   * When the header WAS captured we log the real value; otherwise the original
+   * explanatory message is kept (auto-routed, but this upstream exposed no
+   * header to read).
+   */
+  private _logRoutedVia(routedVia?: string): void {
+    if (routedVia) {
+      console.log(`[FreeLLMAPI] routed-via: ${routedVia}`);
+      return;
+    }
     if (this.config.modelId?.toLowerCase() === 'auto') {
       console.log('[FreeLLMAPI] routed-via: (auto) — upstream provider/model selected by the FreeLLMAPI router (see X-Routed-Via on the actual response for the exact upstream).');
     }
-    return response;
   }
 }

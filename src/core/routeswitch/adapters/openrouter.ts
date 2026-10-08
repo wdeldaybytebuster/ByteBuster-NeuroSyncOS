@@ -1,11 +1,31 @@
 import { OpenAICompatibleProvider } from './openai-compatible';
-import { GenerationStreamHooks, ProviderCapabilities } from '../providers';
+import { ExtraBody, GenerationStreamHooks, ProviderCapabilities, ProviderGenerationResult } from '../providers';
 import { ZenDiscoveryService } from '../discovery';
 
 export interface OpenRouterProviderConfig {
   apiKey?: string;
   /** Blank or 'auto' resolves to a live free (':free' suffix) model from OpenRouter's catalog. */
   modelId?: string;
+  /**
+   * A4 — durable per-provider body default (e.g. a Fusion panel preference
+   * persisted with the provider row). Subject to the SAME `sanitizeExtraBody`
+   * denylist as a per-call value, so it may extend the request but can never
+   * take over it. The authoritative list is `EXTRA_BODY_DENYLIST` in
+   * `./openai-compatible` — six keys; the three named below are the contract
+   * ones, not the whole list.
+   *
+   * `model` (routing identity), `messages` (the prompt) and `response_format`
+   * (the structured-output schema) protect the request CONTRACT. The other
+   * three — `__proto__`, `constructor`, `prototype` — are refused for a
+   * different reason: writing one would be served by an inherited accessor
+   * instead of becoming data, so it would retarget the prototype and vanish
+   * from `Object.keys`, which is also why the sanitizer builds on
+   * `Object.create(null)`.
+   *
+   * It is re-sanitized by `_generateWithConfig` before the merge, so the two
+   * paths cannot disagree.
+   */
+  extraBody?: ExtraBody;
 }
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -47,6 +67,11 @@ export class OpenRouterProvider extends OpenAICompatibleProvider {
       ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
       modelId: config.modelId || 'auto',
       extraHeaders: OPENROUTER_EXTRA_HEADERS,
+      // A4 — forward a config-level body default so a durable provider row is
+      // not silently dropped for this type: `generate` below reads `this.config`
+      // and hands it to `_generateWithConfig`, which already sanitizes a
+      // config-level `extraBody` before merging.
+      ...(config.extraBody !== undefined ? { extraBody: config.extraBody } : {}),
     }, customId || 'openrouter');
 
     // Explicit capability override (P8-4). Stated in full rather than spread
@@ -61,16 +86,29 @@ export class OpenRouterProvider extends OpenAICompatibleProvider {
     };
   }
 
-  // HEURISTIC FALLBACK: `streamHooks` ignored — see OpenAICompatibleProvider.generate.
+  // INTENTIONAL, not an oversight: OpenRouter is talked to DIRECTLY (no routing
+  // proxy in front of it), so there is no `X-Routed-Via` to report and this
+  // adapter deliberately does not capture one. `streamHooks` is likewise NOT
+  // received (see OpenAICompatibleProvider.generate, HEURISTIC FALLBACK), so an
+  // AgentStop abort does not cancel an in-flight OpenRouter call — A5's
+  // cancellation guarantee covers the OpenAI-compatible and FreeLLMAPI paths
+  // only. Do not "fix" either by forwarding hooks or inheriting the base
+  // capture path: the base `generateWithMeta` bypasses the free-model
+  // discovery/rotation loop below.
   override async generate(
     prompt: string,
     estimatedTokens: number,
     schema?: any,
     _streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
   ): Promise<string> {
     const cfg = this.config;
+    // A4: thread the per-request extraBody through the explicit-model path AND
+    // the candidate-rotation loop below, so failover never silently drops the
+    // caller's body additions.
+    const extra = extraBody !== undefined ? { extraBody } : {};
     if (cfg.modelId && cfg.modelId.toLowerCase() !== 'auto') {
-      return this._generateWithConfig(prompt, estimatedTokens, schema, cfg);
+      return this._generateWithConfig(prompt, estimatedTokens, schema, cfg, undefined, false, extra);
     }
 
     const freeModels = await ZenDiscoveryService.getFreeModels();
@@ -91,12 +129,34 @@ export class OpenRouterProvider extends OpenAICompatibleProvider {
     let lastErr: unknown;
     for (const model of freeModels.slice(0, MAX_CANDIDATES)) {
       try {
-        return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id });
+        return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id }, undefined, false, extra);
       } catch (err: any) {
         lastErr = err;
         if (!/429|rate.?limit/i.test(err?.message || '')) throw err;
       }
     }
     throw lastErr;
+  }
+
+  /**
+   * A4/A7 — non-capturing metadata variant. OpenRouter is reached directly (the
+   * app talks to it, not through a router that annotates a routing header), so
+   * there is no `X-Routed-Via` to report — intentionally, not by omission; this
+   * delegates to `generate` and returns the content with no routing hint.
+   *
+   * Implementing it EXPLICITLY (rather than inheriting the base capture path) is
+   * deliberate: the base implementation talks to `_generateWithConfig` directly
+   * and would therefore bypass this override's free-model discovery/rotation
+   * logic whenever the model id is `auto`.
+   */
+  override async generateWithMeta(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
+  ): Promise<ProviderGenerationResult> {
+    const content = await this.generate(prompt, estimatedTokens, schema, streamHooks, extraBody);
+    return { content };
   }
 }

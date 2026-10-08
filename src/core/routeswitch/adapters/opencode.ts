@@ -1,11 +1,32 @@
 import { OpenAICompatibleProvider, isTimeoutError } from './openai-compatible';
-import { GenerationStreamHooks, ProviderCapabilities } from '../providers';
+import { ExtraBody, GenerationStreamHooks, ProviderCapabilities, ProviderGenerationResult } from '../providers';
 import { OpenCodeDiscoveryService } from '../discovery';
 
 export interface OpenCodeProviderConfig {
   apiKey?: string;
   /** Blank or 'auto' resolves to a live free model from OpenCode Zen's catalog. */
   modelId?: string;
+  /**
+   * A4 — durable per-provider body default (e.g. a Fusion panel preference
+   * persisted with the provider row). Subject to the SAME `sanitizeExtraBody`
+   * denylist as a per-call value, so it may extend the request but can never
+   * take over it. The authoritative list is `EXTRA_BODY_DENYLIST` in
+   * `./openai-compatible` — six keys; the three named below are the contract
+   * ones, not the whole list.
+   *
+   * `model` (routing identity), `messages` (the prompt) and `response_format`
+   * (the structured-output schema) protect the request CONTRACT. The other
+   * three — `__proto__`, `constructor`, `prototype` — are refused for a
+   * different reason: writing one would be served by an inherited accessor
+   * instead of becoming data, so it would retarget the prototype and vanish
+   * from `Object.keys`, which is also why the sanitizer builds on
+   * `Object.create(null)`.
+   *
+   * It is re-sanitized by `_generateWithConfig` before the merge — including for
+   * every candidate in the free-model rotation below, which spreads
+   * `{ ...cfg, modelId: model.id }` and therefore preserves this value.
+   */
+  extraBody?: ExtraBody;
 }
 
 const OPENCODE_ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
@@ -48,6 +69,12 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
       baseUrl: OPENCODE_ZEN_BASE_URL,
       ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
       modelId: config.modelId || 'auto',
+      // A4 — forward a config-level body default so a durable provider row is
+      // not silently dropped for this type: `generate` below reads `this.config`
+      // and hands it to `_generateWithConfig` (and to every candidate in the
+      // rotation loop), which already sanitizes a config-level `extraBody`
+      // before merging.
+      ...(config.extraBody !== undefined ? { extraBody: config.extraBody } : {}),
     }, customId || 'opencode');
 
     // Explicit capability override (P8-4). Stated in full rather than spread
@@ -68,10 +95,16 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
     estimatedTokens: number,
     schema?: any,
     streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
   ): Promise<string> {
     const cfg = this.config;
+    // A4: the per-request extraBody is threaded through EVERY call this override
+    // makes — the explicit-model path and each candidate in the rotation loop
+    // below — so a caller's body additions are never silently dropped just
+    // because the platform had to fail over to a different free model.
+    const extra = extraBody !== undefined ? { extraBody } : {};
     if (cfg.modelId && cfg.modelId.toLowerCase() !== 'auto') {
-      return this._generateWithConfig(prompt, estimatedTokens, schema, cfg, streamHooks);
+      return this._generateWithConfig(prompt, estimatedTokens, schema, cfg, streamHooks, false, extra);
     }
 
     const freeModels = await OpenCodeDiscoveryService.getFreeModels();
@@ -89,7 +122,7 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
     let lastErr: unknown;
     for (const model of freeModels.slice(0, OPENCODE_MAX_CANDIDATES)) {
       try {
-        return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id }, streamHooks);
+        return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id }, streamHooks, false, extra);
       } catch (err: any) {
         lastErr = err;
         // Treat rate-limits, intermittent empty-content failures (a known issue
@@ -100,5 +133,26 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
       }
     }
     throw lastErr;
+  }
+
+  /**
+   * A4/A7 — non-capturing metadata variant. OpenCode Zen does not return an
+   * `X-Routed-Via` header, so this simply delegates to `generate` and returns the
+   * content with no routing hint.
+   *
+   * Implementing it EXPLICITLY (rather than inheriting the base capture path) is
+   * deliberate: the base implementation talks to `_generateWithConfig` directly
+   * and would therefore bypass this override's free-model discovery/rotation
+   * logic whenever the model id is `auto`.
+   */
+  override async generateWithMeta(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
+  ): Promise<ProviderGenerationResult> {
+    const content = await this.generate(prompt, estimatedTokens, schema, streamHooks, extraBody);
+    return { content };
   }
 }

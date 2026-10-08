@@ -286,12 +286,29 @@ llmRouter.post('/providers/:id/test', async (c) => {
     const startMs = Date.now();
     // P2-1: inherits the provider's raw AbortSignal.timeout chat budget
     // (30 s default) — no hooks here, just the adapter-owned timeout.
-    const result = await provider.generate('Hello, respond with a single word to confirm connectivity.', 20);
+    // A7 — prefer the metadata-carrying variant so the upstream routing hint
+    // (`X-Routed-Via`, set by the FreeLLMAPI router) reaches PortGrid. Providers
+    // that cannot report it keep the plain generate() path exactly as before.
+    const connectivityPrompt = 'Hello, respond with a single word to confirm connectivity.';
+    let result: string;
+    let routedVia: string | undefined;
+    if (provider.generateWithMeta) {
+      const detailed = await provider.generateWithMeta(connectivityPrompt, 20);
+      result = detailed.content;
+      routedVia = detailed.routedVia;
+    } else {
+      result = await provider.generate(connectivityPrompt, 20);
+    }
     const latencyMs = Date.now() - startMs;
 
     return c.json({
       success: true,
-      test: { connected: true, latencyMs, responsePreview: result.substring(0, 100) }
+      test: {
+        connected: true,
+        latencyMs,
+        responsePreview: result.substring(0, 100),
+        ...(routedVia !== undefined ? { routedVia } : {}),
+      }
     });
   } catch (err: any) {
     return c.json({

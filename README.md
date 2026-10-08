@@ -49,6 +49,19 @@ provider setup by default: an OpenAI-compatible base URL and API key live in the
 RouteSwitch provider registry and persist in the local SQLite database, so the UI's
 RouteSwitch Set-up screen can configure and test providers without needing env vars.
 
+RouteSwitch also supports a router-side ensemble: request `model="fusion"` on a
+chat completion and the router fans the request out and returns one answer.
+NeuroSync does not run that ensemble -- it passes the model id through and, for
+OpenAI-compatible and FreeLLMAPI providers, reports the `X-Routed-Via` response
+header so the dashboard can show which upstream served the call. Optional
+per-request fields can be supplied via `extraBody` (a trusted-caller setting from
+config or a provider row); it can never override the model, the prompt, or the
+structured output format, and prototype-key names (`__proto__`, `constructor`,
+`prototype`) are refused outright. See
+[docs/architecture/FUSION.md](./docs/architecture/FUSION.md) for the full
+contract, the authoritative denied-key list, the provider-by-provider coverage,
+and the time budgets involved.
+
 The UI isbuilt to use the 2026 Unified MCP standard. When deployed as a Tauri
 bundle it ships its own 32-bit sidecar wrapper; the remainder of the stack -- 
 server, UI dev server, tests -- all run plain under Node.js on a desktop or an edge

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { db, initDB } from '../../core/basevault/db';
 import { llmRouter } from './llm';
 
@@ -12,6 +12,12 @@ beforeEach(() => {
   db.prepare('DELETE FROM llm_routing_rules').run();
   db.prepare('DELETE FROM llm_providers').run();
   db.prepare('DELETE FROM council_decisions').run();
+});
+
+// Every provider self-test below mocks global fetch; restore unconditionally so
+// a failed assertion can never leak a mock into a later test.
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 async function post(path: string, body: any): Promise<{ status: number; data: any }> {
@@ -164,5 +170,45 @@ describe('GET /council-log', () => {
     const res = await get('/council-log');
     expect(res.status).toBe(200);
     expect(res.data.decisions.length).toBe(20);
+  });
+});
+
+/**
+ * A.7 — the provider connectivity self-test must pass the upstream routing hint
+ * (`X-Routed-Via`) through to PortGrid when the serving router reports one, and
+ * stay byte-identical to the old payload when it does not.
+ */
+describe('POST /providers/:id/test — routedVia capture (A.7)', () => {
+  const headerFetch = (routedVia: string | null) =>
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      headers: { get: (k: string) => (k.toLowerCase() === 'x-routed-via' ? routedVia : null) },
+      json: async () => ({ choices: [{ message: { content: 'pong' } }] }),
+    } as any);
+
+  it('includes routedVia when the upstream response carries the header', async () => {
+    const created = await post('/providers', { name: 'FreeLLMAPI', type: 'freellmapi', config: { modelId: 'auto' } });
+    expect(created.status).toBe(200);
+
+    headerFetch('chutes/deepseek-v3');
+    const res = await post(`/providers/${created.data.provider.id}/test`, {});
+
+    expect(res.status).toBe(200);
+    expect(res.data.success).toBe(true);
+    expect(res.data.test.connected).toBe(true);
+    expect(res.data.test.responsePreview).toBe('pong');
+    expect(res.data.test.routedVia).toBe('chutes/deepseek-v3');
+  });
+
+  it('omits routedVia when the header is absent', async () => {
+    const created = await post('/providers', { name: 'FreeLLMAPI', type: 'freellmapi', config: { modelId: 'auto' } });
+    expect(created.status).toBe(200);
+
+    headerFetch(null);
+    const res = await post(`/providers/${created.data.provider.id}/test`, {});
+
+    expect(res.status).toBe(200);
+    expect(res.data.test.connected).toBe(true);
+    expect('routedVia' in res.data.test).toBe(false);
   });
 });

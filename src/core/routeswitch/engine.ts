@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { FreeModeGovernor } from './governor';
-import { GenerationStreamHooks, LLMProvider, MockProvider } from './providers';
+import { ExtraBody, GenerationStreamHooks, LLMProvider, MockProvider } from './providers';
 import { TriageClassifier } from './triage';
 import { ConsensusSynthesizer } from './council';
 import { AgentStopSupervisor } from './agent-stop';
@@ -31,6 +31,13 @@ export interface RouteRequest {
   scope?: 'cerebro' | 'agent';
   scopeId?: string;
   projectId?: string;
+  /**
+   * A4 (Fusion) — optional per-request body additions forwarded to the active
+   * provider's OpenAI-compatible request (e.g. Fusion panel options). The
+   * adapter merges these after building the canonical body and re-pins `model`,
+   * so this can extend a request but never change routing identity.
+   */
+  extraBody?: ExtraBody;
 }
 
 export interface RouteResponse {
@@ -40,6 +47,14 @@ export interface RouteResponse {
   /** Numeric confidence, 0.0-1.0. */
   confidence?: number;
   isCouncilMode?: boolean;
+  /**
+   * A7 — upstream routing hint reported by the serving provider
+   * (`X-Routed-Via`, e.g. `chutes/deepseek-v3`). Present only when the provider
+   * actually reported one; absent for providers without that observability, and
+   * never fabricated for the council path (multiple upstreams serve a council
+   * decision, so a single value would be a lie).
+   */
+  routedVia?: string;
 }
 
 export class RouteSwitchEngine {
@@ -205,7 +220,10 @@ export class RouteSwitchEngine {
    *
    * Returns the response content or throws on error.
    */
-  private async _executeWithProvider(provider: LLMProvider, request: RouteRequest): Promise<{ content: string; confidence: number }> {
+  private async _executeWithProvider(
+    provider: LLMProvider,
+    request: RouteRequest,
+  ): Promise<{ content: string; confidence: number; routedVia?: string }> {
     // P2-1: the engine keeps AbortController ownership. The controller below
     // drives AgentStop preemption; the provider only ever receives the signal
     // (combined with its own AbortSignal.timeout via AbortSignal.any) — it
@@ -224,12 +242,31 @@ export class RouteSwitchEngine {
       },
     };
 
-    const responseContent = await provider.generate(
-      request.prompt,
-      request.estimatedTokens,
-      request.responseSchema,
-      streamHooks,
-    );
+    // A4/A7 — prefer the metadata-carrying variant when the active provider
+    // implements it, so the upstream routing hint reaches the caller; otherwise
+    // keep the plain string contract. Both paths receive the same engine-owned
+    // streamHooks and the request's extraBody (Fusion seam).
+    let responseContent: string;
+    let routedVia: string | undefined;
+    if (provider.generateWithMeta) {
+      const detailed = await provider.generateWithMeta(
+        request.prompt,
+        request.estimatedTokens,
+        request.responseSchema,
+        streamHooks,
+        request.extraBody,
+      );
+      responseContent = detailed.content;
+      routedVia = detailed.routedVia;
+    } else {
+      responseContent = await provider.generate(
+        request.prompt,
+        request.estimatedTokens,
+        request.responseSchema,
+        streamHooks,
+        request.extraBody,
+      );
+    }
 
     const usedRealConfidence = streamedTokenCount > 0;
 
@@ -255,7 +292,7 @@ export class RouteSwitchEngine {
     }
     confidence = Math.max(0, Math.min(1, confidence));
 
-    return { content: responseContent, confidence };
+    return { content: responseContent, confidence, ...(routedVia !== undefined ? { routedVia } : {}) };
   }
 
   public async execute(request: RouteRequest): Promise<RouteResponse> {
@@ -337,10 +374,29 @@ export class RouteSwitchEngine {
     let responseContent: string;
     let finalProvider = primaryProvider.id;
     let confidence = 1.0;
+    // A7 — only ever set from the single-provider path below. Council Mode
+    // deliberately leaves it undefined (see RouteResponse.routedVia).
+    let routedVia: string | undefined;
 
     if (isCouncilTriggered) {
       log.info('High-risk prompt detected. Triggering Council Mode.');
       const allProviders = eligibleCouncilProviders;
+      // A4 — `extraBody` is deliberately INERT in Council Mode. This path fans
+      // the same prompt out to every eligible provider and synthesises a
+      // consensus, so forwarding a per-request body extension (e.g. a Fusion
+      // panel preference) to each leg would multiply the ensemble fan-out by
+      // the number of legs and contradict the 1x accounting rule Fusion relies
+      // on; Council's own per-leg budget contract governs this path instead.
+      // The drop is logged ONCE here (never per-leg) so it is never silent — the
+      // same discipline the adapter applies to refused `extraBody` keys. Only
+      // the fact and the leg count are logged, never the values. See
+      // docs/architecture/FUSION.md §1 — the authoritative Council explanation;
+      // §2 only forward-references it.
+      if (request.extraBody && Object.keys(request.extraBody).length > 0) {
+        log.warn(
+          `[RouteSwitch] extraBody is ignored in Council Mode: this request fanned out to ${allProviders.length} consensus legs, and a per-request body extension is only applied on the single-provider path (see docs/architecture/FUSION.md §1).`
+        );
+      }
       // P2-B1: pass a REAL hooks object (never explicit-undefined under
       // exactOptionalPropertyTypes) so legs take budgeted provider paths.
       // The engine owns this controller; the council owns the deadline and
@@ -404,6 +460,7 @@ export class RouteSwitchEngine {
           const result = await this._executeWithProvider(provider, { ...request, prompt: enrichedPrompt });
           responseContent = result.content;
           confidence = result.confidence;
+          routedVia = result.routedVia;
           finalProvider = provider.id;
           this.governor.recordUsage(request.estimatedTokens, provider.id);
           // Success — break out of fallback loop
@@ -449,7 +506,8 @@ export class RouteSwitchEngine {
       provider: finalProvider,
       tokensUsed: actualTokens,
       confidence,
-      isCouncilMode: isCouncilTriggered
+      isCouncilMode: isCouncilTriggered,
+      ...(routedVia !== undefined ? { routedVia } : {}),
     };
   }
 

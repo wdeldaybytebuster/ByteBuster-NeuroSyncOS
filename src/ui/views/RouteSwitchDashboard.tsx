@@ -285,7 +285,9 @@ function SetupView() {
   const [formApiKey, setFormApiKey] = useState('');
   const [formIsPaidTier, setFormIsPaidTier] = useState(false);
   const [formSaving, setFormSaving] = useState(false);
-  const [testResult, setTestResult] = useState<{connected:boolean;latencyMs?:number;error?:string;responsePreview?:string}|null>(null);
+  // A7 — `routedVia` carries the upstream provider/model the serving router
+  // actually used (`X-Routed-Via`), when the provider reports one.
+  const [testResult, setTestResult] = useState<{connected:boolean;latencyMs?:number;error?:string;responsePreview?:string;routedVia?:string}|null>(null);
   const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
 
   // Routing Rules state
@@ -388,10 +390,27 @@ function SetupView() {
 
   const handleEditProvider = (p: ProviderEntry) => {
     setEditingId(p.id); setFormName(p.name); setFormType(p.type);
-    if (p.type === 'freellmapi') { setFormApiKey(p.config.apiKey || ''); setFormModelId(p.config.modelId || 'auto'); }
+    // Reset EVERY type-specific field first, mirroring "+ Add Provider", so no
+    // provider type can inherit a previously-edited type's leftover form state.
+    // Without this, editing an openai-compatible provider with base URL
+    // `https://some-vendor/v1` and then editing a freellmapi provider persisted
+    // that stale URL on the FreeLLMAPI row (`baseUrl: formBaseUrl || undefined`
+    // below) and sent Fusion traffic to the wrong endpoint.
+    setFormBaseUrl('');
+    setFormModelId('');
+    setFormModelPath('');
+    if (p.type === 'freellmapi') {
+      // Round-trip a persisted custom host if one exists; blank = the adapter's
+      // baked-in http://localhost:3001/v1 default.
+      setFormBaseUrl(p.config.baseUrl || '');
+      setFormModelId(p.config.modelId || 'auto');
+    }
     if (p.type === 'openai-compatible') { setFormBaseUrl(p.config.baseUrl || ''); setFormModelId(p.config.modelId || 'Auto'); }
     if (p.type === 'llama-cpp') { setFormModelPath(p.config.modelPath || ''); }
     if (p.type === 'opencode' || p.type === 'openrouter') { setFormModelId(p.config.modelId || ''); }
+    // The key is never sent back by the API (GET /providers returns `hasApiKey`,
+    // never `apiKey`), so the field always starts blank — blank means "leave the
+    // stored key unchanged".
     setFormApiKey(''); setFormIsPaidTier(p.isPaidTier || false); setShowAddForm(true); setTestResult(null);
   };
 
@@ -497,7 +516,7 @@ function SetupView() {
               </div>
               {testingProviderId === p.id && testResult && (
                 <div className={`mx-3 mb-3 flex items-center gap-2 p-2 rounded-lg text-[10px] font-mono ${testResult.connected ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
-                  {testResult.connected ? `✓ Connected (${testResult.latencyMs}ms) — ${testResult.responsePreview || ''}` : `✕ Failed: ${testResult.error}`}
+                  {testResult.connected ? `✓ Connected (${testResult.latencyMs}ms) — ${testResult.responsePreview || ''}${testResult.routedVia ? ` • routed via ${testResult.routedVia}` : ''}` : `✕ Failed: ${testResult.error}`}
                 </div>
               )}
             </div>

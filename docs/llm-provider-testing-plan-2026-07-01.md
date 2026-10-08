@@ -261,3 +261,71 @@ user-facing providers.
   is confirmed **not implemented** — still an open item if you want that UI
   copy corrected or the feature actually built, but out of scope for this
   round.
+
+## 9. Phase A — Fusion contract testing matrix (added 2026-10-08)
+
+Covers the pass-through contract described in
+[`docs/architecture/FUSION.md`](../architecture/FUSION.md). "Mechanical" rows
+must pass in CI; "live" rows need registered provider credentials and are
+marked as such.
+
+| # | Requirement | Test file | Assertion | Kind | Status |
+|---|---|---|---|---|---|
+| 1 | Fusion passthrough: `extraBody` merges into the request body | `src/core/routeswitch/adapters/extra-body.test.ts` | the captured fetch body contains the extra field alongside the generated fields | Mechanical | Implemented — run the FUSION.md §8 command |
+| 2 | Model is pinned after the merge | same file | a non-`auto` provider id wins over `extraBody.model`; with `auto`, no `model` key is sent at all. **What this does *not* prove:** the denylist strips `model` before the merge, so no black-box test can isolate the re-pin (the pinned-model tests still pass with it deleted) — per the honest limitation in FUSION.md §2, treat the pin as redundant defence-in-depth, not independently verified behaviour. | Mechanical | Implemented — run the FUSION.md §8 command |
+| 3 | `messages` / `response_format` cannot be overridden | same file | a hostile `extraBody` carrying those keys leaves the real prompt and the schema block intact, and the rejected key names are returned by the sanitizer and logged by the request path | Mechanical | Implemented — run the FUSION.md §8 command |
+| 4 | FreeLLMAPI forwards stream hooks (cancellation) | `src/core/routeswitch/adapters/streamhooks-regression.test.ts` | a FreeLLMAPI call receives a combined abort signal; aborting the engine controller aborts it. Scope note: this holds for FreeLLMAPI and the OpenAI-compatible base adapter; `OpenRouterProvider` deliberately receives no hooks. | Mechanical | Implemented — run the FUSION.md §8 command |
+| 5 | Usage accounting is 1× for a Fusion request | `src/core/routeswitch/routeswitch.test.ts` | `tokensUsed` equals `estimatedTokens` once even when `extraBody` is present | Mechanical | Implemented — run the FUSION.md §8 command |
+| 6 | `X-Routed-Via` capture and display | `src/server/routes/llm.test.ts` | provider self-test payload includes `routedVia` when the header is present, and omits it (no throw) when it is absent | Mechanical | Implemented — run the FUSION.md §8 command |
+| 7 | Provider self-test round-trip through the real UI | `localhost:3742` → RouteSwitch Set-up → Provider Registry → Test | shows `connected`, latency, preview, and the routed-via value when the router returns one | Live (needs a funded router and a working key) | **Blocked on operator authorization for live provider calls** |
+| 8 | Fusion latency against the 30 s provider budget | live server logs (`/tmp/opencode/neurosync-server4.log`) | record p50/p95; if p95 > ~25 s set `OPENAI_COMPAT_TIMEOUT_MS=60000` per FUSION.md §3 | Live | **Blocked on operator authorization for live provider calls** |
+| 9 | Documentation matches behaviour | `docs/architecture/FUSION.md`, README | no claim exceeds what the adapters do; unmeasured numbers are labelled unmeasured | Review | Implemented in this change set |
+| 10 | A per-request `extraBody` is inert in Council Mode | `src/core/routeswitch/routeswitch.test.ts` | a Council-Mode-triggered request carrying `extraBody` leaves every leg's outgoing request free of the extra key and still returns a consensus | Mechanical | Implemented — run the FUSION.md §8 command |
+| 11 | A persisted provider-row `extraBody` reaches the wire through `instantiateProvider` | `src/core/routeswitch/provider-factory.test.ts`, `src/core/routeswitch/adapters/opencode-reasoning.test.ts` | a row's `config_json.extraBody` lands on the captured request body with per-call keys winning. Coverage is per arm, not uniform: the `openai-compatible` and `freellmapi` arms and the `openrouter` arm are driven end-to-end in `provider-factory.test.ts`; the `opencode` arm is driven end-to-end in `opencode-reasoning.test.ts`, which seeds `opencode_zen_enabled` (without that flag the arm throws, which is why the factory-arm assertion cannot live in `provider-factory.test.ts`); `provider-factory.test.ts` also carries a direct-construction check of the opencode adapter as a unit-level assertion. An unrelated config field is not promoted to a body key; a persisted `model`/`messages` cannot smuggle past the guard; a type that cannot carry one (`llama-cpp`, `mock`) warns by provider type and key NAMES and ignores the value; and the factory reports the refused key NAMES it drops (never values), with the provider type named in that label on the supported arms too | Mechanical | Implemented — run the FUSION.md §8 command |
+
+Three scope notes a tester should not mistake for failures:
+
+- **`routedVia` is not universal.** Only the OpenAI-compatible base adapter and
+the FreeLLMAPI adapter capture `X-Routed-Via`; Opencode, OpenRouter, llama.cpp
+and the mock provider return no metadata. Row 6 therefore asserts presence and
+absence, never "always set".
+- **Council Mode's accounting multiplier is unchanged by this change set** and is
+covered by Council's own tests, not by row 5 — `governor.test.ts` contains no
+`extraBody` reference. FUSION.md §6 records the 1× rule and why there is nothing
+to multiply by.
+- **A per-request `extraBody` deliberately does not reach Council Mode legs.**
+  This is about the value carried on `RouteRequest`; a provider's own durable
+  static `extraBody` is a property of that provider instance and therefore *does*
+  travel with a leg. See FUSION.md §1 and §2. A request that triggers consensus
+  does not propagate its **per-request** extra body to the legs, and the engine
+  logs a single warning so the drop is not silent. Forwarding a Fusion
+  panel request to N legs would multiply the router-side fan-out by the leg count
+  and would contradict Council's own `estimatedTokens × provider count`
+  accounting, so row 10 asserts the *absence* of propagation — that is the
+  expected result, not a failure. **The engine's single
+  diagnostic warning is deliberately NOT asserted:** a log-line assertion is
+  brittle and would not prove the behaviour, so row 10 regression-protects the
+  non-propagation only, and the warning is verifiable by reading `engine.ts`.
+
+Deliberate deviations a tester must not "fix" back:
+
+- The phase plan's `§VERIFY: extraBody` DAG node is replaced by the
+  `sanitizeExtraBody()` guard plus rows 1–3. No such node exists. `§VERIFY:` is a
+  CoreExec DAG-node sentinel (`src/core/coreexec/dispatch.ts`, executed by
+  `src/core/coreexec/worker.ts`) whose payload names keys to assert on a preceding
+  task row, and it cannot live inside an adapter's fetch path without crossing the
+  CoreExec/RouteSwitch module boundary.
+- Rows 7 and 8 are the only rows that require outbound provider calls. The
+  mechanical rows must pass without any network access.
+- `extraBody` is a trusted-caller seam (in-process config or a DB provider row),
+  not a hardened boundary against untrusted input; the rows above test accidental
+  override protection, not hostile-input sandboxing.
+
+Pre-commit graph check: in this checkout the system `gitnexus` (1.6.3) is older
+than the index storage format, so `node .gitnexus/run.cjs detect-changes` fails
+with a database-version error. Use the pinned dlx invocation instead:
+
+```bash
+pnpm --allow-build=@ladybugdb/core --allow-build=gitnexus --allow-build=tree-sitter \
+  dlx gitnexus@1.6.12 detect-changes --scope all --repo .
+```

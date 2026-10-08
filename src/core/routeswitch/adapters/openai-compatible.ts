@@ -1,4 +1,4 @@
-import { GenerationStreamHooks, LLMProvider } from '../providers';
+import { ExtraBody, GenerationMeta, GenerationStreamHooks, LLMProvider, ProviderGenerationResult } from '../providers';
 import { db } from '../../basevault/db';
 import { decrypt } from '../../basevault/crypto';
 
@@ -8,6 +8,101 @@ export interface OpenAICompatibleConfig {
   modelId: string;
   /** Extra static headers merged into every request (e.g. OpenRouter's HTTP-Referer/X-Title). */
   extraHeaders?: Record<string, string>;
+  /**
+   * A4 — static body additions applied to every request from this provider
+   * instance (e.g. a durable Fusion panel preference persisted with the
+   * provider row). Merged BEFORE any per-call `extraBody`, and subject to the
+   * same denylist.
+   */
+  extraBody?: ExtraBody;
+}
+
+/**
+ * A4 — body keys a caller-supplied `extraBody` may never override.
+ *
+ * `model` is the routing identity (re-pinned after every merge). `messages` and
+ * `response_format` are the request contract this adapter owns: letting a caller
+ * replace either would allow a workflow to forge the prompt or silently drop the
+ * structured-output schema the caller asked for.
+ *
+ * `__proto__` / `constructor` / `prototype` are denied as well: writing any of
+ * them into the sanitized object would otherwise either be swallowed by an
+ * inherited accessor (never reaching `rejected`, and vanishing from
+ * `Object.keys`) or mutate the object's prototype instead of adding data.
+ */
+export const EXTRA_BODY_DENYLIST = [
+  'model',
+  'messages',
+  'response_format',
+  '__proto__',
+  'constructor',
+  'prototype',
+] as const;
+
+/**
+ * A4 — deterministic, zero-LLM guard on a caller-supplied extraBody. Returns the
+ * surviving own-enumerable keys plus the names it refused.
+ *
+ * P8-2 intent: verification is a key check, never another model call. (The
+ * Phase A plan asked for a `§VERIFY: extraBody` node between body build and
+ * fetch; that sentinel is a CoreExec DAG-node classifier — see
+ * `coreexec/dispatch.ts` — with no representation inside a provider adapter, so
+ * inserting one here would cross the CoreExec/RouteSwitch boundary. This guard
+ * plus its unit tests provide the same deterministic guarantee.)
+ *
+ * Non-plain inputs (`undefined`, `null`, an array, a string, a number) are
+ * treated as empty, and a key whose value cannot be READ (an accessor that
+ * throws) is refused rather than propagated: this function never throws, so a
+ * malformed hint can never fail a request.
+ */
+export function sanitizeExtraBody(extra?: ExtraBody): { extra: ExtraBody; rejected: string[] } {
+  // Null-prototype target: `safe['__proto__'] = v` can therefore never reach an
+  // inherited setter and can never retarget the object's prototype.
+  const safe: ExtraBody = Object.create(null);
+  const rejected: string[] = [];
+  if (!extra || typeof extra !== 'object' || Array.isArray(extra)) {
+    return { extra: safe, rejected };
+  }
+  const denied = new Set<string>(EXTRA_BODY_DENYLIST);
+  for (const key of Object.keys(extra)) {
+    let value: unknown;
+    try {
+      value = (extra as Record<string, unknown>)[key];
+    } catch {
+      // Reading the key threw (accessor/proxy). Drop it, but report it — a
+      // silently swallowed key would contradict this function's contract.
+      rejected.push(key);
+      continue;
+    }
+    if (denied.has(key)) {
+      rejected.push(key);
+      continue;
+    }
+    safe[key] = value;
+  }
+  return { extra: safe, rejected };
+}
+
+/**
+ * A4 — observability for the guard above. A refused key is a caller typo (e.g.
+ * `messages` or `model`) or an attempt to hijack the request contract, and a
+ * silent drop made that undiagnosable from the app. Key NAMES only — never the
+ * values, which can carry prompt-adjacent content. Emits nothing when the list
+ * is empty, so the untouched path stays silent.
+ *
+ * Exported so the provider factory can reuse this single implementation for a
+ * durable provider row's stored value (`provider-factory.ts`) instead of
+ * duplicating the message: the factory is the one caller that cannot report the
+ * refusal itself, because the adapter re-sanitizes an object the factory has
+ * already filtered and its own `rejected` list is empty by then.
+ */
+export function warnOnRejectedExtraBodyKeys(rejected: string[], source: string): void {
+  if (rejected.length === 0) return;
+  console.warn(
+    `[RouteSwitch] extraBody keys refused by the adapter guard (${source}): ` +
+      `${rejected.join(', ')} — 'model', 'messages' and 'response_format' are ` +
+      `adapter-owned and cannot be overridden.`
+  );
 }
 
 /**
@@ -164,9 +259,45 @@ export class OpenAICompatibleProvider implements LLMProvider {
     estimatedTokens: number,
     schema?: any,
     streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
   ): Promise<string> {
     const effectiveConfig = await this._resolveEffectiveConfig();
-    return this._generateWithConfig(prompt, estimatedTokens, schema, effectiveConfig, streamHooks);
+    // Additive single options bucket rather than removing the optional
+    // positional `streamHooks`: the 4 other generate overrides and every
+    // existing caller keep working untouched.
+    const extra = extraBody !== undefined ? { extraBody } : {};
+    return this._generateWithConfig(prompt, estimatedTokens, schema, effectiveConfig, streamHooks, false, extra);
+  }
+
+  /**
+   * A4/A7 — the metadata-carrying variant. `generate()` is intentionally left
+   * returning a bare string; callers that need per-call observability use this
+   * instead and fall back when a provider does not implement it.
+   *
+   * A fresh `meta` object is created per call so concurrent generations never
+   * share captured state (no mutable field on `this`).
+   */
+  async generateWithMeta(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    streamHooks?: GenerationStreamHooks,
+    extraBody?: ExtraBody,
+  ): Promise<ProviderGenerationResult> {
+    const effectiveConfig = await this._resolveEffectiveConfig();
+    const meta: GenerationMeta = {};
+    const options: { extraBody?: ExtraBody; meta: GenerationMeta } = { meta };
+    if (extraBody !== undefined) options.extraBody = extraBody;
+    const content = await this._generateWithConfig(
+      prompt,
+      estimatedTokens,
+      schema,
+      effectiveConfig,
+      streamHooks,
+      false,
+      options,
+    );
+    return meta.routedVia !== undefined ? { content, routedVia: meta.routedVia } : { content };
   }
 
   /**
@@ -193,8 +324,16 @@ export class OpenAICompatibleProvider implements LLMProvider {
      * gets identical behaviour to before this parameter existed.
      */
     _isReasoningRetry = false,
+    /**
+     * A4/A7 — additive options bucket. Deliberately a single appended optional
+     * parameter rather than new positional ones: the four `generate` overrides
+     * and the reasoning-exhaustion retry keep compiling untouched.
+     *  - `extraBody`: per-call body additions, merged AFTER the canonical body.
+     *  - `meta`:      per-call out-param the caller reads once this resolves.
+     */
+    extra?: { extraBody?: ExtraBody; meta?: GenerationMeta },
   ): Promise<string> {
-    const { baseUrl, apiKey, modelId, extraHeaders } = effectiveConfig;
+    const { baseUrl, apiKey, modelId, extraHeaders, extraBody: configExtraBody } = effectiveConfig;
 
     // Graceful offline fallback if no baseUrl is configured
     if (!baseUrl) {
@@ -257,6 +396,34 @@ export class OpenAICompatibleProvider implements LLMProvider {
       body.model = modelId;
     }
 
+    // A4 — merge caller-supplied body additions LAST, then re-pin `model`.
+    // Merge order is deliberate: static provider config → per-call request fields
+    // → canonical model. A caller can therefore extend the request (e.g. Fusion
+    // panel options) but can never hijack the routing identity. `messages` and
+    // `response_format` never reach this merge at all — `sanitizeExtraBody`
+    // drops them (and reports them, see the warnings below), so the request
+    // contract stays adapter-owned.
+    // A4 — for a provider built by `provider-factory.ts` this config-level pass
+    // is a provable no-op: the factory already ran the row's `config_json`
+    // `extraBody` through `sanitizeExtraBody`, so `staticExtra.rejected` is
+    // always empty here and the `'provider config'` warning below can never fire
+    // for those instances. It remains reachable only for a DIRECTLY constructed
+    // adapter carrying a raw config-level `extraBody`.
+    const staticExtra = sanitizeExtraBody(configExtraBody);
+    const callExtra = sanitizeExtraBody(extra?.extraBody);
+    // A4 — surface anything the guard refused. Without this a caller typo
+    // (`messages`, `model`) is dropped in production with zero diagnostics.
+    warnOnRejectedExtraBodyKeys(staticExtra.rejected, 'provider config');
+    warnOnRejectedExtraBodyKeys(callExtra.rejected, 'request extraBody');
+    const requestBody: Record<string, any> = { ...body, ...staticExtra.extra, ...callExtra.extra };
+    if (isAuto) {
+      // Pinned absent: even when extraBody tried to set one, an `auto` request
+      // must stay auto so the router remains free to choose.
+      delete requestBody.model;
+    } else {
+      requestBody.model = modelId;
+    }
+
     let url = baseUrl.replace(/\/$/, '');
     if (!url.endsWith('/v1/chat/completions')) {
       if (url.endsWith('/v1')) {
@@ -276,7 +443,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       response = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(body),
+        body: JSON.stringify(requestBody),
         signal,
       });
     } catch (err) {
@@ -293,8 +460,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // it rather than failing outright; the prompt already instructs
       // "output ONLY a valid JSON array" and OKFGenerator's parser strips
       // markdown fences/preamble, so best-effort JSON still usually works.
-      if (response.status === 400 && body.response_format && /response_format/i.test(errorText)) {
-        const { response_format: _unused, ...bodyWithoutSchema } = body;
+      if (response.status === 400 && requestBody.response_format && /response_format/i.test(errorText)) {
+        const { response_format: _unused, ...bodyWithoutSchema } = requestBody;
         try {
           response = await fetch(url, {
             method: 'POST',
@@ -312,6 +479,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
       } else {
         throw new Error(`LLM API error ${response.status}: ${errorText}`);
       }
+    }
+
+    // A7 — capture the upstream routing hint. FreeLLMAPI sets a non-empty
+    // `X-Routed-Via` (<platform>/<model>) on every response; other
+    // OpenAI-compatible endpoints may omit it entirely. Best-effort
+    // observability only: the access is defensive (mocked/foreign responses may
+    // have no `headers` object at all), it never throws, and it never affects
+    // the returned content.
+    if (extra?.meta) {
+      const routedVia = response.headers?.get?.('x-routed-via');
+      if (routedVia) extra.meta.routedVia = routedVia;
     }
 
     const data = await response.json() as any;
@@ -344,7 +522,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
         // budget combined with the same engine-owned abort signal.
         const retryConfig: OpenAICompatibleConfig = { ...effectiveConfig };
         const retryTokens = Math.min(maxTokens * REASONING_RETRY_MULTIPLIER, REASONING_RETRY_CAP);
-        return this._generateWithConfig(prompt, retryTokens, schema, retryConfig, streamHooks, true);
+        // A7: this retry is a fresh request — clear any routing hint captured
+        // from the attempt that produced no visible content, so a reported
+        // `routedVia` always describes the call whose content we return.
+        if (extra?.meta) delete extra.meta.routedVia;
+        return this._generateWithConfig(prompt, retryTokens, schema, retryConfig, streamHooks, true, extra);
       }
 
       if (isReasoningExhaustion) {

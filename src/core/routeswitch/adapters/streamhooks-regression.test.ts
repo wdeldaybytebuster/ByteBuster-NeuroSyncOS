@@ -3,6 +3,7 @@ import { MockProvider } from './mock-provider';
 import { OpenAICompatibleProvider, isTimeoutError } from './openai-compatible';
 import { OpenRouterProvider } from './openrouter';
 import { OpenCodeProvider } from './opencode';
+import { FreeLLMProvider } from './freellmapi';
 import { GenerationStreamHooks, LLMProvider } from '../providers';
 
 /**
@@ -129,5 +130,77 @@ describe('non-llama-cpp adapters are unaffected by streamHooks', () => {
     expect(isTimeoutError(abort)).toBe(false);
     expect(isTimeoutError(new Error('boom'))).toBe(false);
     expect(isTimeoutError(null)).toBe(false);
+  });
+});
+
+/**
+ * A.5 — FreeLLMAPI used to accept `streamHooks` as `_streamHooks` and then drop
+ * it, so an AgentStop abort for an in-flight FreeLLMAPI (Fusion) call never
+ * reached the fetch signal and the request ran to completion regardless.
+ */
+describe('A.5 — FreeLLMAPI forwards streamHooks (agent-abort propagation)', () => {
+  it('P2-1: an engine-owned abort signal reaches fetch and aborts it', async () => {
+    let seenSignal: AbortSignal | null | undefined;
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((async (_url: any, init?: any) => {
+      seenSignal = init?.signal as AbortSignal | undefined;
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'pong' } }] }) } as any;
+    }) as any);
+
+    const p = new FreeLLMProvider({ modelId: 'auto' });
+    const engineController = new AbortController();
+    const res = await p.generate('Hello, respond with a single word to confirm connectivity.', 20, undefined, {
+      signal: engineController.signal,
+    });
+
+    expect(res).toBe('pong');
+    expect(seenSignal).toBeDefined();
+    expect(seenSignal!.aborted).toBe(false);
+    engineController.abort();
+    // Only true when streamHooks was actually forwarded: the adapter-owned
+    // timeout signal alone would never track the engine controller.
+    expect(seenSignal!.aborted).toBe(true);
+
+    fetchMock.mockRestore();
+  });
+
+  it('returns byte-identical content with and without hooks', async () => {
+    const body = { choices: [{ message: { content: 'IDENTICAL_CONTENT' } }] };
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => body } as any);
+
+    const p = new FreeLLMProvider({ modelId: 'auto' });
+    const without = await p.generate('Same prompt here', 20);
+    const withHooks = await p.generate('Same prompt here', 20, undefined, {
+      signal: new AbortController().signal,
+    });
+
+    expect(withHooks).toBe(without);
+    expect(withHooks).toBe('IDENTICAL_CONTENT');
+    fetchMock.mockRestore();
+  });
+
+  it('forwards streamHooks and extraBody together on the plain generate() path', async () => {
+    let seenSignal: AbortSignal | null | undefined;
+    let seenBody: any;
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((async (_url: any, init?: any) => {
+      seenSignal = init?.signal as AbortSignal | undefined;
+      seenBody = JSON.parse(init?.body as string);
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'pong' } }] }) } as any;
+    }) as any);
+
+    const p = new FreeLLMProvider({ modelId: 'fusion' });
+    const engineController = new AbortController();
+    const res = await p.generate('Test prompt', 20, undefined, { signal: engineController.signal }, {
+      fusion: { panels: 3 },
+    });
+
+    expect(res).toBe('pong');
+    // Both additions must survive the same call: neither may be dropped while
+    // the other is threaded through.
+    expect(seenBody.fusion).toEqual({ panels: 3 });
+    expect(seenBody.model).toBe('fusion');
+    expect(seenSignal).toBeDefined();
+    engineController.abort();
+    expect(seenSignal!.aborted).toBe(true);
+    fetchMock.mockRestore();
   });
 });
