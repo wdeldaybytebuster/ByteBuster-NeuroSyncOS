@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { SyncEventLogSchema, SyncEventLog } from '../schema';
 import { db } from '../db';
 import { parseDelta } from './sync-policy';
-import { loadSyncSecret, syncMac, macsEqual } from './sync-handshake';
+import { loadSyncSecret, syncMac, macsEqual, syncFingerprint } from './sync-handshake';
+import {
+  getApprovedPeers,
+  isApprovedPeer,
+  updateApprovedPeerFingerprint,
+} from './sync-consent';
+import { scoutEmitter } from '../../scoutdaemon/sse';
 import { randomBytes } from 'node:crypto';
 import type { Statement } from 'better-sqlite3';
 import WebSocket from 'ws';
@@ -193,7 +199,14 @@ export class NodeTransport {
     }
   }
 
-  /** A peer challenged US: answer with a MAC over its nonce + its label. */
+  /** A peer challenged US: answer with a MAC over its nonce + its label.
+   *
+   * P2-B4 — the answer also presents our node fingerprint
+   * (`syncFingerprint`, the pairing-verification code) as `fp` so the
+   * challenger can run its TOFU compare. Extra frame field: old peers that
+   * do not send `fp` are still honoured (backward compatible — absence is
+   * "no statement", never a failure).
+   */
   private respondToChallenge(parsed: Record<string, unknown>, peerId: string, ws: any) {
     const nonce = typeof parsed.nonce === 'string' ? parsed.nonce : '';
     const label = typeof parsed.peerId === 'string' ? parsed.peerId : peerId;
@@ -204,6 +217,7 @@ export class NodeTransport {
         nonce,
         peerId: label,
         mac: syncMac(loadSyncSecret(), nonce, label),
+        fp: syncFingerprint(loadSyncSecret()),
       }));
     } catch (e) {
       console.error(`[Transport] Failed to answer challenge from ${peerId}:`, e);
@@ -224,6 +238,43 @@ export class NodeTransport {
     if (!macsEqual(mac, expected)) {
       this.failHandshake(peerId, ws, 'bad-mac');
       return;
+    }
+
+    // P2-B4 — TOFU fingerprint compare (runs only for peers on the consent
+    // list, parsed as ip:port — inbound `incoming-<uuid>` sockets never map
+    // to an approved peer, so the route-layer consent decision still owns
+    // them; see server-main.ts /api/sync routes). First handshake with a
+    // presented `fp` LEARNS it (persisted to the existing sync_peers
+    // `fingerprint` field, no migration); a later DIFFERENT `fp` refuses
+    // the peer and surfaces a PortGrid event. Absent `fp` (old peers) or no
+    // stored fingerprint = no statement, handshake proceeds as before.
+    // isApprovedPeer is the ONE canonical approval gate — nothing here
+    // re-implements list membership.
+    const presentedFp = typeof parsed.fp === 'string' && parsed.fp !== '' ? parsed.fp : null;
+    if (presentedFp) {
+      const host = peerId.split(':')[0] ?? '';
+      const port = Number(peerId.split(':')[1]);
+      if (host !== '' && Number.isInteger(port) && isApprovedPeer(db, host, port)) {
+        const stored = getApprovedPeers(db).find((p) => p.ip === host && p.port === port);
+        const knownFp = stored?.fingerprint ?? null;
+        if (knownFp && knownFp !== presentedFp) {
+          console.warn(`[Transport] Fingerprint MISMATCH for approved peer ${peerId} — refusing`);
+          this.clearChallenge(peerId);
+          this.authenticatedPeers.delete(peerId);
+          try { ws.close(4401, 'fingerprint-mismatch'); } catch { /* socket already gone */ }
+          try {
+            scoutEmitter.emit('update', {
+              type: 'PEER_FINGERPRINT_MISMATCH',
+              node: { ip: host, port, expected: knownFp, presented: presentedFp },
+              timestamp: Date.now(),
+            });
+          } catch { /* telemetry must never break the refusal */ }
+          return;
+        }
+        if (!knownFp) {
+          updateApprovedPeerFingerprint(db, host, port, presentedFp); // TOFU-learn
+        }
+      }
     }
 
     // Valid — retire the challenge. (A re-challenge of an already-authenticated

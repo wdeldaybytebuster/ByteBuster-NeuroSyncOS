@@ -32,7 +32,7 @@ const app = new Hono();
 // a foreign origin never receives Access-Control-Allow-Origin). Registered
 // before auth so OPTIONS preflight short-circuits ahead of the 401.
 import { perimeterCors, rateLimitMiddleware, wsUpgradeGuard } from './perimeter';
-import { NEUROSYNC_PORT } from './port';
+import { NEUROSYNC_PORT, allowedPeerPorts } from './port';
 import { shutdownDrainingMiddleware } from './shutdown';
 // §2.2-C6 — the operator credential gate replaces the old anonymous block
 // (readiness-derived gating + header-presence-only check both failed open).
@@ -327,17 +327,29 @@ app.get(
  * targets (closes the §0-V1-5 delta-exfil chain), and append the target to
  * the SAME consent list used by discovery approvals (one list, one guard).
  * Session auth on this route lands with C6 (server-main middleware swap).
+ *
+ * P2-B4 — the peer-port trap is enforced HERE at the route layer (not in
+ * the transport, so transport-level pairing tests stay green): any
+ * otherwise-valid port outside {configured} ∪ {PEER_PORT_ALLOWLIST} is a
+ * 400 with a readable error. An optional `fingerprint` body field is
+ * persisted (TOFU seed); when absent, the first successful handshake learns
+ * it and a later different one refuses the peer (see transport.ts).
  */
 app.post('/api/sync/manual', async (c) => {
   try {
     const body = await c.req.json().catch(() => null);
-    const check = validateManualPeer(body?.ip, body?.port, isSyncAllowPublic(db));
+    const check = validateManualPeer(body?.ip, body?.port, isSyncAllowPublic(db), allowedPeerPorts());
     if (!check.ok) {
+      if (check.error === 'port-not-allowlisted') {
+        const allowed = [...allowedPeerPorts()].sort((a, b) => a - b).join(', ');
+        return c.json({ error: `port ${String(body?.port)} is not an allowed peer port (allowed: ${allowed}; extend with PEER_PORT_ALLOWLIST)` }, 400);
+      }
       return c.json({ error: check.error }, 400);
     }
     const ip: string = body.ip;
     const port: number = body.port;
-    const added = addApprovedPeer(db, ip, port);
+    const fingerprint: string | undefined = typeof body?.fingerprint === 'string' && body.fingerprint !== '' ? body.fingerprint : undefined;
+    const added = addApprovedPeer(db, ip, port, fingerprint);
     if (!added.ok) {
       return c.json({ error: added.error }, 409);
     }
@@ -370,8 +382,12 @@ app.post('/api/sync/peers', async (c) => {
     return c.json({ error: 'invalid-action' }, 400);
   }
 
-  const check = validateManualPeer(body?.ip, body?.port, isSyncAllowPublic(db));
+  const check = validateManualPeer(body?.ip, body?.port, isSyncAllowPublic(db), allowedPeerPorts());
   if (!check.ok) {
+    if (check.error === 'port-not-allowlisted') {
+      const allowed = [...allowedPeerPorts()].sort((a, b) => a - b).join(', ');
+      return c.json({ error: `port ${String(body?.port)} is not an allowed peer port (allowed: ${allowed}; extend with PEER_PORT_ALLOWLIST)` }, 400);
+    }
     return c.json({ error: check.error }, 400);
   }
   const ip: string = body.ip;
@@ -385,8 +401,11 @@ app.post('/api/sync/peers', async (c) => {
   }
 
   // approve → persist to the consent list, then connect (§2.1-C4: ONLY this
-  // route and /api/sync/manual may call connect*).
-  const added = addApprovedPeer(db, ip, port);
+  // route and /api/sync/manual may call connect*). P2-B4: an optional
+  // `fingerprint` body field seeds TOFU; otherwise the first handshake
+  // learns it (see transport.ts handleAuthFrame).
+  const fingerprint: string | undefined = typeof body?.fingerprint === 'string' && body.fingerprint !== '' ? body.fingerprint : undefined;
+  const added = addApprovedPeer(db, ip, port, fingerprint);
   if (!added.ok) {
     return c.json({ error: added.error }, 409);
   }

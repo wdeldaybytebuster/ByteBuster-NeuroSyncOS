@@ -168,8 +168,14 @@ function DashboardView() {
           );
         }
         // §2.1-C4: peer consent events re-render the Sync Peers lists live.
-        if (data.type === 'PEER_DISCOVERED' || data.type === 'PEER_APPROVED' || data.type === 'PEER_REJECTED') {
+        // P2-B4: a fingerprint mismatch also raises a dedicated banner (kept
+        // until dismissed) so a refused peer is visible, not silent.
+        if (data.type === 'PEER_DISCOVERED' || data.type === 'PEER_APPROVED' || data.type === 'PEER_REJECTED' || data.type === 'PEER_FINGERPRINT_MISMATCH') {
           refreshSyncPeers();
+        }
+        if (data.type === 'PEER_FINGERPRINT_MISMATCH' && data.node) {
+          const n = data.node;
+          setPeerMismatch(`Fingerprint MISMATCH — refused ${n.ip}:${n.port} (expected ${n.expected}, presented ${n.presented}). Re-approve only if you rotated that peer.`);
         }
       } catch {}
     });
@@ -195,6 +201,9 @@ function DashboardView() {
   const [manualIp, setManualIp] = useState('');
   const [manualPort, setManualPort] = useState('3743');
   const [peerNotice, setPeerNotice] = useState<string | null>(null);
+  // P2-B4 — fingerprint-mismatch refusal banner (set by the SSE handler
+  // above; NOT part of the syncPeers list state, which Phase 3 owns).
+  const [peerMismatch, setPeerMismatch] = useState<string | null>(null);
 
   const refreshSyncPeers = useCallback(() => {
     authFetch(`${API}/api/sync/peers`, {
@@ -628,6 +637,14 @@ function DashboardView() {
         {peerNotice && (
           <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-white/[0.03] border border-white/10 text-[10px] text-gray-300">
             <Sparkles size={12} className="shrink-0" style={{ color: ACCENT }} /> {peerNotice}
+          </div>
+        )}
+
+        {/* P2-B4: TOFU fingerprint-mismatch refusal — stays until dismissed. */}
+        {peerMismatch && (
+          <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-red-500/[0.07] border border-red-500/30 text-[10px] text-red-300">
+            <Sparkles size={12} className="shrink-0 text-red-400" /> {peerMismatch}
+            <button onClick={() => setPeerMismatch(null)} className="ml-auto px-2 py-0.5 rounded text-[9px] font-bold border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-all">Dismiss</button>
           </div>
         )}
 

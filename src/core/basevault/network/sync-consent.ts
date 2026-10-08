@@ -55,13 +55,28 @@ export function isPrivatePeerTarget(ip: string): boolean {
  * NOTE (documented decision): loopback (127.0.0.1 / ::1) is NOT RFC1918 or
  * link-local, so it is default-denied like any other non-private target —
  * plan-literal reading of §2.1-C4; operators can allow it via sync_allow_public.
+ *
+ * P2-B4 — `allowedPorts` is the route layer's effective peer-port set
+ * ({configured} ∪ {PEER_PORT_ALLOWLIST}, see server/port.ts). When present,
+ * any otherwise-valid port outside the set is rejected with
+ * `port-not-allowlisted` so an approved peer cannot probe arbitrary LAN
+ * ports. Omitted (undefined) = no port restriction — transport-level and
+ * legacy callers keep byte-identical behaviour.
  */
-export function validateManualPeer(ip: unknown, port: unknown, allowPublic: boolean): PeerValidation {
+export function validateManualPeer(
+  ip: unknown,
+  port: unknown,
+  allowPublic: boolean,
+  allowedPorts?: Iterable<number>,
+): PeerValidation {
   if (typeof ip !== 'string' || net.isIP(ip) === 0) {
     return { ok: false, error: 'invalid-ip' };
   }
   if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) {
     return { ok: false, error: 'invalid-port' };
+  }
+  if (allowedPorts !== undefined && !new Set(allowedPorts).has(port)) {
+    return { ok: false, error: 'port-not-allowlisted' };
   }
   if (!allowPublic && !isPrivatePeerTarget(ip)) {
     return { ok: false, error: 'target-not-private' };
@@ -137,4 +152,25 @@ export function removeApprovedPeer(db: Database, ip: string, port: number): bool
 
 export function isApprovedPeer(db: Database, ip: string, port: number): boolean {
   return getApprovedPeers(db).some((p) => p.ip === ip && p.port === port);
+}
+
+/**
+ * P2-B4 — TOFU-learn: record the fingerprint a peer presented on its first
+ * successful handshake. Same JSON `sync_peers` row (the `fingerprint` field),
+ * so no migration. No-op (false) when the peer is not on the consent list —
+ * learning is only for approved peers (the canonical isApprovedPeer gate).
+ */
+export function updateApprovedPeerFingerprint(
+  db: Database,
+  ip: string,
+  port: number,
+  fingerprint: string,
+): boolean {
+  const peers = getApprovedPeers(db);
+  const peer = peers.find((p) => p.ip === ip && p.port === port);
+  if (!peer) return false;
+  if (peer.fingerprint === fingerprint) return true; // already known — idempotent
+  peer.fingerprint = fingerprint;
+  writeJson(db, 'sync_peers', peers);
+  return true;
 }

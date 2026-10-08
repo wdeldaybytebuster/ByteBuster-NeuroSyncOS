@@ -29,3 +29,40 @@ export function resolveNeurosyncPort(raw: unknown): number {
 }
 
 export const NEUROSYNC_PORT: number = resolveNeurosyncPort(process.env.NEUROSYNC_PORT);
+
+/**
+ * P2-B4 — peer-port allowlist (the peer-port trap).
+ *
+ * `PEER_PORT_ALLOWLIST` is a comma/space-separated env override (e.g.
+ * `PEER_PORT_ALLOWLIST=3743,3744`); entries that are not integer ports
+ * 1..65535 are dropped. The effective set for manual-pairing and consent
+ * approval is ALWAYS {configured NEUROSYNC_PORT} ∪ {allowlist} — the
+ * configured port is implicitly allowed so a stock single-port deployment
+ * needs no env at all, and an approved peer can never probe an arbitrary
+ * LAN port (enforced at the ROUTE layer in server-main.ts, not in the
+ * transport, so transport-level pairing tests stay method-signature green).
+ */
+export function resolvePeerPortAllowlist(raw: unknown): number[] {
+  if (typeof raw !== 'string' || raw.trim() === '') return [];
+  const out: number[] = [];
+  for (const part of raw.split(/[\s,;]+/)) {
+    if (part === '') continue;
+    const n = Number(part);
+    if (Number.isInteger(n) && n >= 1 && n <= 65535 && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+export const PEER_PORT_ALLOWLIST: number[] = resolvePeerPortAllowlist(
+  process.env.PEER_PORT_ALLOWLIST,
+);
+
+/** Effective peer-port set: {configured} ∪ {allowlist}. */
+export function allowedPeerPorts(configured: number = NEUROSYNC_PORT): Set<number> {
+  return new Set([configured, ...PEER_PORT_ALLOWLIST]);
+}
+
+/** True when `port` is a member of the effective peer-port set. */
+export function isAllowedPeerPort(port: number, configured: number = NEUROSYNC_PORT): boolean {
+  return allowedPeerPorts(configured).has(port);
+}

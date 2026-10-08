@@ -9,6 +9,12 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { NEUROSYNC_PORT, DEFAULT_NEUROSYNC_PORT, resolveNeurosyncPort } from './port';
+import {
+  PEER_PORT_ALLOWLIST,
+  resolvePeerPortAllowlist,
+  allowedPeerPorts,
+  isAllowedPeerPort,
+} from './port';
 import { ALLOWED_ORIGINS } from './perimeter';
 
 describe('resolveNeurosyncPort validation (1–65535, else default)', () => {
@@ -92,5 +98,34 @@ describe('GITNEXUS_PORT precedent untouched', () => {
       'utf8',
     );
     expect(src).toMatch(/NEUROSYNC_GITNEXUS_PORT/);
+  });
+});
+
+describe('P2-B4 — PEER_PORT_ALLOWLIST (effective set {configured} ∪ {allowlist})', () => {
+  it('parses comma/space-separated lists, drops garbage', () => {
+    expect(resolvePeerPortAllowlist(undefined)).toEqual([]);
+    expect(resolvePeerPortAllowlist('')).toEqual([]);
+    expect(resolvePeerPortAllowlist('   ')).toEqual([]);
+    expect(resolvePeerPortAllowlist('3744, 3745')).toEqual([3744, 3745]);
+    expect(resolvePeerPortAllowlist('3744 3745;3746')).toEqual([3744, 3745, 3746]);
+    expect(resolvePeerPortAllowlist('0, 65536, 1.5, abc, 3744')).toEqual([3744]);
+    expect(resolvePeerPortAllowlist('3744,3744, 3744')).toEqual([3744]); // deduped
+  });
+
+  it('PEER_PORT_ALLOWLIST is wired to the env through the parser', () => {
+    expect(PEER_PORT_ALLOWLIST).toEqual(resolvePeerPortAllowlist(process.env.PEER_PORT_ALLOWLIST));
+  });
+
+  it('the configured port is always allowed, even with an empty allowlist', () => {
+    expect(isAllowedPeerPort(3743, 3743)).toBe(true);
+    expect(isAllowedPeerPort(80, 3743)).toBe(false);
+    expect(isAllowedPeerPort(3744, 3743)).toBe(false);
+  });
+
+  it('allowedPeerPorts is {configured} ∪ {allowlist}', () => {
+    const set = allowedPeerPorts(3743);
+    expect(set.has(3743)).toBe(true);
+    for (const p of PEER_PORT_ALLOWLIST) expect(set.has(p)).toBe(true);
+    expect(set.has(1)).toBe(PEER_PORT_ALLOWLIST.includes(1));
   });
 });

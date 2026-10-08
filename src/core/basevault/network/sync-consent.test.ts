@@ -10,6 +10,7 @@ import {
   addApprovedPeer,
   removeApprovedPeer,
   isApprovedPeer,
+  updateApprovedPeerFingerprint,
 } from './sync-consent';
 
 /**
@@ -27,13 +28,31 @@ beforeEach(() => {
 });
 
 describe('sync-consent — validateManualPeer (the §0-V1-5 exfil chain)', () => {
-  it('accepts an RFC1918 target on a valid port', () => {
+  it('accepts an RFC1918 target on a valid port (no allowlist = no port restriction)', () => {
     expect(validateManualPeer('192.168.1.20', 3743, false)).toEqual({ ok: true });
     expect(validateManualPeer('10.0.0.5', 1, false)).toEqual({ ok: true });
     expect(validateManualPeer('172.16.9.9', 65535, false)).toEqual({ ok: true });
     expect(validateManualPeer('169.254.10.10', 8080, false)).toEqual({ ok: true }); // link-local
     expect(validateManualPeer('fd00::1', 3743, false)).toEqual({ ok: true }); // v6 ULA
     expect(validateManualPeer('fe80::1', 3743, false)).toEqual({ ok: true }); // v6 link-local
+  });
+
+  it('P2-B4 — REJECTS non-allowlisted ports when the route layer passes its set', () => {
+    const allowlist = new Set([3743]);
+    // allowlisted member passes …
+    expect(validateManualPeer('192.168.1.20', 3743, false, allowlist)).toEqual({ ok: true });
+    // … everything else is rejected even though the ip/port are otherwise valid
+    // (the peer-port trap: an approved peer must not probe arbitrary LAN ports).
+    for (const port of [1, 80, 443, 8080, 9999, 65535]) {
+      expect(validateManualPeer('192.168.1.20', port, false, allowlist), `port ${port}`).toEqual({
+        ok: false,
+        error: 'port-not-allowlisted',
+      });
+    }
+    // allowlist check runs AFTER shape validation — malformed ports keep
+    // their own error, never the allowlist one.
+    expect(validateManualPeer('192.168.1.20', 0, false, allowlist)).toEqual({ ok: false, error: 'invalid-port' });
+    expect(validateManualPeer('not-an-ip', 9999, false, allowlist)).toEqual({ ok: false, error: 'invalid-ip' });
   });
 
   it('REJECTS the exfiltration target: a public IP unless sync_allow_public', () => {
@@ -60,9 +79,13 @@ describe('sync-consent — validateManualPeer (the §0-V1-5 exfil chain)', () =>
     }
   });
 
-  it('REJECTS bad ports (not an integer in 1..65535)', () => {
+  it('REJECTS bad ports (not an integer in 1..65535) — with or without an allowlist', () => {
     for (const port of [0, 65536, -1, 1.5, '3743', null, undefined, NaN]) {
       expect(validateManualPeer('10.0.0.1', port as any, false), `port ${String(port)}`).toEqual({
+        ok: false,
+        error: 'invalid-port',
+      });
+      expect(validateManualPeer('10.0.0.1', port as any, false, new Set([3743])), `allowlisted port ${String(port)}`).toEqual({
         ok: false,
         error: 'invalid-port',
       });
@@ -140,5 +163,29 @@ describe('sync-consent — approved peer list (cap 32, deduped)', () => {
     // and a fresh add recovers the list
     expect(addApprovedPeer(db, '10.0.0.1', 3743)).toEqual({ ok: true });
     expect(getApprovedPeers(db)).toHaveLength(1);
+  });
+
+  it('P2-B4 — TOFU-learn: updateApprovedPeerFingerprint persists to the SAME row (no migration)', () => {
+    // approve path persist (operator-supplied seed) …
+    expect(addApprovedPeer(db, '192.168.1.20', 3743, 'seed-fp')).toEqual({ ok: true });
+    // … and manual-path persist (no seed) both land in the fingerprint field.
+    expect(addApprovedPeer(db, '192.168.1.21', 3743)).toEqual({ ok: true });
+    expect(getApprovedPeers(db).find((p) => p.ip === '192.168.1.21')?.fingerprint).toBeUndefined();
+
+    // first handshake learns it
+    expect(updateApprovedPeerFingerprint(db, '192.168.1.21', 3743, 'learned-fp')).toBe(true);
+    expect(getApprovedPeers(db).find((p) => p.ip === '192.168.1.21')).toMatchObject({ fingerprint: 'learned-fp' });
+
+    // re-learning the same value is idempotent
+    expect(updateApprovedPeerFingerprint(db, '192.168.1.21', 3743, 'learned-fp')).toBe(true);
+    expect(getApprovedPeers(db)).toHaveLength(2);
+
+    // rotation overwrites (re-approval is the operator's explicit consent)
+    expect(updateApprovedPeerFingerprint(db, '192.168.1.21', 3743, 'rotated-fp')).toBe(true);
+    expect(getApprovedPeers(db).find((p) => p.ip === '192.168.1.21')).toMatchObject({ fingerprint: 'rotated-fp' });
+
+    // a peer that is NOT on the consent list learns nothing (canonical gate)
+    expect(updateApprovedPeerFingerprint(db, '10.9.9.9', 9999, 'evil-fp')).toBe(false);
+    expect(isApprovedPeer(db, '10.9.9.9', 9999)).toBe(false);
   });
 });
