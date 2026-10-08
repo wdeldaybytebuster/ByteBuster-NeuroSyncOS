@@ -3,7 +3,7 @@ import { RouteSwitchConfig } from './RouteSwitchConfig';
 import { RoutingDials } from './RoutingDials';
 import { useDeveloperMode } from './DeveloperModeContext';
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
-import { authFetch, openEventSource, LONG_TASK_BUDGET_MS } from '../lib/api';
+import { API, authFetch, openEventSource, LONG_TASK_BUDGET_MS } from '../lib/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -62,7 +62,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         payload.config = { modelPath };
       }
 
-      const res = await authFetch('http://localhost:3743/api/routeswitch/provider', {
+      const res = await authFetch(`${API}/api/routeswitch/provider`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

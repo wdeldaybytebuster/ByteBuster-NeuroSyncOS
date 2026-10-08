@@ -47,9 +47,9 @@ export const API = resolveApiOrigin();
 const SESSION_KEY = 'neurosync.session';
 const AUTH_HEADER = 'Authorization';
 const API_HOST = new URL(API).host;
-// P2-3: the compiled default stays bearer-eligible even when API resolved to
-// the page origin (vite dev on :3742 keeps absolute :3743 call sites working
-// until the deferred App/Settings/RunHistory/Statusline sweep lands).
+// P3-S3: the compiled default stays bearer-eligible even when API resolved to
+// the page origin — App.tsx absolute :3743 call sites remain until the Phase 4
+// D-14 sweep lands (Settings/RunHistory/Statusline now use the API chokepoint).
 const DEFAULT_API_HOST = new URL(DEFAULT_API).host;
 
 // ── session token (localStorage) ─────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IntentPreview } from './IntentPreview';
 import { Activity, ShieldAlert, Cpu } from 'lucide-react';
-import { openEventSource } from '../lib/api';
+import { API, openEventSource } from '../lib/api';
 
 export function Statusline() {
   const [status, setStatus] = useState<'idle' | 'working' | 'warning'>('idle');
@@ -9,7 +9,7 @@ export function Statusline() {
   const [isIntentPreviewOpen, setIntentPreviewOpen] = useState(false);
 
   useEffect(() => {
-    const sse = openEventSource('http://localhost:3743/api/scout/events');
+    const sse = openEventSource(`${API}/api/scout/events`);
     let timeout: ReturnType<typeof setTimeout>;
 
     sse.addEventListener('scout-update', (event) => {
