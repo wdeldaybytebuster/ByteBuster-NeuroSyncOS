@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db, initDB, dbPath, migratePendingProposalBlob, SCHEMA_VERSION, getUserVersion, setUserVersion } from './db';
+import { db, initDB, dbPath, migratePendingProposalBlob, migrate_v0_v1, SCHEMA_VERSION, getUserVersion, setUserVersion } from './db';
 import fs from 'fs';
 
 describe('BaseVault SQLite Database', () => {
@@ -162,12 +162,88 @@ describe('BaseVault SQLite Database', () => {
     expect(getUserVersion()).toBe(0);
     initDB();
     expect(getUserVersion()).toBe(SCHEMA_VERSION);
-    // All 19 gated ALTERs still applied exactly once (idempotent try/catch).
+    // migrate_v0_v1 (18 unique column-adds; the 19th historical ALTER was a
+    // project_root_path duplicate) still applied exactly once (idempotent).
     const taskCols = (db.prepare(`PRAGMA table_info(tasks)`).all() as { name: string }[]).map(c => c.name);
     expect(taskCols).toContain('node_type');
     expect(taskCols).toContain('started_at');
     const runCols = (db.prepare(`PRAGMA table_info(workflow_runs)`).all() as { name: string }[]).map(c => c.name);
     expect(runCols).toContain('completed_at');
     expect(runCols).toContain('track');
+  });
+
+  // ── P3-S5: CREATE = v-latest-only ─────────────────────────────────────
+  // Fresh tables (built by the CREATE bodies alone) must already carry all
+  // 10 formerly-ALTER-only columns with their exact types/defaults — a
+  // fresh DB and a migrated legacy DB converge to the same shape.
+  it('creates v-latest tables carrying the 10 formerly-ALTER-only columns', () => {
+    const cols = (table: string) =>
+      db.prepare(`PRAGMA table_info(${table})`).all() as { name: string; type: string; notnull: number; dflt_value: string | null }[];
+    const col = (table: string, name: string) => {
+      const c = cols(table).find(x => x.name === name);
+      expect(c, `column ${table}.${name} should exist`).toBeDefined();
+      return c!;
+    };
+
+    // os_todos.confidence
+    expect(col('os_todos', 'confidence').type.toUpperCase()).toBe('REAL');
+    expect(col('os_todos', 'confidence').dflt_value).toBe('0.5');
+    // projects trio
+    for (const name of ['archived_at', 'gitnexus_repo_name', 'permission_archetype']) {
+      const c = col('projects', name);
+      expect(c.type.toUpperCase()).toBe(name === 'archived_at' ? 'INTEGER' : 'TEXT');
+      expect(c.notnull).toBe(0);
+    }
+    // workflow_runs.completed_at
+    expect(col('workflow_runs', 'completed_at').type.toUpperCase()).toBe('INTEGER');
+    // llm_providers paid-tier pair
+    for (const name of ['require_paid_tier', 'is_paid_tier']) {
+      const c = col('llm_providers', name);
+      expect(c.type.toUpperCase()).toBe('INTEGER');
+      expect(c.notnull).toBe(1);
+      expect(c.dflt_value).toBe('0');
+    }
+    // approvals conflict pair
+    for (const name of ['conflict_with_id', 'conflict_reasoning']) {
+      expect(col('cerebro_learning_approvals', name).type.toUpperCase()).toBe('TEXT');
+    }
+    // tasks.node_type
+    expect(col('tasks', 'node_type').type.toUpperCase()).toBe('TEXT');
+  });
+
+  // ── P3-S5: legacy-DB repair ───────────────────────────────────────────
+  // Simulate a v0-era database (columns missing, version unstamped) and prove
+  // initDB → migrate_v0_v1 repairs it to the v-latest shape and restamps.
+  it('repairs a legacy DB missing v1 columns back to the v-latest shape', () => {
+    const taskCols = () =>
+      (db.prepare(`PRAGMA table_info(tasks)`).all() as { name: string }[]).map(c => c.name);
+    const runCols = () =>
+      (db.prepare(`PRAGMA table_info(workflow_runs)`).all() as { name: string }[]).map(c => c.name);
+    expect(taskCols()).toContain('node_type');
+    expect(runCols()).toContain('completed_at');
+
+    // Carve the v0-era shape back out (drop triggers that name the column
+    // first — initDB recreates them below; DROP COLUMN is supported here).
+    db.exec('DROP TRIGGER IF EXISTS sync_workflow_runs_insert;');
+    db.exec('DROP TRIGGER IF EXISTS sync_workflow_runs_update;');
+    db.exec('ALTER TABLE tasks DROP COLUMN node_type;');
+    db.exec('ALTER TABLE workflow_runs DROP COLUMN completed_at;');
+    expect(taskCols()).not.toContain('node_type');
+    expect(runCols()).not.toContain('completed_at');
+
+    // Unstamp → legacy, then boot-migrate.
+    setUserVersion(0);
+    expect(getUserVersion()).toBe(0);
+    initDB();
+
+    expect(getUserVersion()).toBe(SCHEMA_VERSION);
+    expect(taskCols()).toContain('node_type');
+    expect(runCols()).toContain('completed_at');
+    // Sync triggers that name completed_at are recreated and functional.
+    const triggers = (db.prepare(
+      `SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'sync_workflow_runs_%'`
+    ).all() as { name: string }[]).map(t => t.name);
+    expect(triggers).toContain('sync_workflow_runs_insert');
+    expect(triggers).toContain('sync_workflow_runs_update');
   });
 });

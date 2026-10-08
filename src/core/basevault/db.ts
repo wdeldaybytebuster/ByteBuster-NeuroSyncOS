@@ -108,14 +108,17 @@ db.pragma('busy_timeout = 5000');
 
 db.function('sha256', (text: string) => createHash('sha256').update(text || '').digest('hex'));
 
-// ── P2-4: schema version gate (user_version) ─────────────────────────────────
-// SCHEMA_VERSION 1 covers the base CREATE TABLE set plus the 19 legacy ALTER
-// TABLE migrations below. Legacy databases predate versioning (user_version 0
-// with tables already present) — baseline detect treats ANY version < N as
-// needing migration, and the ALTERs stay idempotent try/catch so re-running
-// them on an already-migrated legacy DB is a safe no-op. Fresh DBs (v0, no
-// tables) take the same path. Version writes use db.pragma, which applies
-// immediately outside any transaction.
+// ── P3-S5: versioned migration chain (user_version) ─────────────────────────
+// SCHEMA_VERSION 1 = base CREATE TABLE set (v-latest-only: every column ever
+// added below is inline in the CREATE bodies) + migrate_v0_v1() (the 19
+// historical legacy ALTERs, 18 unique after the project_root_path dedupe).
+// Legacy databases predate versioning (user_version 0 with tables already
+// present) — baseline detect treats ANY version < N as needing migration, and
+// the ALTERs stay idempotent try/catch so re-running them on an
+// already-migrated legacy DB is a safe no-op. Fresh DBs (v0, no tables) take
+// the same path. Version writes use db.pragma, which applies immediately
+// outside any transaction. migratePendingProposalBlob is NOT version-gated —
+// it stays an unconditional per-boot repair (see its call site).
 export const SCHEMA_VERSION = 1;
 
 export function getUserVersion(): number {
@@ -131,395 +134,23 @@ export function setUserVersion(v: number): void {
   db.pragma(`user_version = ${v}`);
 }
 
-// Schema Initialization Function
-export function initDB() {
-  if (!isMainThread && process.env.NODE_ENV !== 'test') return;
-  // P2-4 baseline detect: v0 + tables present (legacy) or v0 + no tables
-  // (fresh) both need migration; only an already-stamped version skips it.
-  const prevVersion = getUserVersion();
-  const needsMigration = prevVersion < SCHEMA_VERSION;
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      workspace_path TEXT,
-      project_root_path TEXT,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS workflows (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      dag_template TEXT NOT NULL,
-      cron_schedule TEXT,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS workflow_runs (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      dag_layout TEXT NOT NULL,
-      status TEXT NOT NULL,
-      track TEXT NOT NULL DEFAULT 'track2',
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      run_id TEXT NOT NULL,
-      status TEXT NOT NULL,
-      claim_lease INTEGER,
-      output_data TEXT,
-      retry_count INTEGER NOT NULL DEFAULT 0,
-      started_at INTEGER,
-      FOREIGN KEY(run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
-    );
-    
-    CREATE TABLE IF NOT EXISTS os_todos (
-      id TEXT PRIMARY KEY,
-      dag_node_id TEXT,
-      project_id TEXT,
-      source_module TEXT NOT NULL DEFAULT 'CoreExec',
-      context_payload TEXT,
-      severity TEXT NOT NULL,
-      escalation_reason TEXT NOT NULL,
-      required_action_type TEXT NOT NULL,
-      status TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      resolved_at INTEGER,
-      resolved_by TEXT
-    );
-
-    -- Optimize task querying by status and run_id
-    CREATE INDEX IF NOT EXISTS idx_tasks_run_id_status ON tasks(run_id, status);
-
-    -- Cerebro Memory Tables
-    -- project_id NULL = GLOBAL/USER-tier memory (visible everywhere); set = PROJECT-tier
-    -- (visible only to that project), mirroring the tier convention on okf_nodes.
-    CREATE TABLE IF NOT EXISTS cerebro_memories_meta (
-      id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      type TEXT NOT NULL,
-      project_id TEXT,
-      last_accessed_at INTEGER NOT NULL,
-      access_count INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      source_tool TEXT
-    );
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS cerebro_memories_vec USING vec0(
-      id TEXT PRIMARY KEY,
-      embedding bit[1536]
-    );
-
-    CREATE TABLE IF NOT EXISTS memory_quarantine (
-      id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
-      type TEXT NOT NULL,
-      project_id TEXT,
-      last_accessed_at INTEGER NOT NULL,
-      access_count INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL,
-      taint_flag INTEGER NOT NULL DEFAULT 1,
-      source_tool TEXT
-    );
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS memory_quarantine_vec USING vec0(
-      id TEXT PRIMARY KEY,
-      embedding bit[1536]
-    );
-
-    CREATE TABLE IF NOT EXISTS memory_audit_log (
-      id TEXT PRIMARY KEY,
-      memory_id TEXT NOT NULL,
-      action TEXT NOT NULL,
-      previous_content TEXT,
-      new_content TEXT,
-      changed_at INTEGER NOT NULL,
-      previous_hash TEXT
-    );
-
-    CREATE TRIGGER IF NOT EXISTS audit_memory_update 
-    AFTER UPDATE ON cerebro_memories_meta
-    BEGIN
-      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
-      VALUES (
-        lower(hex(randomblob(16))),
-        NEW.id,
-        'UPDATE',
-        OLD.content,
-        NEW.content,
-        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
-        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
-      );
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS audit_memory_delete 
-    AFTER DELETE ON cerebro_memories_meta
-    BEGIN
-      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
-      VALUES (
-        lower(hex(randomblob(16))),
-        OLD.id,
-        'DELETE',
-        OLD.content,
-        NULL,
-        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
-        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
-      );
-    END;
-
-    -- Audit triggers for quarantine table (tainted/unverified content).
-    -- Mirrors the cerebro_memories_meta audit chain so any mutation of
-    -- quarantine content is also hash-chained for provenance.
-    CREATE TRIGGER IF NOT EXISTS audit_memory_insert 
-    AFTER INSERT ON memory_quarantine
-    BEGIN
-      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
-      VALUES (
-        lower(hex(randomblob(16))),
-        NEW.id,
-        'INSERT',
-        NULL,
-        NEW.content,
-        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
-        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
-      );
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS audit_memory_update_quarantine 
-    AFTER UPDATE ON memory_quarantine
-    BEGIN
-      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
-      VALUES (
-        lower(hex(randomblob(16))),
-        NEW.id,
-        'UPDATE',
-        OLD.content,
-        NEW.content,
-        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
-        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
-      );
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS audit_memory_delete_quarantine 
-    AFTER DELETE ON memory_quarantine
-    BEGIN
-      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
-      VALUES (
-        lower(hex(randomblob(16))),
-        OLD.id,
-        'DELETE',
-        OLD.content,
-        NULL,
-        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
-        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
-      );
-    END;
-
-
-    CREATE TABLE IF NOT EXISTS cerebro_learning_approvals (
-      id TEXT PRIMARY KEY,
-      fact TEXT NOT NULL,
-      confidence REAL NOT NULL,
-      status TEXT NOT NULL,
-      source_run_id TEXT,
-      created_at INTEGER NOT NULL,
-      source_tool TEXT
-    );
-
-    -- Cerebro prune history: one row per manual prune action. Powers the
-    -- "Pruned (30d)" counter (SUM(count) over the last 30 days). Pruning is
-    -- manual-trigger only (never a silent background auto-delete) since it
-    -- permanently removes user memory rows from cerebro_memories_meta/_vec.
-    CREATE TABLE IF NOT EXISTS cerebro_prune_log (
-      id TEXT PRIMARY KEY,
-      pruned_at INTEGER NOT NULL,
-      count INTEGER NOT NULL
-    );
-
-    -- Council Mode (RouteSwitch high-risk arbitration) computes a real
-    -- confidence/disagreement signal from parallel provider calls, but every
-    -- caller of RouteSwitchEngine.execute() previously discarded it — only
-    -- result.content was ever read. This table is what makes that signal
-    -- queryable/visible (persisted + logged + surfaced in the dashboard)
-    -- instead of vanishing silently after being computed at real cost.
-    CREATE TABLE IF NOT EXISTS council_decisions (
-      id TEXT PRIMARY KEY,
-      scope TEXT,
-      scope_id TEXT,
-      provider_count INTEGER NOT NULL,
-      confidence REAL NOT NULL,
-      disagreement_score REAL NOT NULL,
-      chosen_response_length INTEGER NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS system_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-
-    -- ScopeLogic DAG proposals awaiting human approval (System B).
-    -- Previously crammed as a single JSON blob into system_settings under the
-    -- fixed key 'pending_proposal' with no confidence, no project scoping, and
-    -- no audit trail. This real table lets a staged proposal be confidence-gated
-    -- (Deference UI, 0.70 threshold) and surfaced in the SAME PortGrid approval
-    -- queue as os_todos. project_id is nullable (proposals staged under a
-    -- "Global"/no-active-project scope are legitimate). No FK on project_id:
-    -- proposal history should survive project deletion for audit, and staging
-    -- must not fail if the id doesn't (yet) resolve to a projects row.
-    CREATE TABLE IF NOT EXISTS dag_proposals (
-      id TEXT PRIMARY KEY,
-      project_id TEXT,
-      proposal TEXT NOT NULL,
-      confidence REAL NOT NULL DEFAULT 0.5,
-      status TEXT NOT NULL DEFAULT 'pending',
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_dag_proposals_status ON dag_proposals(status, created_at);
-
-    CREATE TABLE IF NOT EXISTS model_benchmarks (
-      model_id TEXT PRIMARY KEY,
-      avg_latency_ms REAL,
-      avg_tps REAL,
-      failure_rate REAL,
-      total_runs INTEGER
-    );
-
-    CREATE TABLE IF NOT EXISTS discovered_models (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      context_length INTEGER,
-      pricing_prompt TEXT,
-      pricing_completion TEXT,
-      fetched_at INTEGER NOT NULL
-    );
-
-    -- LLM Provider Registry: named provider entries with encrypted API keys
-    CREATE TABLE IF NOT EXISTS llm_providers (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      config_json TEXT NOT NULL,
-      api_key_encrypted TEXT,
-      is_enabled INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    -- LLM Routing Rules: per-scope fallback chains
-    CREATE TABLE IF NOT EXISTS llm_routing_rules (
-      id TEXT PRIMARY KEY,
-      scope TEXT NOT NULL,
-      scope_id TEXT,
-      provider_chain TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      UNIQUE(scope, scope_id)
-    );
-
-    -- OKF Knowledge Graph: individual Markdown concept files indexed
-    CREATE TABLE IF NOT EXISTS okf_nodes (
-      id TEXT PRIMARY KEY,
-      tier TEXT NOT NULL CHECK(tier IN ('GLOBAL', 'USER', 'PROJECT')),
-      project_id TEXT,
-      type TEXT NOT NULL,
-      title TEXT,
-      confidence REAL NOT NULL DEFAULT 1.0,
-      content_hash TEXT,
-      frontmatter_json TEXT,
-      file_path TEXT UNIQUE NOT NULL,
-      last_indexed_at INTEGER NOT NULL,
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-    );
-
-    -- OKF Edges: relationships between concept files (from Markdown links)
-    CREATE TABLE IF NOT EXISTS okf_edges (
-      source_node_id TEXT NOT NULL,
-      target_node_id TEXT NOT NULL,
-      relationship_type TEXT NOT NULL DEFAULT 'references',
-      PRIMARY KEY (source_node_id, target_node_id),
-      FOREIGN KEY (source_node_id) REFERENCES okf_nodes(id) ON DELETE CASCADE,
-      FOREIGN KEY (target_node_id) REFERENCES okf_nodes(id) ON DELETE CASCADE
-    );
-
-    -- ScoutDaemon quarantined research (isolated from active knowledge graph)
-    CREATE TABLE IF NOT EXISTS scout_okf_nodes (
-      id TEXT PRIMARY KEY,
-      project_id TEXT,
-      type TEXT NOT NULL,
-      title TEXT,
-      confidence REAL NOT NULL DEFAULT 0.5,
-      content_hash TEXT,
-      frontmatter_json TEXT,
-      file_path TEXT UNIQUE NOT NULL,
-      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'promoted', 'rejected')),
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS scout_symbols (
-      id TEXT PRIMARY KEY,
-      project_id TEXT,
-      file_path TEXT NOT NULL,
-      symbol_type TEXT NOT NULL,
-      symbol_name TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-    );
-
-    -- ── Axiom 6: Genesis Hardware Profile (Immutable Ledger) ─────────────────
-    -- Written ONCE by ScoutDaemon's hardware-profiler at first-run setup.
-    -- 'tier' is the synthesized classification: constrained | standard | high-performance.
-    -- Never modified after initial write; re-profiling inserts a new row with a
-    -- new id — it never overwrites the historical record.
-    CREATE TABLE IF NOT EXISTS hardware_profiles (
-      id TEXT PRIMARY KEY,
-      profiled_at INTEGER NOT NULL,
-      cpu_cores INTEGER NOT NULL,
-      cpu_physical_cores INTEGER NOT NULL,
-      cpu_has_hyperthreading INTEGER NOT NULL DEFAULT 0,
-      cpu_brand TEXT,
-      ram_total_mb INTEGER NOT NULL,
-      storage_type TEXT NOT NULL DEFAULT 'unknown',
-      os_platform TEXT NOT NULL,
-      os_distro TEXT,
-      virtualization TEXT NOT NULL DEFAULT 'none',
-      gpu_type TEXT NOT NULL DEFAULT 'none',
-      gpu_vram_mb INTEGER NOT NULL DEFAULT 0,
-      tier TEXT NOT NULL CHECK(tier IN ('constrained', 'standard', 'high-performance'))
-    );
-
-    -- ── Axiom 6: Derived Environment Rules ───────────────────────────────────
-    -- Key/value pairs synthesized from hardware_profiles by the profiler.
-    -- CoreExec reads these at boot to inject taskset, thread caps, heap limits.
-    -- RouteSwitch reads 'local_llm_enabled' before attempting local SLM calls.
-    CREATE TABLE IF NOT EXISTS environment_rules (
-      id TEXT PRIMARY KEY,
-      profile_id TEXT NOT NULL REFERENCES hardware_profiles(id) ON DELETE CASCADE,
-      rule_key TEXT NOT NULL,
-      rule_value TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_environment_rules_profile ON environment_rules(profile_id);
-
-    -- Indexes for graph traversal performance
-    CREATE INDEX IF NOT EXISTS idx_okf_nodes_tier ON okf_nodes(tier, project_id);
-    CREATE INDEX IF NOT EXISTS idx_okf_nodes_type ON okf_nodes(type);
-    CREATE INDEX IF NOT EXISTS idx_okf_edges_source ON okf_edges(source_node_id);
-    CREATE INDEX IF NOT EXISTS idx_okf_edges_target ON okf_edges(target_node_id);
-    CREATE INDEX IF NOT EXISTS idx_scout_okf_status ON scout_okf_nodes(status);
-    CREATE INDEX IF NOT EXISTS idx_cerebro_memories_project ON cerebro_memories_meta(project_id);
-  `);
-
-  // P2-4 version gate (region 1: 16 ALTERs). Keeps every try/catch below
-  // intact; skips them entirely once user_version is stamped.
-  if (needsMigration) {
+/**
+ * P3-S5 — versioned migration chain, v0 → v1. Folds the 19 historical
+ * legacy ALTER TABLE statements (formerly three inline `if (needsMigration)`
+ * regions) into ONE function, applied in their original order. Every
+ * try/catch stays exactly as it was (duplicate-column-name is a safe no-op
+ * on already-migrated DBs), including the per-column log messages.
+ *
+ * DEDUPE: the historical list contained `projects.project_root_path` TWICE
+ * (regions 1a + 1o) — only one survives here; the second site is recorded as
+ * a comment where it stood. 18 unique column-adds remain.
+ *
+ * CREATE bodies above are v-latest-only (they already carry every column
+ * listed here), so fresh DBs and migrated legacy DBs converge to the same
+ * shape. `migratePendingProposalBlob` is deliberately NOT part of this
+ * function — it stays an unconditional per-boot repair (see its call site).
+ */
+export function migrate_v0_v1(): void {
   try {
     db.exec(`ALTER TABLE projects ADD COLUMN workspace_path TEXT;`);
   } catch (e: any) {
@@ -663,13 +294,9 @@ export function initDB() {
     }
   }
 
-  try {
-    db.exec(`ALTER TABLE projects ADD COLUMN project_root_path TEXT;`);
-  } catch (e: any) {
-    if (!e.message.includes('duplicate column name')) {
-      console.error('Error adding project_root_path column to projects:', e);
-    }
-  }
+  // P3-S5 DEDUPE: the second historical `projects.project_root_path` ALTER
+  // stood here — identical to the one above, so it is folded away (one
+  // application covers both).
 
   try {
     db.exec(`ALTER TABLE workflow_runs ADD COLUMN track TEXT NOT NULL DEFAULT 'track2';`);
@@ -678,7 +305,438 @@ export function initDB() {
       console.error('Error adding track column to workflow_runs:', e);
     }
   }
-  } // end P2-4 version gate (region 1)
+
+  // ── FIX-3 (Axiom 4): Verify Node Type Tracking ───────────────────────────
+  // Adds node_type to tasks so 'verify' step nodes are distinguishable from
+  // 'action' nodes in the dispatch loop and in PortGrid approval UI.
+  // NULL = legacy action node (fully backwards-compatible).
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN node_type TEXT;`);
+  } catch (e: any) {
+    if (!e.message?.includes('duplicate column name')) {
+      console.error('[FIX-3] Error adding node_type column to tasks:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN source_tool TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding source_tool column to cerebro_learning_approvals:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN started_at INTEGER;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding started_at column to tasks:', e);
+    }
+  }
+}
+
+// Schema Initialization Function
+export function initDB() {
+  if (!isMainThread && process.env.NODE_ENV !== 'test') return;
+  // P2-4 baseline detect: v0 + tables present (legacy) or v0 + no tables
+  // (fresh) both need migration; only an already-stamped version skips it.
+  const prevVersion = getUserVersion();
+  const needsMigration = prevVersion < SCHEMA_VERSION;
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      workspace_path TEXT,
+      project_root_path TEXT,
+      archived_at INTEGER,
+      gitnexus_repo_name TEXT,
+      permission_archetype TEXT,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS workflows (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      dag_template TEXT NOT NULL,
+      cron_schedule TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS workflow_runs (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      dag_layout TEXT NOT NULL,
+      status TEXT NOT NULL,
+      track TEXT NOT NULL DEFAULT 'track2',
+      created_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      claim_lease INTEGER,
+      output_data TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      started_at INTEGER,
+      node_type TEXT,
+      FOREIGN KEY(run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
+    );
+    
+    CREATE TABLE IF NOT EXISTS os_todos (
+      id TEXT PRIMARY KEY,
+      dag_node_id TEXT,
+      project_id TEXT,
+      source_module TEXT NOT NULL DEFAULT 'CoreExec',
+      context_payload TEXT,
+      severity TEXT NOT NULL,
+      escalation_reason TEXT NOT NULL,
+      required_action_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      resolved_at INTEGER,
+      resolved_by TEXT,
+      confidence REAL NOT NULL DEFAULT 0.5
+    );
+
+    -- Optimize task querying by status and run_id
+    CREATE INDEX IF NOT EXISTS idx_tasks_run_id_status ON tasks(run_id, status);
+
+    -- Cerebro Memory Tables
+    -- project_id NULL = GLOBAL/USER-tier memory (visible everywhere); set = PROJECT-tier
+    -- (visible only to that project), mirroring the tier convention on okf_nodes.
+    CREATE TABLE IF NOT EXISTS cerebro_memories_meta (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      type TEXT NOT NULL,
+      project_id TEXT,
+      last_accessed_at INTEGER NOT NULL,
+      access_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      source_tool TEXT
+    );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS cerebro_memories_vec USING vec0(
+      id TEXT PRIMARY KEY,
+      embedding bit[1536]
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_quarantine (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      type TEXT NOT NULL,
+      project_id TEXT,
+      last_accessed_at INTEGER NOT NULL,
+      access_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      taint_flag INTEGER NOT NULL DEFAULT 1,
+      source_tool TEXT
+    );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_quarantine_vec USING vec0(
+      id TEXT PRIMARY KEY,
+      embedding bit[1536]
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_audit_log (
+      id TEXT PRIMARY KEY,
+      memory_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      previous_content TEXT,
+      new_content TEXT,
+      changed_at INTEGER NOT NULL,
+      previous_hash TEXT
+    );
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_update 
+    AFTER UPDATE ON cerebro_memories_meta
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'UPDATE',
+        OLD.content,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_delete 
+    AFTER DELETE ON cerebro_memories_meta
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        OLD.id,
+        'DELETE',
+        OLD.content,
+        NULL,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    -- Audit triggers for quarantine table (tainted/unverified content).
+    -- Mirrors the cerebro_memories_meta audit chain so any mutation of
+    -- quarantine content is also hash-chained for provenance.
+    CREATE TRIGGER IF NOT EXISTS audit_memory_insert 
+    AFTER INSERT ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'INSERT',
+        NULL,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_update_quarantine 
+    AFTER UPDATE ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'UPDATE',
+        OLD.content,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_delete_quarantine 
+    AFTER DELETE ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        OLD.id,
+        'DELETE',
+        OLD.content,
+        NULL,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+
+    CREATE TABLE IF NOT EXISTS cerebro_learning_approvals (
+      id TEXT PRIMARY KEY,
+      fact TEXT NOT NULL,
+      confidence REAL NOT NULL,
+      status TEXT NOT NULL,
+      source_run_id TEXT,
+      created_at INTEGER NOT NULL,
+      source_tool TEXT,
+      conflict_with_id TEXT,
+      conflict_reasoning TEXT
+    );
+
+    -- Cerebro prune history: one row per manual prune action. Powers the
+    -- "Pruned (30d)" counter (SUM(count) over the last 30 days). Pruning is
+    -- manual-trigger only (never a silent background auto-delete) since it
+    -- permanently removes user memory rows from cerebro_memories_meta/_vec.
+    CREATE TABLE IF NOT EXISTS cerebro_prune_log (
+      id TEXT PRIMARY KEY,
+      pruned_at INTEGER NOT NULL,
+      count INTEGER NOT NULL
+    );
+
+    -- Council Mode (RouteSwitch high-risk arbitration) computes a real
+    -- confidence/disagreement signal from parallel provider calls, but every
+    -- caller of RouteSwitchEngine.execute() previously discarded it — only
+    -- result.content was ever read. This table is what makes that signal
+    -- queryable/visible (persisted + logged + surfaced in the dashboard)
+    -- instead of vanishing silently after being computed at real cost.
+    CREATE TABLE IF NOT EXISTS council_decisions (
+      id TEXT PRIMARY KEY,
+      scope TEXT,
+      scope_id TEXT,
+      provider_count INTEGER NOT NULL,
+      confidence REAL NOT NULL,
+      disagreement_score REAL NOT NULL,
+      chosen_response_length INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    -- ScopeLogic DAG proposals awaiting human approval (System B).
+    -- Previously crammed as a single JSON blob into system_settings under the
+    -- fixed key 'pending_proposal' with no confidence, no project scoping, and
+    -- no audit trail. This real table lets a staged proposal be confidence-gated
+    -- (Deference UI, 0.70 threshold) and surfaced in the SAME PortGrid approval
+    -- queue as os_todos. project_id is nullable (proposals staged under a
+    -- "Global"/no-active-project scope are legitimate). No FK on project_id:
+    -- proposal history should survive project deletion for audit, and staging
+    -- must not fail if the id doesn't (yet) resolve to a projects row.
+    CREATE TABLE IF NOT EXISTS dag_proposals (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      proposal TEXT NOT NULL,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dag_proposals_status ON dag_proposals(status, created_at);
+
+    CREATE TABLE IF NOT EXISTS model_benchmarks (
+      model_id TEXT PRIMARY KEY,
+      avg_latency_ms REAL,
+      avg_tps REAL,
+      failure_rate REAL,
+      total_runs INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS discovered_models (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      context_length INTEGER,
+      pricing_prompt TEXT,
+      pricing_completion TEXT,
+      fetched_at INTEGER NOT NULL
+    );
+
+    -- LLM Provider Registry: named provider entries with encrypted API keys
+    CREATE TABLE IF NOT EXISTS llm_providers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      api_key_encrypted TEXT,
+      is_enabled INTEGER NOT NULL DEFAULT 1,
+      require_paid_tier INTEGER NOT NULL DEFAULT 0,
+      is_paid_tier INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    -- LLM Routing Rules: per-scope fallback chains
+    CREATE TABLE IF NOT EXISTS llm_routing_rules (
+      id TEXT PRIMARY KEY,
+      scope TEXT NOT NULL,
+      scope_id TEXT,
+      provider_chain TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(scope, scope_id)
+    );
+
+    -- OKF Knowledge Graph: individual Markdown concept files indexed
+    CREATE TABLE IF NOT EXISTS okf_nodes (
+      id TEXT PRIMARY KEY,
+      tier TEXT NOT NULL CHECK(tier IN ('GLOBAL', 'USER', 'PROJECT')),
+      project_id TEXT,
+      type TEXT NOT NULL,
+      title TEXT,
+      confidence REAL NOT NULL DEFAULT 1.0,
+      content_hash TEXT,
+      frontmatter_json TEXT,
+      file_path TEXT UNIQUE NOT NULL,
+      last_indexed_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    -- OKF Edges: relationships between concept files (from Markdown links)
+    CREATE TABLE IF NOT EXISTS okf_edges (
+      source_node_id TEXT NOT NULL,
+      target_node_id TEXT NOT NULL,
+      relationship_type TEXT NOT NULL DEFAULT 'references',
+      PRIMARY KEY (source_node_id, target_node_id),
+      FOREIGN KEY (source_node_id) REFERENCES okf_nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY (target_node_id) REFERENCES okf_nodes(id) ON DELETE CASCADE
+    );
+
+    -- ScoutDaemon quarantined research (isolated from active knowledge graph)
+    CREATE TABLE IF NOT EXISTS scout_okf_nodes (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      type TEXT NOT NULL,
+      title TEXT,
+      confidence REAL NOT NULL DEFAULT 0.5,
+      content_hash TEXT,
+      frontmatter_json TEXT,
+      file_path TEXT UNIQUE NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'promoted', 'rejected')),
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS scout_symbols (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      file_path TEXT NOT NULL,
+      symbol_type TEXT NOT NULL,
+      symbol_name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    -- ── Axiom 6: Genesis Hardware Profile (Immutable Ledger) ─────────────────
+    -- Written ONCE by ScoutDaemon's hardware-profiler at first-run setup.
+    -- 'tier' is the synthesized classification: constrained | standard | high-performance.
+    -- Never modified after initial write; re-profiling inserts a new row with a
+    -- new id — it never overwrites the historical record.
+    CREATE TABLE IF NOT EXISTS hardware_profiles (
+      id TEXT PRIMARY KEY,
+      profiled_at INTEGER NOT NULL,
+      cpu_cores INTEGER NOT NULL,
+      cpu_physical_cores INTEGER NOT NULL,
+      cpu_has_hyperthreading INTEGER NOT NULL DEFAULT 0,
+      cpu_brand TEXT,
+      ram_total_mb INTEGER NOT NULL,
+      storage_type TEXT NOT NULL DEFAULT 'unknown',
+      os_platform TEXT NOT NULL,
+      os_distro TEXT,
+      virtualization TEXT NOT NULL DEFAULT 'none',
+      gpu_type TEXT NOT NULL DEFAULT 'none',
+      gpu_vram_mb INTEGER NOT NULL DEFAULT 0,
+      tier TEXT NOT NULL CHECK(tier IN ('constrained', 'standard', 'high-performance'))
+    );
+
+    -- ── Axiom 6: Derived Environment Rules ───────────────────────────────────
+    -- Key/value pairs synthesized from hardware_profiles by the profiler.
+    -- CoreExec reads these at boot to inject taskset, thread caps, heap limits.
+    -- RouteSwitch reads 'local_llm_enabled' before attempting local SLM calls.
+    CREATE TABLE IF NOT EXISTS environment_rules (
+      id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL REFERENCES hardware_profiles(id) ON DELETE CASCADE,
+      rule_key TEXT NOT NULL,
+      rule_value TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_environment_rules_profile ON environment_rules(profile_id);
+
+    -- Indexes for graph traversal performance
+    CREATE INDEX IF NOT EXISTS idx_okf_nodes_tier ON okf_nodes(tier, project_id);
+    CREATE INDEX IF NOT EXISTS idx_okf_nodes_type ON okf_nodes(type);
+    CREATE INDEX IF NOT EXISTS idx_okf_edges_source ON okf_edges(source_node_id);
+    CREATE INDEX IF NOT EXISTS idx_okf_edges_target ON okf_edges(target_node_id);
+    CREATE INDEX IF NOT EXISTS idx_scout_okf_status ON scout_okf_nodes(status);
+    CREATE INDEX IF NOT EXISTS idx_cerebro_memories_project ON cerebro_memories_meta(project_id);
+  `);
+
+  // P3-S5 — single versioned migration call (v0 → v1). The 19 historical
+  // ALTERs live in migrate_v0_v1() above (18 unique after the
+  // project_root_path dedupe); skipped entirely once user_version is stamped.
+  if (needsMigration) {
+    migrate_v0_v1();
+  }
 
   migratePendingProposalBlob();
 
@@ -706,28 +764,7 @@ export function initDB() {
     }
   }
 
-  // ── FIX-3 (Axiom 4): Verify Node Type Tracking ───────────────────────────
-  // Adds node_type to tasks so 'verify' step nodes are distinguishable from
-  // 'action' nodes in the dispatch loop and in PortGrid approval UI.
-  // NULL = legacy action node (fully backwards-compatible).
-  // P2-4 version gate (region 2: node_type + learning-approvals source_tool).
-  if (needsMigration) {
-  try {
-    db.exec(`ALTER TABLE tasks ADD COLUMN node_type TEXT;`);
-  } catch (e: any) {
-    if (!e.message?.includes('duplicate column name')) {
-      console.error('[FIX-3] Error adding node_type column to tasks:', e);
-    }
-  }
-
-  try {
-    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN source_tool TEXT;`);
-  } catch (e: any) {
-    if (!e.message.includes('duplicate column name')) {
-      console.error('Error adding source_tool column to cerebro_learning_approvals:', e);
-    }
-  }
-  } // end P2-4 version gate (region 2)
+  // P3-S5 — FIX-3 node_type + approvals source_tool ALTERs now live in migrate_v0_v1().
 
   // Delta Sync Event Log
   try {
@@ -795,16 +832,7 @@ export function initDB() {
     console.error('Error creating sync_event_log table:', e);
   }
 
-  // P2-4 version gate (region 3: tasks.started_at).
-  if (needsMigration) {
-  try {
-    db.exec(`ALTER TABLE tasks ADD COLUMN started_at INTEGER;`);
-  } catch (e: any) {
-    if (!e.message.includes('duplicate column name')) {
-      console.error('Error adding started_at column to tasks:', e);
-    }
-  }
-  } // end P2-4 version gate (region 3)
+  // P3-S5 — tasks.started_at ALTER now lives in migrate_v0_v1().
 
   // P2-4: stamp the schema version at the end of initDB (immediate pragma
   // write). Only upgrades — never downgrades a newer stamp.
