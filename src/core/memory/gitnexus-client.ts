@@ -126,9 +126,6 @@ function spawnEvalServer(port: number): Promise<{ child: ChildProcess; host: str
 
 /** Fetch the list of repos the eval-server currently has indexed. */
 async function fetchIndexedRepos(host: string, port: number): Promise<string[]> {
-  const res = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
-  if (!res.ok) return [];
-  const body = (await res.json()) as { repos?: string[] };
   // §2.3 C9 — through the governed egress door. `internal: true`: this is a
   // LOCAL eval-server (host from its READY line, assumed loopback), so the
   // kill switch must not sever it — but a non-loopback host is now blocked
@@ -247,12 +244,6 @@ export async function queryCodeStructure(query: string, projectId?: string): Pro
     const repo = resolveRepoForCall(s.repos, projectId);
     if (!repo) return null;
 
-    const res = await fetch(`http://${s.host}:${s.port}/tool/query`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ search_query: query, repo, limit: 2 }),
-      signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
-    });
     // §2.3 C9 — governed egress (internal/local eval-server, POST JSON);
     // timeoutMs replaces the old inline AbortSignal. On any block/failure
     // egress returns ok:false → null → silent degradation (never throws).
