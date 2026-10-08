@@ -29,6 +29,21 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Plan: docs/security/ARCHITECT-ci-gating-cleanup.md §2.3 (Phase B).
+      # The tree now reads 8/8 (Auditor sign-off condition, §7 T2/T3), so the
+      # runner's own exit code IS the gate: main() returns 0 iff every check
+      # passes. `set -o pipefail` is still required — without it
+      # `npm run … | tee` returns tee's exit code and a failing audit looks
+      # green. The trailing grep is the plan's recommended belt-and-braces
+      # assertion against runner-logic drift (a runner that exits 0 without
+      # printing 8/8 still reds the pipeline).
+      - name: Ground-rule audit
+        run: |
+          mkdir -p /tmp/opencode
+          set -o pipefail
+          npm run audit:ground-rules 2>&1 | tee /tmp/opencode/audit.log
+          grep -q "8/8 checks passed" /tmp/opencode/audit.log
+
       - name: Test
         run: npm test
 

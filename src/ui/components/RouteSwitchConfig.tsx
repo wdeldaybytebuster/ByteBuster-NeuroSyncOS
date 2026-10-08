@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { authFetch } from '../lib/api';
 
 interface ModelInfo {
   id: string;
@@ -18,17 +19,17 @@ export function RouteSwitchConfig() {
 
   useEffect(() => {
     // Fetch available models from discovery module
-    fetch('/api/models')
+    authFetch('/api/models')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.models) {
           setModels(data.models);
         }
       })
-      .catch(console.error);
+      .catch((err: any) => { if (!(err instanceof TypeError || err.message === 'Failed to fetch')) console.error(err); });
 
     // Fetch existing settings
-    fetch('/api/system/settings')
+    authFetch('/api/system/settings')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.settings) {
@@ -37,14 +38,14 @@ export function RouteSwitchConfig() {
           if (data.settings.rs_fallback2) setFallback2(data.settings.rs_fallback2);
         }
       })
-      .catch(console.error);
+      .catch((err: any) => { if (!(err instanceof TypeError || err.message === 'Failed to fetch')) console.error(err); });
   }, []);
 
   const handleSave = async () => {
     setLoading(true);
     setStatusMsg('');
     try {
-      const res = await fetch('/api/system/settings', {
+      const res = await authFetch('/api/system/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
-import { Radar, Activity, Inbox, Cpu, Thermometer, Power, Zap, Rss, Clock, Shield, AlertTriangle, CheckCircle, Skull } from 'lucide-react';
+import { Radar, Activity, Inbox, Cpu, Thermometer, Power, Zap, Rss, Clock, Shield, AlertTriangle, CheckCircle, Skull, RefreshCw } from 'lucide-react';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
+import { SensoryMode, normalizeSensoryMode, startTelemetrySubscription } from './scoutTelemetry';
+import { API, authFetch, openEventSource } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#8E24AA';
 const ACCENT_LIGHT = '#d05ce3';
 
@@ -14,48 +17,70 @@ const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-
 function DashboardView() {
   const { activeProjectId } = useNavigation();
   const [daemonState, setDaemonState] = useState<'passive'|'active'|'quarantine'|'sleeping'>('passive');
-  const [cpuLoad, setCpuLoad] = useState(0.42);
+  const [cpuLoad, setCpuLoad] = useState<number | null>(null);
   const [cpuTemp, setCpuTemp] = useState(38);
   const [utilization, setUtilization] = useState(12);
   const [discoveries, setDiscoveries] = useState<{id:string;title:string;type:string;created:string}[]>([]);
   const [todos, setTodos] = useState<any[]>([]);
   const [scoutDrafts, setScoutDrafts] = useState<{id:string;title:string|null;type:string;confidence:number;status:string;createdAt:number}[]>([]);
+  const [sensoryMode, setSensoryMode] = useState<SensoryMode | null>(null);
+  const refreshNowRef = useRef<(() => Promise<void>) | null>(null);
 
-  // SSE connection for system metrics
+  const applyTelemetry = (data: any) => {
+    if (!data) return;
+    if (data.utilization !== undefined) setUtilization(data.utilization);
+    if (data.temperature !== undefined && data.temperature !== null) setCpuTemp(Math.round(data.temperature));
+    // Derive daemon state from load
+    const load = data.utilization || 0;
+    if (load > 80) setDaemonState('sleeping');
+    else if (load > 50) setDaemonState('passive');
+    else setDaemonState('active');
+    setCpuLoad(load / 100);
+  };
+
+  // Resolve the real Sensory Modality (ScoutDaemon Set-up, Control B) once on
+  // mount, defaulting to 'sse' (today's only real behavior) until it resolves.
   useEffect(() => {
-    const es = new EventSource(`${API}/api/system/metrics`);
-    es.addEventListener('telemetry', (e: any) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.utilization !== undefined) setUtilization(data.utilization);
-        if (data.temperature !== undefined) setCpuTemp(Math.round(data.temperature));
-        // Derive daemon state from load
-        const load = data.utilization || 0;
-        if (load > 80) setDaemonState('sleeping');
-        else if (load > 50) setDaemonState('passive');
-        else setDaemonState('active');
-        setCpuLoad(load / 100);
-      } catch {}
-    });
-    es.onerror = () => {};
-    return () => es.close();
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+      setSensoryMode(normalizeSensoryMode(d?.success ? d.settings?.scout_sensory_mode : undefined));
+    }).catch(() => setSensoryMode('sse'));
   }, []);
+
+  // Telemetry subscription — genuinely gated on the resolved mode. 'sse' opens
+  // the EventSource exactly as before; 'polling' polls the plain-GET snapshot
+  // endpoint instead; 'manual' subscribes to nothing automatic at all (see
+  // scoutTelemetry.ts for the full mode contract + tests).
+  useEffect(() => {
+    if (sensoryMode === null) return; // still resolving the setting
+    const sub = startTelemetrySubscription(sensoryMode, {
+      openEventSource: () => openEventSource(`${API}/api/system/metrics`) as any,
+      fetchSnapshot: () => authFetch(`${API}/api/system/metrics/snapshot`).then(r => r.json()).then(d => d.success ? d.metrics : null),
+      onUpdate: applyTelemetry,
+    });
+    refreshNowRef.current = sub.refreshNow;
+    // Deliberately no auto-refresh-on-mount for 'manual' mode here — the
+    // whole point of manual mode is that NOTHING updates telemetry except an
+    // explicit click on "Refresh Now" below. Auto-fetching on navigation
+    // would be exactly the kind of silent automatic update this mode exists
+    // to avoid.
+    return () => { sub.stop(); refreshNowRef.current = null; };
+  }, [sensoryMode]);
 
   // Fetch quarantine discoveries (from cerebro learning approvals as proxy)
   useEffect(() => {
-    fetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
       if (d.success && d.queue) {
         setDiscoveries(d.queue.map((q: any) => ({ id: q.id, title: q.fact, type: 'learning', created: new Date(q.created_at).toLocaleString() })));
       }
     }).catch(() => {});
-    fetch(`${API}/api/todos`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/todos`).then(r => r.json()).then(d => {
       if (d.success && d.todos) setTodos(d.todos);
     }).catch(() => {});
   }, [activeProjectId]);
 
   // Fetch OKF scout drafts
   useEffect(() => {
-    fetch(`${API}/api/okf/scout-drafts`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/okf/scout-drafts`).then(r => r.json()).then(d => {
       if (d.success && d.drafts) setScoutDrafts(d.drafts);
     }).catch(() => {});
   }, [activeProjectId]);
@@ -75,7 +100,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Radar size={16} style={{ color: ACCENT_LIGHT }} /> Ambient Vanguard Monitor
+            <Radar size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Watcher Status" dev="Ambient Vanguard Monitor" />
           </h2>
           <span className="text-[10px] font-mono uppercase tracking-widest text-gray-500">Deference UI</span>
         </div>
@@ -89,7 +114,7 @@ function DashboardView() {
             <div className="text-xs font-bold text-white">{state.label}</div>
             <div className="text-[10px] text-gray-500 font-mono">ScoutDaemon is operating as a respectful guest on your hardware.</div>
           </div>
-          <button onClick={() => { fetch(`${API}/api/scout/heartbeat`, { method: 'POST' }).catch(() => {}); }} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-white/10 transition-all">
+          <button onClick={() => { authFetch(`${API}/api/scout/heartbeat`, { method: 'POST' }).catch(() => {}); }} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-white/10 transition-all">
             Decision Node Audit
           </button>
         </div>
@@ -106,7 +131,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> Quarantine Staging & Discovery Ledger
+            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="New Discoveries (Waiting For You)" dev="Quarantine Staging & Discovery Ledger" />
           </h2>
           <span className="text-[10px] font-mono text-gray-500">{discoveries.length} pending</span>
         </div>
@@ -124,7 +149,7 @@ function DashboardView() {
                   <div className="text-xs font-bold text-white truncate">{d.title}</div>
                   <div className="text-[10px] text-gray-500 font-mono">{d.type} • {d.created}</div>
                 </div>
-                <button onClick={async () => { try { await fetch(`${API}/api/todos/promote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fact: d.title, sourceId: d.id }) }); setDiscoveries(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="shrink-0 px-2 py-1 rounded text-[9px] font-bold border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all" style={{ color: ACCENT_LIGHT }}>
+                <button onClick={async () => { try { await authFetch(`${API}/api/todos/promote`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fact: d.title, sourceId: d.id }) }); setDiscoveries(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="shrink-0 px-2 py-1 rounded text-[9px] font-bold border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all" style={{ color: ACCENT_LIGHT }}>
                   Send to PortGrid
                 </button>
               </div>
@@ -146,7 +171,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> Scout Research Drafts (OKF)
+            <Inbox size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Draft Notes From The Watcher" dev="Scout Research Drafts (OKF)" />
           </h2>
           <span className="text-[10px] font-mono text-gray-500">{scoutDrafts.length} quarantined</span>
         </div>
@@ -165,8 +190,8 @@ function DashboardView() {
                   <div className="text-[10px] text-gray-500 font-mono">{d.type} • conf: {d.confidence.toFixed(2)} • {new Date(d.createdAt).toLocaleDateString()}</div>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
-                  <button onClick={async () => { await fetch(`${API}/api/okf/scout-drafts/${d.id}/promote`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); }} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Promote</button>
-                  <button onClick={async () => { await fetch(`${API}/api/okf/scout-drafts/${d.id}/reject`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); }} className="px-2 py-1 rounded text-[9px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
+                  <button onClick={async () => { try { await authFetch(`${API}/api/okf/scout-drafts/${d.id}/promote`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Promote</button>
+                  <button onClick={async () => { try { await authFetch(`${API}/api/okf/scout-drafts/${d.id}/reject`, { method: 'POST' }); setScoutDrafts(prev => prev.filter(x => x.id !== d.id)); } catch {} }} className="px-2 py-1 rounded text-[9px] font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
                 </div>
               </div>
             ))}
@@ -177,9 +202,23 @@ function DashboardView() {
       {/* Widget C: Hardware-Adaptive Telemetry */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Thermometer size={16} className="text-orange-400" /> Hardware Telemetry ("Machine Persona")
+          <Thermometer size={16} className="text-orange-400" /> <ModeLabel simple="Computer Load" dev={'Hardware Telemetry ("Machine Persona")'} />
+          {sensoryMode === 'manual' && (
+            <button
+              onClick={() => { refreshNowRef.current?.().catch(() => {}); }}
+              className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:text-white hover:bg-white/10 transition-all"
+              title="Manual Sensory Mode is on — telemetry only updates when you click this."
+            >
+              <RefreshCw size={11} /> Refresh Now
+            </button>
+          )}
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Visual justification of why ScoutDaemon is active or sleeping. Demonstrates graceful resource yielding.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Shows why the watcher is running or sleeping — it backs off automatically when your computer is busy or hot." dev="Visual justification of why ScoutDaemon is active or sleeping. Demonstrates graceful resource yielding." /></p>
+        {sensoryMode === 'manual' && (
+          <div className="mb-3 text-[10px] text-amber-400/80 font-mono flex items-center gap-1.5">
+            <AlertTriangle size={11} /> Manual Sensory Mode — these numbers only update when you click "Refresh Now".
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
@@ -197,7 +236,7 @@ function DashboardView() {
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Daemon State</div>
             <div className="text-sm font-bold font-mono" style={{ color: state.color }}>{daemonState.toUpperCase()}</div>
-            <div className="text-[10px] text-gray-600 mt-2 font-mono">Load: {(cpuLoad * 100).toFixed(0)}%</div>
+            <div className="text-[10px] text-gray-600 mt-2 font-mono">Load: {cpuLoad === null ? '—' : `${(cpuLoad * 100).toFixed(0)}%`}</div>
           </div>
         </div>
       </section>
@@ -209,32 +248,45 @@ function DashboardView() {
 function SetupView() {
   const [agentStopThreshold, setAgentStopThreshold] = useState(0.65);
   const [maxTokenBurn, setMaxTokenBurn] = useState(2000);
-  const [sseEnabled, setSseEnabled] = useState(true);
-  const [pollingEnabled, setPollingEnabled] = useState(false);
-  const [manualMode, setManualMode] = useState(false);
+  // Single real Sensory Modality choice — replaces the old 3 independent
+  // checkboxes (scout_sse_enabled/scout_polling_enabled/scout_manual_mode),
+  // which could all be on/off simultaneously despite this being conceptually
+  // one choice, AND were saved but never read by anything (see
+  // scoutTelemetry.ts). Persisted as one `scout_sensory_mode` key.
+  const [sensoryMode, setSensoryMode] = useState<SensoryMode>('sse');
   const [tempCeiling, setTempCeiling] = useState(85);
   const [loadCeiling, setLoadCeiling] = useState(0.8);
   const [killSwitchActive, setKillSwitchActive] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Honest AgentStop capability of the currently-active LLM provider:
+  // 'preemptive' = real per-token confidence (llama-cpp), 'heuristic' = post-hoc
+  // fallback (HTTP/synthetic providers). Backed by /api/llm/config, not hardcoded.
+  const [agentStopMode, setAgentStopMode] = useState<{ mode: 'preemptive' | 'heuristic'; activeProviderId: string } | null>(null);
 
   // Load settings
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.agent_stop_threshold) setAgentStopThreshold(Number(d.settings.agent_stop_threshold));
         if (d.settings.scout_max_token_burn) setMaxTokenBurn(Number(d.settings.scout_max_token_burn));
         if (d.settings.scout_temp_ceiling) setTempCeiling(Number(d.settings.scout_temp_ceiling));
         if (d.settings.scout_load_ceiling) setLoadCeiling(Number(d.settings.scout_load_ceiling));
+        setSensoryMode(normalizeSensoryMode(d.settings.scout_sensory_mode));
       }
+    }).catch(() => {});
+    // Whether AgentStop can actually run preemptively depends on the active
+    // provider — surface it honestly rather than implying it always works.
+    authFetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
+      if (d.success && d.agentStop) setAgentStopMode({ mode: d.agentStop.mode, activeProviderId: d.agentStop.activeProviderId });
     }).catch(() => {});
   }, []);
 
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_stop_threshold: agentStopThreshold, scout_max_token_burn: maxTokenBurn, scout_temp_ceiling: tempCeiling, scout_load_ceiling: loadCeiling, scout_sse_enabled: sseEnabled, scout_polling_enabled: pollingEnabled, scout_manual_mode: manualMode })
+        body: JSON.stringify({ agent_stop_threshold: agentStopThreshold, scout_max_token_burn: maxTokenBurn, scout_temp_ceiling: tempCeiling, scout_load_ceiling: loadCeiling, scout_sensory_mode: sensoryMode })
       });
     } catch {}
     setSaving(false);
@@ -245,14 +297,33 @@ function SetupView() {
       {/* Control A: Predictive Early Termination (AgentStop) */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Zap size={16} style={{ color: ACCENT_LIGHT }} /> Predictive Early Termination (AgentStop)
+          <Zap size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Stop Runaway AI Early" dev="Predictive Early Termination (AgentStop)" /> <HelpTip text="If a background AI task starts producing nonsense, it gets stopped automatically before it wastes your time and battery." />
+          {agentStopMode && (
+            agentStopMode.mode === 'preemptive' ? (
+              <span
+                className="ml-auto text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border"
+                style={{ color: '#34d399', borderColor: 'rgba(52,211,153,0.4)', background: 'rgba(52,211,153,0.08)' }}
+                title={`Active provider "${agentStopMode.activeProviderId}" streams real per-token confidence — generation is genuinely aborted mid-stream when confidence drops.`}
+              >
+                Preemptive (live)
+              </span>
+            ) : (
+              <span
+                className="ml-auto text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border"
+                style={{ color: '#fbbf24', borderColor: 'rgba(251,191,36,0.4)', background: 'rgba(251,191,36,0.08)' }}
+                title={`Active provider "${agentStopMode.activeProviderId}" does not expose real per-token confidence. AgentStop runs a post-hoc heuristic estimate only — it does not cut generation short. Real preemptive termination requires the local llama-cpp provider.`}
+              >
+                Heuristic fallback
+              </span>
+            )
+          )}
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Algorithmic circuit breaker. Monitors token-level entropy during background inference. If hallucination detected, executes kill-before-compute abort.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="A safety cutoff for background AI work — if the AI starts rambling or making things up, the task is stopped early." dev="Algorithmic circuit breaker. Monitors token-level entropy during background inference. If hallucination detected, executes kill-before-compute abort." /></p>
 
         <div className="space-y-4">
           <div>
             <div className="flex justify-between text-xs mb-1">
-              <span className="text-gray-300 font-bold">Entropy Kill Threshold</span>
+              <span className="text-gray-300 font-bold"><ModeLabel simple="How Quickly To Pull The Plug" dev="Entropy Kill Threshold" /></span>
               <span className="font-mono font-bold" style={{ color: ACCENT_LIGHT }}>{agentStopThreshold.toFixed(2)}</span>
             </div>
             <input type="range" min={0.3} max={0.95} step={0.05} value={agentStopThreshold} onChange={e => setAgentStopThreshold(+e.target.value)} className="w-full h-2 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
@@ -272,22 +343,28 @@ function SetupView() {
       {/* Control B: Passive Ingestion & Sensing Modalities */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Rss size={16} style={{ color: ACCENT_LIGHT }} /> Passive Ingestion & Sensing Modalities
+          <Rss size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="How It Watches For Changes" dev="Passive Ingestion & Sensing Modalities" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Configure what ScoutDaemon monitors. Push-based feeds only — no aggressive polling that drains battery.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Choose how the background watcher notices new things. The recommended option waits quietly for updates instead of checking constantly (which drains battery)." dev="Configure what ScoutDaemon monitors. Push-based feeds only — no aggressive polling that drains battery." /></p>
 
-        <div className="space-y-3">
+        {/* A real single-choice selector (radio group) — the old version was
+            3 independent checkboxes that could all be on/off at once despite
+            this being one setting, and none of them did anything. Now exactly
+            one mode is active, persisted as `scout_sensory_mode`, and
+            genuinely read by DashboardView's telemetry subscription
+            (scoutTelemetry.ts). */}
+        <div className="space-y-3" role="radiogroup" aria-label="Sensory Modality">
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Server-Sent Events (SSE)</span><span className="text-[10px] text-gray-500">Passive push-based feeds (recommended)</span></div>
-            <input type="checkbox" checked={sseEnabled} onChange={e => setSseEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Wait For Updates (Recommended)" dev="Server-Sent Events (SSE)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Updates arrive on their own — easy on your battery" dev="Passive push-based feeds (recommended)" /></span></div>
+            <input type="radio" name="scout-sensory-mode" checked={sensoryMode === 'sse'} onChange={() => setSensoryMode('sse')} className="w-4 h-4" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Active HTTP Polling</span><span className="text-[10px] text-red-400">⚠ Battery intensive — not recommended for laptops</span></div>
-            <input type="checkbox" checked={pollingEnabled} onChange={e => setPollingEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Check Constantly" dev="Active HTTP Polling" /></span><span className="text-[10px] text-red-400">⚠ Battery intensive — not recommended for laptops</span></div>
+            <input type="radio" name="scout-sensory-mode" checked={sensoryMode === 'polling'} onChange={() => setSensoryMode('polling')} className="w-4 h-4" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Manual Scout Mode (MVP)</span><span className="text-[10px] text-gray-500">Triggered one-off sweeps only, no autonomous scheduling</span></div>
-            <input type="checkbox" checked={manualMode} onChange={e => setManualMode(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Only When I Ask" dev="Manual Scout Mode (MVP)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="The watcher only runs when you start it yourself" dev="Triggered one-off sweeps only, no autonomous scheduling" /></span></div>
+            <input type="radio" name="scout-sensory-mode" checked={sensoryMode === 'manual'} onChange={() => setSensoryMode('manual')} className="w-4 h-4" style={{ accentColor: ACCENT }} />
           </label>
         </div>
       </section>
@@ -295,9 +372,9 @@ function SetupView() {
       {/* Control C: Idle-Detection & Hardware Yield Thresholds */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Clock size={16} style={{ color: ACCENT_LIGHT }} /> Idle-Detection & Hardware Yield
+          <Clock size={16} style={{ color: ACCENT_LIGHT }} /> <ModeLabel simple="Auto-Pause Limits" dev="Idle-Detection & Hardware Yield" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Physical limits at which ScoutDaemon suspends all operations to protect the host machine.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="When your computer gets too hot or too busy, the watcher pauses itself to protect your machine." dev="Physical limits at which ScoutDaemon suspends all operations to protect the host machine." /></p>
 
         <div className="space-y-4">
           <div>
@@ -322,13 +399,13 @@ function SetupView() {
       {/* Control D: Absolute Manual Kill Switch */}
       <section className={`bg-white/[0.02] border rounded-xl p-5 backdrop-blur-sm transition-all duration-300 ${killSwitchActive ? 'border-red-500/40 shadow-[0_0_30px_rgba(220,38,38,0.2)]' : 'border-white/5 shadow-[0_0_15px_rgba(142,36,170,0.08)] hover:shadow-[0_0_30px_rgba(142,36,170,0.2)] hover:border-[rgba(142,36,170,0.25)]'}`}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Skull size={16} className="text-red-400" /> Absolute Manual Kill Switch
+          <Skull size={16} className="text-red-400" /> <ModeLabel simple="Emergency Stop" dev="Absolute Manual Kill Switch" />
         </h2>
         <p className="text-xs text-gray-400 mb-4">
-          Forcefully terminates the ScoutDaemon process (SIGKILL). Because it runs as a separate OS process, this instantly sheds CPU load without disrupting CoreExec or active workflows.
+          <ModeLabel simple="Instantly shuts down the background watcher and frees up your computer. Your workflows and other work are not affected." dev="Forcefully terminates the ScoutDaemon process (SIGKILL). Because it runs as a separate OS process, this instantly sheds CPU load without disrupting CoreExec or active workflows." />
         </p>
 
-        <div className="flex items-center justify-between p-4 rounded-lg border transition-all" style={{ backgroundColor: killSwitchActive ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.3)', borderColor: killSwitchActive ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.05)' }}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-lg border transition-all" style={{ backgroundColor: killSwitchActive ? 'rgba(220,38,38,0.1)' : 'rgba(0,0,0,0.3)', borderColor: killSwitchActive ? 'rgba(220,38,38,0.4)' : 'rgba(255,255,255,0.05)' }}>
           <div>
             <span className="text-sm font-bold block" style={{ color: killSwitchActive ? '#ef4444' : 'white' }}>
               {killSwitchActive ? 'DAEMON TERMINATED' : 'Daemon Running'}
@@ -340,10 +417,10 @@ function SetupView() {
           <button
             onClick={async () => {
               if (killSwitchActive) {
-                await fetch(`${API}/api/system/daemon/restart`, { method: 'POST' }).catch(() => {});
+                await authFetch(`${API}/api/system/daemon/restart`, { method: 'POST' }).catch(() => {});
                 setKillSwitchActive(false);
               } else {
-                await fetch(`${API}/api/system/daemon/kill`, { method: 'POST' }).catch(() => {});
+                await authFetch(`${API}/api/system/daemon/kill`, { method: 'POST' }).catch(() => {});
                 setKillSwitchActive(true);
               }
             }}

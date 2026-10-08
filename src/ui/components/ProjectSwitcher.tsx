@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Globe, Folder, Plus, X, FolderOpen, Pencil, Archive } from 'lucide-react';
 import { useNavigation } from '../layouts/OSLayout';
 import { PathBrowser } from './PathBrowser';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface Project {
   id: string;
@@ -11,8 +11,19 @@ interface Project {
   workspace_path?: string;
   project_root_path?: string | null;
   gitnexus_repo_name?: string | null;
+  permission_archetype?: string | null;
   created_at: number;
 }
+
+// Per-project execution permission archetype options. Empty value = no
+// restriction (permissive default — behaves exactly as an unconfigured project).
+// Labels mirror PortGrid's Agent Permissions matrix / Phase 1 hobbyist wording.
+const ARCHETYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'No restriction (default)' },
+  { value: 'code_execute', label: 'Can Run Commands' },
+  { value: 'research_only', label: 'Read-Only Researcher' },
+  { value: 'admin_operator', label: 'Full Access' },
+];
 
 export function ProjectSwitcher() {
   const { activeProjectId, activeProjectName, setActiveProject } = useNavigation();
@@ -29,6 +40,7 @@ export function ProjectSwitcher() {
   const [editName, setEditName] = useState('');
   const [editRootPath, setEditRootPath] = useState('');
   const [editGitnexusRepoName, setEditGitnexusRepoName] = useState('');
+  const [editArchetype, setEditArchetype] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -37,7 +49,7 @@ export function ProjectSwitcher() {
   const [pathBrowserTarget, setPathBrowserTarget] = useState<'create' | 'edit'>('create');
 
   const fetchProjects = () => {
-    fetch(`${API}/api/projects`)
+    authFetch(`${API}/api/projects`)
       .then(r => r.json())
       .then(data => { if (data.projects) setProjects(data.projects); })
       .catch(() => {})
@@ -51,7 +63,7 @@ export function ProjectSwitcher() {
     setCreating(true);
     setCreateError('');
     try {
-      const res = await fetch(`${API}/api/projects`, {
+      const res = await authFetch(`${API}/api/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim(), projectRootPath: newRootPath.trim() || undefined })
@@ -75,6 +87,7 @@ export function ProjectSwitcher() {
     setEditName(p.name);
     setEditRootPath(p.project_root_path || '');
     setEditGitnexusRepoName(p.gitnexus_repo_name || '');
+    setEditArchetype(p.permission_archetype || '');
     setEditError('');
   };
 
@@ -82,7 +95,7 @@ export function ProjectSwitcher() {
     e.stopPropagation();
     if (!window.confirm(`Archive "${p.name}"? It will disappear from this list but its data isn't deleted.`)) return;
     try {
-      const res = await fetch(`${API}/api/projects/${p.id}/archive`, { method: 'POST' });
+      const res = await authFetch(`${API}/api/projects/${p.id}/archive`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         setProjects(prev => prev.filter(proj => proj.id !== p.id));
@@ -96,13 +109,14 @@ export function ProjectSwitcher() {
     setEditSaving(true);
     setEditError('');
     try {
-      const res = await fetch(`${API}/api/projects/${editingId}`, {
+      const res = await authFetch(`${API}/api/projects/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editName.trim(),
           projectRootPath: editRootPath.trim() || null,
           gitnexusRepoName: editGitnexusRepoName.trim() || null,
+          permissionArchetype: editArchetype || null,
         })
       });
       const data = await res.json();
@@ -170,6 +184,18 @@ export function ProjectSwitcher() {
                     className="w-full bg-black/40 border border-white/10 rounded px-2 py-1.5 text-[10px] font-mono text-white focus:outline-none focus:border-amber-500/50"
                     placeholder="GitNexus repo name (optional, disambiguates code-structure lookups)"
                   />
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono text-gray-500 uppercase tracking-widest block">What this project's AI may do</label>
+                    <select
+                      value={editArchetype}
+                      onChange={e => setEditArchetype(e.target.value)}
+                      className="w-full bg-black/40 border border-white/10 rounded px-2 py-1.5 text-[10px] text-white focus:outline-none focus:border-amber-500/50"
+                    >
+                      {ARCHETYPE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value} className="bg-gray-900">{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
                   {editError && <div className="text-[9px] text-red-400">{editError}</div>}
                   <div className="flex gap-1.5">
                     <button onClick={handleSaveEdit} disabled={editSaving} className="flex-1 px-2 py-1 rounded bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] font-bold disabled:opacity-40">{editSaving ? 'Saving...' : 'Save'}</button>

@@ -4,24 +4,25 @@ import { sweepOrphanedWorkspaces } from './memory-sweep';
 import crypto from 'crypto';
 import { executeRun } from './engine';
 import { validateDAGTemplate, escalateBlockedDAGToOsTodos } from './validateDAG';
+import { getPollingIntervalMs } from './settings';
 import { log } from '../observability/logger';
 
 const activeJobs = new Map<string, ScheduledTask>();
 
 // Module-level handles
-let refreshInterval: NodeJS.Timeout | null = null;
+let refreshTimeout: NodeJS.Timeout | null = null;
 let reflectionInterval: NodeJS.Timeout | null = null;
 let reflectionWorker: import('worker_threads').Worker | null = null;
 
 /**
- * Test-only helper: clears the periodic refresh interval and stops every
- * active cron job. Production code does NOT need to call this — the process
- * lifecycle owns the interval until SIGINT.
+ * Test-only helper: clears the periodic refresh loop and stops every active
+ * cron job. Production code does NOT need to call this — the process
+ * lifecycle owns the loop until SIGINT.
  */
 export function _stopSchedulerLoopForTests(): void {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-    refreshInterval = null;
+  if (refreshTimeout) {
+    clearTimeout(refreshTimeout);
+    refreshTimeout = null;
   }
   if (reflectionInterval) {
     clearInterval(reflectionInterval);
@@ -37,45 +38,44 @@ export function _stopSchedulerLoopForTests(): void {
   activeJobs.clear();
 }
 
+/**
+ * Self-rescheduling cron-refresh loop (replaces a single long-lived
+ * `setInterval(refreshJobs, 60000)`). Re-reads `getPollingIntervalMs()`
+ * (system_settings.polling_interval, from UnifiedMasterDashboard's Set-up
+ * view) on EVERY tick, so a saved change to the setting takes effect on the
+ * very next tick — no server restart needed, unlike a fixed setInterval
+ * whose period can't change after creation. Exported for direct unit testing.
+ */
+export function _scheduleRefreshLoop(): void {
+  refreshJobs();
+  refreshTimeout = setTimeout(_scheduleRefreshLoop, getPollingIntervalMs());
+}
+
 export function initScheduler() {
   log.info('[CoreExec] Initializing Cron Scheduler...');
   sweepOrphanedWorkspaces();
-  refreshJobs();
 
-  // Periodically refresh jobs from DB to catch new/updated schedules.
-  refreshInterval = setInterval(refreshJobs, 60000);
+  // Also runs an immediate refreshJobs() (see _scheduleRefreshLoop), then
+  // re-arms itself at the current polling_interval setting on every tick.
+  _scheduleRefreshLoop();
 
-  // Initialize background reflection worker
+  // Initialize background reflection directly (which offloads to its own worker pool)
   try {
-    const { Worker } = require('worker_threads');
-    const path = require('path');
-    const workerPath = path.join(__dirname, '../basevault/reflection-worker.ts');
+    const { ReflectionExecutor } = require('../memory/cerebro/reflection');
     
-    // We use execArgv to allow tsx/ts-node to run the typescript worker if needed
-    // Usually the main process is already spawned with tsx in this project.
-    reflectionWorker = new Worker(workerPath);
-    
-    reflectionWorker?.on('message', (msg) => {
-      if (msg.type === 'reflection_done') {
-        log.info(`[CoreExec] Reflection cycle complete. Pruned ${msg.pruned} memories.`);
-      } else if (msg.type === 'reflection_error') {
-        log.error(`[CoreExec] Reflection cycle failed: ${msg.error}`);
-      }
-    });
-
-    reflectionWorker?.on('error', (err) => {
-      log.error('[CoreExec] Reflection worker encountered an error:', err);
-    });
-
     // Run every 10 minutes
     reflectionInterval = setInterval(() => {
-      reflectionWorker?.postMessage({ type: 'run_reflection' });
+      ReflectionExecutor.runReflectionCycle().catch((err: any) => {
+        log.error('[CoreExec] Reflection cycle failed:', err);
+      });
     }, 10 * 60 * 1000);
     
     // Trigger initial run
-    reflectionWorker?.postMessage({ type: 'run_reflection' });
+    ReflectionExecutor.runReflectionCycle().catch((err: any) => {
+      log.error('[CoreExec] Initial reflection cycle failed:', err);
+    });
   } catch (err) {
-    log.error('[CoreExec] Failed to initialize reflection worker:', err);
+    log.error('[CoreExec] Failed to initialize reflection interval:', err);
   }
 }
 
@@ -149,8 +149,9 @@ async function triggerWorkflow(wf: any) {
     const runId = crypto.randomUUID();
     const dagLayout = JSON.parse(wf.dag_template);
 
+    // Track1 (Track A): Scheduled user workflows take high priority
     db.prepare(
-      'INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)',
+      "INSERT INTO workflow_runs (id, project_id, dag_layout, status, track, created_at) VALUES (?, ?, ?, ?, 'track1', ?)",
     ).run(runId, wf.project_id, wf.dag_template, 'pending', Date.now());
 
     const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status) VALUES (?, ?, ?)');
@@ -160,8 +161,9 @@ async function triggerWorkflow(wf: any) {
 
     log.info(`[CoreExec] Triggered scheduled workflow run: ${runId}`);
 
-    // Background execution
-    executeRun(runId).catch((err) => log.error(`[CoreExec] Cron Run ${runId} failed:`, err));
+    // Rely strictly on engine.ts to pluck them from the queue
+    const { triggerDispatch } = require('./engine');
+    triggerDispatch();
   } catch (error) {
     log.error(`[CoreExec] Failed to trigger workflow ${wf.id}:`, error);
   }

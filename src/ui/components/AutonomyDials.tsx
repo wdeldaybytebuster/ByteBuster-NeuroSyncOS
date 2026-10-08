@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sliders, Shield, Zap } from 'lucide-react';
+import { authFetch } from '../lib/api';
 
 export function AutonomyDials() {
   const [budget, setBudget] = useState(70);
   const [autonomy, setAutonomy] = useState(30);
 
   useEffect(() => {
-    fetch('/api/system/settings')
+    authFetch('/api/system/settings')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.settings) {
@@ -27,7 +28,7 @@ export function AutonomyDials() {
     }
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      fetch('/api/system/settings', {
+      authFetch('/api/system/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ budget, autonomy })
@@ -48,7 +49,7 @@ export function AutonomyDials() {
             </div>
          </div>
          <p className="text-xs text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">
-           Controls Iteration Ceilings, context compaction depth, and logprob confidence thresholds (AgentStop).
+           Sets the Free Mode Governor's token ceiling as a percentage of the base {'100,000'}-token quota — a lower Budget makes the Governor block requests sooner.
          </p>
          <div className="relative pt-1">
            <input 
@@ -78,7 +79,7 @@ export function AutonomyDials() {
             </div>
          </div>
          <p className="text-xs text-gray-400 leading-relaxed group-hover:text-gray-300 transition-colors">
-           Adjusts strict Intent Previews (Sandbox isolation) versus immediate read-only execution.
+           Sets the Deference UI auto-approve confidence bar — higher Autonomy auto-approves more todos and workflow proposals without a manual review click.
          </p>
          <div className="relative pt-1">
            <input 

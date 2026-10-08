@@ -3,9 +3,58 @@ import { z } from 'zod';
 export const ProjectSchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  project_root_path: z.string().nullable().optional(),
   created_at: z.number().int(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+export const SyncEventLogSchema = z.object({
+  id: z.number().int(),
+  // §2.1 defense in depth: identifiers only, max 64 chars (the authoritative
+  // table/column allowlist lives in network/sync-policy.ts).
+  table_name: z.string().min(1).max(64).regex(/^[A-Za-z0-9_]+$/),
+  action: z.enum(['INSERT', 'UPDATE', 'DELETE']),
+  timestamp: z.number().int(),
+  payload: z.string(), // JSON string
+});
+export type SyncEventLog = z.infer<typeof SyncEventLogSchema>;
+
+export const HarnessProfileEnum = z.enum(['planner', 'generator', 'evaluator', 'scout', 'default']);
+export type HarnessProfile = z.infer<typeof HarnessProfileEnum>;
+
+export const DAGNodeSchema = z.object({
+  id: z.string(),
+  dependencies: z.array(z.string()),
+  prompt: z.string().optional(),
+  harness_profile: HarnessProfileEnum.optional().default('default'),
+  plugin: z.string().optional(),
+  params: z.any().optional(),
+});
+export type DAGNode = z.infer<typeof DAGNodeSchema>;
+
+export const DAGLayoutSchema = z.object({
+  nodes: z.array(DAGNodeSchema),
+});
+export type DAGLayout = z.infer<typeof DAGLayoutSchema>;
+
+// Blocked runs retain their audit reason instead of a node list. Accept this
+// explicit legacy sentinel alongside executable layouts when parsing run rows.
+export const BlockedDAGLayoutSchema = z.object({
+  blocked_by_validation: z.literal(true),
+  reason: z.string(),
+  origin_workflow_id: z.string(),
+  origin: z.enum(['scheduler', 'approve-route']),
+});
+
+/** Parse the SQLite JSON-string representation into a validated typed layout. */
+export const WorkflowDAGLayoutSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.union([DAGLayoutSchema, BlockedDAGLayoutSchema]));
 
 // §3.3 — 'blocked-by-validation' is a sentinel status written by
 // escalateBlockedDAGToOsTodos (§3.4) into the FK-satisfying placeholder
@@ -14,8 +63,8 @@ export type Project = z.infer<typeof ProjectSchema>;
 // the RunHistory UI can render these rows distinctly from 'failed' runs.
 export const WorkflowRunSchema = z.object({
   id: z.string().uuid(),
-  project_id: z.string().uuid(),
-  dag_layout: z.string(), // JSON string representing the DAG template
+  project_id: z.string(),
+  dag_layout: WorkflowDAGLayoutSchema,
   status: z.enum(['pending', 'running', 'completed', 'failed', 'blocked-by-validation']),
   created_at: z.number().int(),
 });
@@ -33,6 +82,18 @@ export const TaskSchema = z.object({
   output_data: z.string().nullable(), // Redacted JSON payload
 });
 export type Task = z.infer<typeof TaskSchema>;
+
+export const OsTodoSchema = z.object({
+  id: z.string().uuid(),
+  dag_node_id: z.string().uuid(),
+  severity: z.string(),
+  escalation_reason: z.string(),
+  required_action_type: z.string(),
+  status: z.string(),
+  created_at: z.number().int(),
+  confidence: z.number().optional().default(0.5)
+});
+export type OsTodo = z.infer<typeof OsTodoSchema>;
 
 // §3.3 — single helper used by every /api/basevault/* endpoint that returns
 // a list. Runtime truth is enforced here at the HTTP boundary instead of

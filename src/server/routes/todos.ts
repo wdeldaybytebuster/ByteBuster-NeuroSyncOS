@@ -1,43 +1,88 @@
 import { Hono } from 'hono';
 import { db } from '../../core/basevault/db';
 import { SensitiveDataRedactor, DataTier } from '../../core/basevault/redactor';
+import { executeRun } from '../../core/coreexec/engine';
 
 export const todosRouter = new Hono();
 
 todosRouter.get('/', async (c) => {
   try {
-    const todos = db.prepare('SELECT * FROM os_todos WHERE status = ? ORDER BY created_at DESC').all('open');
+    const todos = db.prepare("SELECT * FROM os_todos WHERE status IN ('open', 'pending') ORDER BY created_at DESC").all() as any[];
+    
+    for (const todo of todos) {
+      if (todo.context_payload) {
+        try {
+          const payload = JSON.parse(todo.context_payload);
+          if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+            const qRow = db.prepare('SELECT source_tool FROM memory_quarantine WHERE id = ?').get(payload.memoryId) as any;
+            if (qRow && qRow.source_tool) {
+              todo.source_tool = qRow.source_tool;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    
     return c.json({ success: true, todos });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
 
-todosRouter.post('/resolve', async (c) => {
-  const body = await c.req.json();
-  const { todoId, resolutionData } = body;
+todosRouter.post('/:id/resolve', async (c) => {
+  const todoId = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const { resolutionData, resolvedBy = 'operator' } = body;
 
   try {
     db.transaction(() => {
       // 1. Mark todo as resolved
-      const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved' WHERE id = ?");
-      const info = updateTodo.run(todoId);
+      const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved', resolved_at = ?, resolved_by = ? WHERE id = ?");
+      const info = updateTodo.run(Date.now(), resolvedBy, todoId);
       
       if (info.changes === 0) throw new Error('To-Do not found');
 
       // 2. Find the associated task
-      const todo = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
+      const todo = db.prepare('SELECT dag_node_id, context_payload FROM os_todos WHERE id = ?').get(todoId) as any;
       if (todo) {
-        // 3. Update task status back to unclaimed so the engine will re-queue it
-        // We inject the resolutionData into the task's output_data so the worker has context on retry
-        const redactedResolution = SensitiveDataRedactor.redactObject(resolutionData, DataTier.INTERNAL);
-        const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
-        updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
+        if (todo.context_payload) {
+          try {
+            const payload = JSON.parse(todo.context_payload);
+            if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+              const qRow = db.prepare('SELECT * FROM memory_quarantine WHERE id = ?').get(payload.memoryId) as any;
+              if (qRow) {
+                db.prepare(`
+                  INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at, source_tool)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(qRow.id, qRow.content, qRow.type, qRow.project_id, qRow.last_accessed_at, qRow.access_count, qRow.created_at, qRow.source_tool);
+                
+                const qVec = db.prepare('SELECT embedding FROM memory_quarantine_vec WHERE id = ?').get(payload.memoryId) as any;
+                if (qVec) {
+                  db.prepare(`
+                    INSERT INTO cerebro_memories_vec (id, embedding)
+                    VALUES (?, ?)
+                  `).run(payload.memoryId, qVec.embedding);
+                }
+                db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+              }
+            }
+          } catch (e) {}
+        }
         
-        // 4. Update the parent workflow_run status from 'parked' to 'running'
-        const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
-        if (task) {
-          db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+        if (todo.dag_node_id) {
+          // 3. Update task status back to unclaimed so the engine will re-queue it
+          // We inject the resolutionData into the task's output_data so the worker has context on retry
+          const redactedResolution = SensitiveDataRedactor.redactObject(resolutionData, DataTier.INTERNAL);
+          const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
+          updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
+          
+          // 4. Update the parent workflow_run status from 'parked' to 'running'
+          const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
+          if (task) {
+            db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+            // Resume the executeRun loop now that it is no longer parked
+            executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after To-Do resolution:`, err));
+          }
         }
       }
     })();
@@ -48,8 +93,52 @@ todosRouter.post('/resolve', async (c) => {
   }
 });
 
-// Deference UI bulk-approve — resolves a batch of high-confidence (>=0.70)
-// todos in one transaction, mirroring /resolve's per-item logic for each id.
+// Deference UI bulk-approve — resolves a batch of high-confidence (>=0.70 by
+// default) todos in one transaction, mirroring /resolve's per-item logic for
+// each id.
+//
+// The 0.70 default mirrors the CoreExec "Autonomy & Delegation" dial's own
+// default of 30% (`src/ui/components/AutonomyDials.tsx`,
+// `src/ui/lib/approvalQueue.ts`'s `autonomyToThreshold`): threshold = 1 -
+// autonomy/100. This is a server-side trust boundary (a client could forward
+// any threshold it likes), so it independently re-reads the same `autonomy`
+// setting rather than trusting a client-supplied value — same duplication
+// pattern as `DEFERENCE_THRESHOLD` in `approvalQueue.ts`. Cached with the same
+// short-TTL pattern used for `free_mode_unlocked` in `governor.ts` so a UI
+// change takes effect within a couple seconds without a DB hit per request.
+const DEFAULT_DEFERENCE_THRESHOLD = 0.70;
+const AUTONOMY_CACHE_TTL_MS = 2000;
+let cachedDeferenceThreshold = DEFAULT_DEFERENCE_THRESHOLD;
+let cachedAutonomyAt = 0;
+
+function getDeferenceThreshold(): number {
+  const now = Date.now();
+  if (now - cachedAutonomyAt > AUTONOMY_CACHE_TTL_MS) {
+    cachedAutonomyAt = now;
+    try {
+      const row = db
+        .prepare("SELECT value FROM system_settings WHERE key = 'autonomy'")
+        .get() as { value: string } | undefined;
+      const autonomy = row ? Number(row.value) : NaN;
+      if (Number.isFinite(autonomy)) {
+        const clamped = Math.min(100, Math.max(0, autonomy));
+        cachedDeferenceThreshold = 1 - clamped / 100;
+      } else {
+        cachedDeferenceThreshold = DEFAULT_DEFERENCE_THRESHOLD;
+      }
+    } catch {
+      // DB not initialized yet, or table missing — safe default.
+      cachedDeferenceThreshold = DEFAULT_DEFERENCE_THRESHOLD;
+    }
+  }
+  return cachedDeferenceThreshold;
+}
+
+/** Test-only: force the autonomy cache to re-read on the next call. */
+export function _resetDeferenceThresholdCache(): void {
+  cachedAutonomyAt = 0;
+}
+
 todosRouter.post('/resolve-bulk', async (c) => {
   const body = await c.req.json();
   const { todoIds } = body;
@@ -61,19 +150,66 @@ todosRouter.post('/resolve-bulk', async (c) => {
   try {
     const resolved: string[] = [];
     const failed: { id: string; error: string }[] = [];
+    // Read once per request so every item in this batch is judged against
+    // the same threshold, even if the cache TTL happens to expire mid-loop.
+    const deferenceThreshold = getDeferenceThreshold();
 
     db.transaction(() => {
       for (const todoId of todoIds) {
         try {
-          const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved' WHERE id = ?");
-          const info = updateTodo.run(todoId);
+          const todo = db
+            .prepare('SELECT dag_node_id, status, confidence FROM os_todos WHERE id = ?')
+            .get(todoId) as any;
+
+          if (!todo) {
+            failed.push({ id: todoId, error: 'To-Do not found' });
+            continue;
+          }
+          if (todo.status !== 'open') {
+            failed.push({ id: todoId, error: `todo is not open (status: ${todo.status})` });
+            continue;
+          }
+          const confidenceValue = todo.confidence;
+          if (typeof confidenceValue !== 'number' || Number.isNaN(confidenceValue) || confidenceValue < deferenceThreshold) {
+            failed.push({
+              id: todoId,
+              error: `confidence ${confidenceValue} is below the ${deferenceThreshold} auto-approve threshold — resolve individually via /resolve instead`,
+            });
+            continue;
+          }
+
+          const updateTodo = db.prepare("UPDATE os_todos SET status = 'resolved', resolved_at = ?, resolved_by = ? WHERE id = ?");
+          const info = updateTodo.run(Date.now(), 'operator', todoId);
           if (info.changes === 0) {
             failed.push({ id: todoId, error: 'To-Do not found' });
             continue;
           }
 
-          const todo = db.prepare('SELECT dag_node_id FROM os_todos WHERE id = ?').get(todoId) as any;
-          if (todo) {
+          if (todo.context_payload) {
+            try {
+              const payload = JSON.parse(todo.context_payload);
+              if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+                const qRow = db.prepare('SELECT * FROM memory_quarantine WHERE id = ?').get(payload.memoryId) as any;
+                if (qRow) {
+                  db.prepare(`
+                    INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at, source_tool)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  `).run(qRow.id, qRow.content, qRow.type, qRow.project_id, qRow.last_accessed_at, qRow.access_count, qRow.created_at, qRow.source_tool);
+                  
+                  const qVec = db.prepare('SELECT embedding FROM memory_quarantine_vec WHERE id = ?').get(payload.memoryId) as any;
+                  if (qVec) {
+                    db.prepare(`
+                      INSERT INTO cerebro_memories_vec (id, embedding)
+                      VALUES (?, ?)
+                    `).run(payload.memoryId, qVec.embedding);
+                  }
+                  db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (todo.dag_node_id) {
             const redactedResolution = SensitiveDataRedactor.redactObject('approved', DataTier.INTERNAL);
             const updateTask = db.prepare("UPDATE tasks SET status = 'unclaimed', output_data = ?, claim_lease = NULL WHERE id = ?");
             updateTask.run(JSON.stringify({ resolution: redactedResolution }), todo.dag_node_id);
@@ -81,6 +217,8 @@ todosRouter.post('/resolve-bulk', async (c) => {
             const task = db.prepare('SELECT run_id FROM tasks WHERE id = ?').get(todo.dag_node_id) as any;
             if (task) {
               db.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ? AND status = 'parked'").run(task.run_id);
+              // Fire-and-forget resume for the newly unparked run
+              executeRun(task.run_id).catch(err => console.error(`[CoreExec] Failed to resume run ${task.run_id} after bulk To-Do resolution:`, err));
             }
           }
           resolved.push(todoId);
@@ -104,8 +242,19 @@ todosRouter.post('/reject', async (c) => {
   const { todoId } = body;
 
   try {
+    const todo = db.prepare('SELECT context_payload FROM os_todos WHERE id = ?').get(todoId) as any;
     const info = db.prepare("UPDATE os_todos SET status = 'rejected' WHERE id = ?").run(todoId);
     if (info.changes === 0) return c.json({ success: false, error: 'To-Do not found' }, 404);
+    
+    if (todo && todo.context_payload) {
+      try {
+        const payload = JSON.parse(todo.context_payload);
+        if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+          db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+        }
+      } catch (e) {}
+    }
+
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -128,11 +277,20 @@ todosRouter.post('/reject-bulk', async (c) => {
 
     db.transaction(() => {
       for (const todoId of todoIds) {
+        const todo = db.prepare('SELECT context_payload FROM os_todos WHERE id = ?').get(todoId) as any;
         const info = db.prepare("UPDATE os_todos SET status = 'rejected' WHERE id = ?").run(todoId);
         if (info.changes === 0) {
           failed.push({ id: todoId, error: 'To-Do not found' });
         } else {
           rejected.push(todoId);
+          if (todo && todo.context_payload) {
+            try {
+              const payload = JSON.parse(todo.context_payload);
+              if (payload.action === 'REVIEW_QUARANTINE' && payload.memoryId) {
+                db.prepare('DELETE FROM memory_quarantine WHERE id = ?').run(payload.memoryId);
+              }
+            } catch (e) {}
+          }
         }
       }
     })();
@@ -155,20 +313,13 @@ todosRouter.post('/promote', async (c) => {
   // the os_todos column default) when the caller doesn't provide one.
   const confidenceValue = typeof confidence === 'number' && confidence >= 0 && confidence <= 1 ? confidence : 0.5;
 
-  try {
+    try {
     const id = require('crypto').randomUUID();
-    // Create a sentinel task and os_todo so PortGrid's HITL queue surfaces it
-    const sentinelTaskId = `promote-${id}`;
-    const sentinelRunId = `scout-discovery-${id}`;
-    const projectId = `scout-promote-${id}`;
+    const contextPayload = JSON.stringify({ fact, sourceId });
 
     db.transaction(() => {
-      // Insert sentinel project, run, and task to satisfy FK constraints
-      db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(projectId, 'ScoutDaemon Discovery', Date.now());
-      db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(sentinelRunId, projectId, JSON.stringify({ nodes: [{ id: sentinelTaskId, prompt: fact }] }), 'pending', Date.now());
-      db.prepare('INSERT INTO tasks (id, run_id, status, claim_lease, output_data) VALUES (?, ?, ?, ?, ?)').run(sentinelTaskId, sentinelRunId, 'unclaimed', null, null);
-      db.prepare('INSERT INTO os_todos (id, dag_node_id, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-        id, sentinelTaskId, 'MEDIUM', `ScoutDaemon Discovery: ${fact.substring(0, 120)}`, 'APPROVE_PROPOSAL', 'open', Date.now(), confidenceValue
+      db.prepare('INSERT INTO os_todos (id, source_module, context_payload, severity, escalation_reason, required_action_type, status, created_at, confidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id, 'ScoutDaemon', contextPayload, 'MEDIUM', `ScoutDaemon Discovery: ${fact.substring(0, 120)}`, 'APPROVE_PROPOSAL', 'open', Date.now(), confidenceValue
       );
     })();
 

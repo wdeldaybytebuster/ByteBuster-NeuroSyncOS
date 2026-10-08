@@ -1,9 +1,15 @@
 import { DynamicThreadPool } from 'poolifier';
 import * as os from 'os';
+import fs from 'fs';
 import path from 'path';
 
+// Name of the worker bundle produced by scripts/build-sidecar.js.
+const WORKER_BUNDLE = 'worker.js';
+
 const cores = os.cpus().length;
-export const safeMaxThreads = Math.max(1, cores - 1);
+// Hard-cap the worker pool at 2 to strictly prevent OOM crashing on 8-core/6GB RAM devices
+// since two separate pools (CoreExec + Cerebro) run simultaneously.
+export const safeMaxThreads = 2;
 
 /**
  * Resolve the JS file poolifier's DynamicThreadPool should spawn as a worker.
@@ -41,9 +47,29 @@ export const safeMaxThreads = Math.max(1, cores - 1);
  */
 function resolveWorkerFile(): string {
   if (path.extname(__filename) !== '.ts') {
-    // Already running from compiled JS (no separate backend build exists
-    // today, but keep this branch for a future real production build).
-    return path.join(__dirname, 'worker.js');
+    // Running from compiled JS (the packaged sidecar). Prefer the worker
+    // bundle staged as a real Tauri resource: worker_threads and poolifier need
+    // a physical filesystem path, not pkg's virtual /snapshot/ path. The host
+    // sets NEUROSYNC_RESOURCE_DIR in src-tauri/src/lib.rs.
+    const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
+    if (resourceDir && resourceDir.length > 0) {
+      const stagedBundle = path.join(resourceDir, 'resources', 'bin', WORKER_BUNDLE);
+      if (fs.existsSync(stagedBundle)) {
+        return stagedBundle;
+      }
+    }
+
+    // Fallback to the adjacent bundle in the pkg snapshot. This keeps local
+    // packaged probes and future runtimes without an external resource layout
+    // working when pkg's worker-thread integration supports that path.
+    const snapshotBundle = path.join(__dirname, WORKER_BUNDLE);
+    if (fs.existsSync(snapshotBundle)) {
+      return snapshotBundle;
+    }
+
+    // Return the expected snapshot location so poolifier's error names the
+    // path we actually looked for.
+    return snapshotBundle;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires

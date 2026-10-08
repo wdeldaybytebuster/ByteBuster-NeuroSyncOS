@@ -165,6 +165,7 @@ ${inputText.substring(0, 4000)}`;
 
     // The schema hint tells compatible providers (OpenAI, llama.cpp with GBNF) to enforce structure
     const schema = {
+      title: 'OKF_CONCEPT_EXTRACTION_SCHEMA',
       type: 'array',
       items: {
         type: 'object',
@@ -180,40 +181,81 @@ ${inputText.substring(0, 4000)}`;
       },
     };
 
-    try {
-      const raw = await generateFn(extractionPrompt, schema);
+    // Provide the raw text as the secondary-prompt context for the retry.
+    // We keep a trimmed copy here so the retry prompt is bounded.
+    const retryContext = inputText.substring(0, 2000);
 
-      // LLMs often wrap JSON in markdown fences or add preamble text.
-      // Extract the JSON array from the response robustly.
-      let jsonStr = raw.trim();
+    const attempts: Array<{ prompt: string; schema: any; label: string }> = [
+      {
+        prompt: extractionPrompt,
+        schema,
+        label: 'primary',
+      },
+      {
+        // Secondary prompt: explicit, terse JSON-only instruction when the
+        // primary prompt returns non-JSON (preamble, explanation, markdown
+        // prose, or hallucination). This is what makes convert-document
+        // resilient without dropping to a tiered generate/document re-call.
+        prompt: `Return the concepts below as a JSON array and NOTHING ELSE — no markdown fences, no preamble, no explanation, no text outside the array.
 
-      console.log(`[OKF Generator] Raw LLM response (first 300 chars): ${jsonStr.substring(0, 300)}`);
+Each concept: {"type":"...", "title":"...", "description":"...", "confidence":0.XX, "tags":["..."], "relatedConcepts":["...", "..."]}
 
-      // Strip markdown code fences if present
-      const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (fenceMatch) {
-        jsonStr = fenceMatch[1]!.trim();
+Text to analyze:
+${retryContext}
+
+Return ONLY this exact JSON array format, e.g.:
+[{"type":"rule","title":"Example Rule","description":"A short description.","confidence":0.85,"tags":["example"],"relatedConcepts":[]}]`,
+        schema,
+        label: 'retry-json-only',
+      },
+    ];
+
+    let lastErr = '';
+
+    for (const attempt of attempts) {
+      try {
+        const raw = await generateFn(attempt.prompt, attempt.schema);
+
+        // LLMs often wrap JSON in markdown fences or add preamble text.
+        // Extract the JSON array from the response robustly.
+        let jsonStr = raw.trim();
+
+        console.log(`[OKF Generator] Raw LLM response (${attempt.label}, first 300 chars): ${jsonStr.substring(0, 300)}`);
+
+        // Strip markdown code fences if present
+        const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fenceMatch) {
+          jsonStr = fenceMatch[1]!.trim();
+        }
+
+        // Try to find the JSON array boundaries if there's preamble/postamble text
+        const arrayStart = jsonStr.indexOf('[');
+        const arrayEnd = jsonStr.lastIndexOf(']');
+        if (arrayStart !== -1 && arrayEnd > arrayStart) {
+          jsonStr = jsonStr.substring(arrayStart, arrayEnd + 1);
+        }
+
+        const parsed: unknown = JSON.parse(jsonStr);
+        if (Array.isArray(parsed)) {
+          const concepts = parsed.filter(
+            (c): c is ExtractedConcept =>
+              typeof c === 'object' && c !== null && 'type' in c && 'title' in c && 'description' in c
+          );
+          if (concepts.length > 0) {
+            return concepts;
+          }
+          // Valid JSON array but empty — not worth retrying; treat as no concepts.
+          return [];
+        }
+        // Valid JSON but not an array — fall through to retry
+        lastErr = `Parsed JSON was not an array (got ${typeof parsed})`;
+      } catch (err: any) {
+        lastErr = err?.message || String(err);
+        console.warn(`[OKF Generator] Concept extraction ${attempt.label} failed:`, lastErr);
       }
-
-      // Try to find the JSON array boundaries if there's preamble/postamble text
-      const arrayStart = jsonStr.indexOf('[');
-      const arrayEnd = jsonStr.lastIndexOf(']');
-      if (arrayStart !== -1 && arrayEnd > arrayStart) {
-        jsonStr = jsonStr.substring(arrayStart, arrayEnd + 1);
-      }
-
-      const parsed: unknown = JSON.parse(jsonStr);
-      if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (c): c is ExtractedConcept =>
-            typeof c === 'object' && c !== null && 'type' in c && 'title' in c && 'description' in c
-        );
-      }
-    } catch (err: any) {
-      console.warn('[OKF Generator] Concept extraction failed:', err?.message || err);
-      console.warn('[OKF Generator] This usually means the LLM response was not valid JSON. Check the raw response logged above.');
     }
 
+    console.warn('[OKF Generator] All extraction attempts failed. Last error:', lastErr);
     return [];
   }
 

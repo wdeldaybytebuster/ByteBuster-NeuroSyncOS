@@ -1,5 +1,6 @@
+import crypto from 'crypto';
 import { FreeModeGovernor } from './governor';
-import { LLMProvider, MockProvider } from './providers';
+import { GenerationStreamHooks, LLMProvider, MockProvider } from './providers';
 import { TriageClassifier } from './triage';
 import { ConsensusSynthesizer } from './council';
 import { AgentStopSupervisor } from './agent-stop';
@@ -13,6 +14,8 @@ export interface RouteRequest {
   prompt: string;
   estimatedTokens: number;
   responseSchema?: any;
+  /** Disable automatic OKF retrieval when a caller must provide explicit context only. */
+  useKnowledgeContext?: boolean;
   /**
    * OQ-001: Optional model-selection hints. When both are provided, RouteSwitchEngine
    * will call selectOptimalModel() to pick the best available model before routing.
@@ -171,27 +174,79 @@ export class RouteSwitchEngine {
   }
 
   /**
-   * Execute a single provider call with AgentStop post-evaluation.
+   * Whether the active provider drives the AgentStop supervisor with REAL
+   * per-token confidence (preemptive early termination) or only the post-hoc
+   * heuristic fallback. Surfaced to the UI so the AgentStop widget can tell the
+   * truth about the currently-active provider instead of hardcoding a claim.
+   */
+  public getAgentStopMode(): { mode: 'preemptive' | 'heuristic'; activeProviderId: string; supportsStreamingConfidence: boolean } {
+    const supports = this.provider.supportsStreamingConfidence === true;
+    return {
+      mode: supports ? 'preemptive' : 'heuristic',
+      activeProviderId: this.provider.id,
+      supportsStreamingConfidence: supports,
+    };
+  }
+
+  /**
+   * Execute a single provider call, streaming real per-token confidence into the
+   * AgentStop supervisor when the provider exposes it.
+   *
+   * For providers with real streaming confidence (llama-cpp), each generated
+   * token's logprob is fed to `agentStop.evaluateToken()` AS IT STREAMS, so the
+   * already-correct 3-consecutive-low-tokens abort logic is finally reachable and
+   * an abort genuinely cuts local inference short (via `streamHooks.signal`),
+   * saving real compute rather than discarding an already-complete response.
+   *
+   * For providers without it, we fall back to a clearly-labelled post-hoc
+   * heuristic that only estimates confidence — it is NOT preemptive and NOT a
+   * real logprob.
+   *
    * Returns the response content or throws on error.
    */
   private async _executeWithProvider(provider: LLMProvider, request: RouteRequest): Promise<{ content: string; confidence: number }> {
     const abortController = new AbortController();
     this.agentStop.reset();
 
-    const responseContent = await provider.generate(request.prompt, request.estimatedTokens, request.responseSchema);
+    // Real per-token confidence path: providers that support it call
+    // onTokenConfidence per streamed token; the supervisor may abort mid-stream.
+    let streamedTokenCount = 0;
+    const streamHooks: GenerationStreamHooks = {
+      signal: abortController.signal,
+      onTokenConfidence: (logprob: number) => {
+        streamedTokenCount++;
+        this.agentStop.evaluateToken(logprob, abortController);
+      },
+    };
 
-    // Post-generation quality evaluation
-    const responseTokens = responseContent.split(/\s+/).length;
-    const qualityScore = responseTokens < 3 ? -2.0 : responseTokens < 10 ? -0.8 : 0.0;
-    this.agentStop.evaluateToken(qualityScore, abortController);
+    const responseContent = await provider.generate(
+      request.prompt,
+      request.estimatedTokens,
+      request.responseSchema,
+      streamHooks,
+    );
 
-    // Continuous confidence score, 0.0-1.0. Starts at 1.0 and is penalized for
-    // low-quality generation and/or AgentStop-triggered termination.
+    const usedRealConfidence = streamedTokenCount > 0;
+
+    // Continuous confidence score, 0.0-1.0.
     let confidence = 1.0;
-    if (qualityScore < 0.0) confidence -= 0.3;
-    if (abortController.signal.aborted) {
-      log.warn('[RouteSwitch] AgentStop terminated response — low confidence detected.');
-      confidence -= 0.6;
+    if (usedRealConfidence) {
+      // Preemptive path. If AgentStop fired, real model confidence dropped below
+      // threshold for enough consecutive tokens and we terminated the generation
+      // early — reflect that as a genuinely low-confidence result.
+      if (abortController.signal.aborted) {
+        log.warn('[RouteSwitch] AgentStop preemptively terminated generation (real per-token confidence dropped below threshold H).');
+        confidence = 0.2;
+      }
+    } else {
+      // HEURISTIC FALLBACK (non-llama-cpp providers): no real per-token
+      // confidence is available from HTTP/synthetic providers, so we keep the
+      // original post-hoc word-count quality estimate ONLY as a rough confidence
+      // signal. This is explicitly NOT preemptive (the full response already
+      // exists) and NOT equivalent to real logprobs — see provider adapters.
+      const responseTokens = responseContent.split(/\s+/).length;
+      const qualityScore = responseTokens < 3 ? -2.0 : responseTokens < 10 ? -0.8 : 0.0;
+      if (qualityScore < 0.0) confidence -= 0.3;
     }
     confidence = Math.max(0, Math.min(1, confidence));
 
@@ -214,7 +269,7 @@ export class RouteSwitchEngine {
 
     // OKF Context Injection: resolve relevant knowledge from the graph and prepend to prompt
     let enrichedPrompt = request.prompt;
-    if (request.prompt.length > 20) { // Skip trivial/test prompts
+    if (request.useKnowledgeContext !== false && request.prompt.length > 20) { // Skip trivial/test prompts or explicit context-isolated calls
       try {
         const contextChunks = OKFGraphQuery.resolveContext(request.prompt, request.projectId);
         if (contextChunks.length > 0) {
@@ -227,8 +282,52 @@ export class RouteSwitchEngine {
       }
     }
 
+    // Council Mode candidate pool: primary + the configured council providers,
+    // de-duplicated by id (the primary is often also a council member).
+    const councilCandidates = [primaryProvider, ...this.councilProviders.filter(p => p.id !== primaryProvider.id)];
+
+    // Free Mode Governor: apply the SAME paid-provider lock the sequential
+    // fallback chain applies (see the `isProviderAllowed` skip below). Council
+    // Mode queries every provider in PARALLEL, so unlike the sequential chain it
+    // can't "fall through" one provider at a time — instead we pre-filter the
+    // pool so a paid+locked provider is simply never called, exactly as it would
+    // be skipped in the sequential chain. This closes the gap flagged in
+    // docs/base-knowledge-integration-tracker.md ("Council Mode does not filter
+    // paid providers").
+    const eligibleCouncilProviders = councilCandidates.filter(
+      p => this.governor.isProviderAllowed(this._isProviderPaidTier(p.id))
+    );
+
+    // JUDGMENT CALL (documented, not silent): a meaningful consensus needs >= 2
+    // providers. If the paid-provider lock drops the eligible pool below 2, we do
+    // NOT run a degenerate 1-provider "council" (which would return the existing
+    // confidence:0 / disagreement:1.0 degenerate signal). Instead we fall back to
+    // the normal sequential fallback chain for this request. That chain ALREADY
+    // skips paid+locked providers the same way and degrades gracefully to a free
+    // provider — or errors only if nothing is eligible. This matches how the
+    // sequential chain already treats a locked paid provider (like an exhausted
+    // one) rather than inventing a new refuse/error path, and it keeps the
+    // request served by a free provider whenever one exists.
+    // Whether Council Mode is even configured for this prompt at all — this
+    // must stay based on `this.councilProviders.length` (the ORIGINAL trigger
+    // basis, unrelated to eligibility) rather than `eligibleCouncilProviders`,
+    // otherwise the paid-provider filter would silently change WHEN Council
+    // Mode triggers (e.g. a single configured council teammate + the primary
+    // would newly satisfy an eligible-count-based check, when previously
+    // Council Mode required >= 2 *dedicated* council providers regardless of
+    // the primary). The filter should only ever narrow the provider pool used
+    // once triggered, or cause a fall-back when configured-but-filtered-out —
+    // never expand which configurations trigger Council Mode in the first
+    // place.
+    const councilConfigured = TriageClassifier.isHighRisk(request.prompt) && this.councilProviders.length >= 2;
+
+    const councilFilteredOut = councilConfigured && eligibleCouncilProviders.length < 2;
+    if (councilFilteredOut) {
+      log.info(`[RouteSwitch] High-risk prompt, but Free Mode lock left only ${eligibleCouncilProviders.length} eligible council provider(s) (need >= 2). Falling back to the sequential single-provider chain.`);
+    }
+
     // Check if Council Mode should be triggered
-    const isCouncilTriggered = TriageClassifier.isHighRisk(request.prompt) && this.councilProviders.length >= 2;
+    const isCouncilTriggered = councilConfigured && !councilFilteredOut;
 
     let responseContent: string;
     let finalProvider = primaryProvider.id;
@@ -236,12 +335,37 @@ export class RouteSwitchEngine {
 
     if (isCouncilTriggered) {
       log.info('High-risk prompt detected. Triggering Council Mode.');
-      const allProviders = [primaryProvider, ...this.councilProviders];
+      const allProviders = eligibleCouncilProviders;
       const consensus = await ConsensusSynthesizer.executeCouncilMode(enrichedPrompt, request.estimatedTokens, allProviders, request.responseSchema);
       responseContent = consensus.content;
       confidence = consensus.confidence;
       finalProvider = 'Council Consensus';
       this.governor.recordUsage(request.estimatedTokens * allProviders.length, 'council');
+
+      // Council Decision Logging: the confidence/disagreement signal Council Mode
+      // computes (at real cost — parallel provider calls) was previously discarded
+      // by every caller of execute(). Persist + log it so it's observable, without
+      // gating or altering the response path. Best-effort — a DB hiccup here must
+      // never break the actual response being returned to the caller.
+      try {
+        db.prepare(`
+          INSERT INTO council_decisions (id, scope, scope_id, provider_count, confidence, disagreement_score, chosen_response_length, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          crypto.randomUUID(),
+          request.scope ?? null,
+          request.scopeId ?? null,
+          allProviders.length,
+          consensus.confidence,
+          consensus.disagreementScore,
+          consensus.content.length,
+          Date.now()
+        );
+      } catch (err) {
+        log.warn('[RouteSwitch] Failed to persist council decision (non-fatal):', err);
+      }
+
+      log.info(`[RouteSwitch] Council Mode decision: confidence=${(consensus.confidence * 100).toFixed(1)}%, disagreement=${consensus.disagreementScore.toFixed(3)}, providers=${allProviders.length}`);
     } else {
       // Fallback loop: try each provider in the chain until one succeeds
       let lastError: Error | null = null;
@@ -299,7 +423,7 @@ export class RouteSwitchEngine {
       }
     }
 
-    const actualTokens = isCouncilTriggered ? request.estimatedTokens * (this.councilProviders.length + 1) : request.estimatedTokens;
+    const actualTokens = isCouncilTriggered ? request.estimatedTokens * eligibleCouncilProviders.length : request.estimatedTokens;
 
     return {
       content: responseContent!,
@@ -308,5 +432,12 @@ export class RouteSwitchEngine {
       confidence,
       isCouncilMode: isCouncilTriggered
     };
+  }
+
+  public async generateEmbedding(text: string): Promise<Float32Array> {
+    if (this.provider.generateEmbedding) {
+      return this.provider.generateEmbedding(text);
+    }
+    throw new Error(`Provider ${this.provider.id} does not support generateEmbedding`);
   }
 }

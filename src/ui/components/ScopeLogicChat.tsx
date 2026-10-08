@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Minimize2, Maximize2 } from 'lucide-react';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
+import { useNavigation } from '../layouts/OSLayout';
+import type { DAGNode } from '../../core/basevault/schema';
+import { API, authFetch } from '../lib/api';
+
 
 export interface DAGProposalPayload {
   id: string;
   status: string;
-  nodes: { id: string; dependencies: string[]; prompt: string }[];
+  nodes: DAGNode[];
 }
 
 interface ScopeLogicChatProps {
@@ -14,6 +19,9 @@ interface ScopeLogicChatProps {
 
 export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
   const { isDeveloperMode } = useDeveloperMode();
+  const hardwareTier = useHardwareTier();
+  const { activeProjectId } = useNavigation();
+  const isConstrained = hardwareTier === 'constrained';
   const [input,     setInput]     = useState('');
   const [chatLog,   setChatLog]   = useState<{role: string, content: string}[]>([]);
   const [loading,   setLoading]   = useState(false);
@@ -33,31 +41,48 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
     setInput('');
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
     try {
-      const res = await fetch('http://localhost:3743/api/scopelogic/prompt', {
+      // Route through NeuroSync's own backend (ScopeLogic interview) — never a raw
+      // LLM endpoint and never a hardcoded credential. The backend owns prompt
+      // construction, provider routing (RouteSwitch), and per-project session state.
+      const res = await authFetch(`${API}/api/scopelogic/prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg })
+        body: JSON.stringify({ message: userMsg, projectId: activeProjectId || null }),
+        signal: controller.signal
       });
-      const data = await res.json();
+      clearTimeout(timeoutId);
 
-      if (data.response) {
-        setChatLog(prev => [...prev, { role: 'system', content: data.response }]);
-      } else if (data.reply) {
-        setChatLog(prev => [...prev, { role: 'system', content: data.reply }]);
+      if (!res.ok) {
+        if (res.status === 429) throw new Error('Too Many Requests (429)');
+        if (res.status >= 500) throw new Error(`Server Error (${res.status})`);
+        throw new Error(`Network error: ${res.status} ${res.statusText}`);
       }
 
-      if (data.dagProposal) {
-        setComplete(true);
-        setChatLog(prev => [...prev, {
-          role: 'system',
-          content: `✅ DAG Proposal Generated: ${data.dagProposal.nodes.length} tasks ready for review on the canvas.`
-        }]);
-        onProposal?.(data.dagProposal);
+      // The endpoint answers with a single JSON object (not an SSE stream).
+      const data = await res.json();
+      const reply = data.reply || data.response || data.message || 'Acknowledged.';
+      setChatLog(prev => [...prev, { role: 'system', content: reply }]);
+
+      if (data.isComplete || data.ready || data.dagProposal) {
+        const prop = data.dagProposal || data.proposal;
+        if (prop && Array.isArray(prop.nodes)) {
+          const proposal = { id: prop.id ?? crypto.randomUUID(), status: 'draft', nodes: prop.nodes };
+          setComplete(true);
+          onProposal?.(proposal);
+        }
       }
 
     } catch (err: any) {
-      const simple = "Something went wrong sending that message. Please try again.";
+      clearTimeout(timeoutId);
+      const isTimeout = err.name === 'AbortError';
+      const simple = isTimeout 
+        ? "Request timed out. Please check your local LLM connection." 
+        : "Something went wrong sending that message. Please try again.";
+        
       setChatLog(prev => [...prev, {
         role: 'system',
         content: isDeveloperMode ? `${simple} (Developer Mode: ${err.message})` : simple
@@ -70,7 +95,7 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
   // §1.1 — Compact chip view; restores the full panel on click.
   if (minimized) {
     return (
-      <div className="glass-panel animate-fade-in" style={{
+      <div className={`${isConstrained ? 'solid-panel' : 'glass-panel'} animate-fade-in`} style={{
         padding: '8px 10px',
         display: 'flex',
         alignItems: 'center',
@@ -94,7 +119,7 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
   }
 
   return (
-    <div className="glass-panel p-4 flex flex-col gap-4 animate-fade-in max-w-md w-full h-[400px]">
+    <div className={`${isConstrained ? 'solid-panel' : 'glass-panel'} p-4 flex flex-col gap-4 animate-fade-in max-w-md w-full h-[400px]`}>
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-accent">💬 ScopeLogic Interview</h2>
         <button

@@ -1,18 +1,10 @@
 import { parentPort, isMainThread } from 'worker_threads';
+import * as ts from 'typescript';
+import { jaroWinkler } from '@skyra/jaro-winkler';
 
-interface ASTNode {
-  type: string;
-  name?: string;
-  value?: string;
-  children?: ASTNode[];
-}
-
-const STOP_WORDS = new Set(['function', 'const', 'let', 'var', 'class', 'import', 'export', 'default', 'return']);
-
-// Mock Jaro-Winkler edit distance for AST reduction and deduplication
-function jaroWinkler(s1: string, s2: string): number {
+// A simple fallback for jaroWinkler if the dependency isn't available
+function jaroWinklerFallback(s1: string, s2: string): number {
   if (s1 === s2) return 1.0;
-  // Very simplified mock for demonstration
   let matching = 0;
   for (let i = 0; i < Math.min(s1.length, s2.length); i++) {
     if (s1[i] === s2[i]) matching++;
@@ -20,30 +12,53 @@ function jaroWinkler(s1: string, s2: string): number {
   return matching / Math.max(s1.length, s2.length);
 }
 
+// Ensure we have a jaroWinkler implementation
+const jw = typeof jaroWinkler === 'function' ? jaroWinkler : jaroWinklerFallback;
+
+const STOP_WORDS = new Set(['function', 'const', 'let', 'var', 'class', 'import', 'export', 'default', 'return']);
+
 function filterStopWords(name: string): boolean {
   return !STOP_WORDS.has(name.toLowerCase());
 }
 
-function processASTNode(node: ASTNode, symbols: any[]) {
-  if (node.type === 'ExportNamedDeclaration' && node.name && filterStopWords(node.name)) {
-    symbols.push({ type: 'export', name: node.name });
-  }
-  if (node.type === 'ImportDeclaration' && node.name) {
-    symbols.push({ type: 'import', name: node.name });
-  }
-  if (node.children) {
-    for (const child of node.children) {
-      processASTNode(child, symbols);
+function processASTNode(node: ts.Node, symbols: any[]) {
+  if (ts.isExportDeclaration(node)) {
+    if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+      node.exportClause.elements.forEach(el => {
+        if (filterStopWords(el.name.text)) {
+          symbols.push({ type: 'export', name: el.name.text });
+        }
+      });
+    }
+  } else if (ts.isFunctionDeclaration(node) && node.name) {
+    if (filterStopWords(node.name.text)) {
+      symbols.push({ type: 'function', name: node.name.text });
+    }
+  } else if (ts.isClassDeclaration(node) && node.name) {
+    if (filterStopWords(node.name.text)) {
+      symbols.push({ type: 'class', name: node.name.text });
+    }
+  } else if (ts.isVariableStatement(node)) {
+    node.declarationList.declarations.forEach(decl => {
+      if (ts.isIdentifier(decl.name) && filterStopWords(decl.name.text)) {
+        symbols.push({ type: 'variable', name: decl.name.text });
+      }
+    });
+  } else if (ts.isImportDeclaration(node)) {
+    const moduleSpecifier = node.moduleSpecifier;
+    if (ts.isStringLiteral(moduleSpecifier)) {
+      symbols.push({ type: 'import', name: moduleSpecifier.text });
     }
   }
+  ts.forEachChild(node, child => processASTNode(child, symbols));
 }
 
 function deduplicateSymbols(symbols: any[]): any[] {
-  const unique = [];
+  const unique: any[] = [];
   for (const sym of symbols) {
     let duplicate = false;
     for (const u of unique) {
-      if (sym.type === u.type && jaroWinkler(sym.name, u.name) > 0.95) {
+      if (sym.type === u.type && jw(sym.name, u.name) > 0.95) {
         duplicate = true;
         break;
       }
@@ -54,22 +69,10 @@ function deduplicateSymbols(symbols: any[]): any[] {
 }
 
 function parseAndReduceAST(sourceCode: string): any[] {
-  // Mocking parsing oxc-parser
-  const mockAST: ASTNode = {
-    type: 'Program',
-    children: [
-      { type: 'ImportDeclaration', name: 'worker_threads' },
-      { type: 'ExportNamedDeclaration', name: 'MyFunction' },
-      { type: 'ExportNamedDeclaration', name: 'MyFunction' }, // Duplicate to test Jaro-Winkler
-      { type: 'FunctionDeclaration', name: 'InternalHelper' }
-    ]
-  };
-  
+  const sourceFile = ts.createSourceFile('temp.ts', sourceCode, ts.ScriptTarget.Latest, true);
   const rawSymbols: any[] = [];
-  processASTNode(mockAST, rawSymbols);
-  const reducedSymbols = deduplicateSymbols(rawSymbols);
-  
-  return reducedSymbols;
+  processASTNode(sourceFile, rawSymbols);
+  return deduplicateSymbols(rawSymbols);
 }
 
 if (!isMainThread && parentPort) {

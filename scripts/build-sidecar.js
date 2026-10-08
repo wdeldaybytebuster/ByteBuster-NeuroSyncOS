@@ -1,0 +1,230 @@
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const ROOT_DIR = path.resolve(__dirname, '..');
+const TAURI_DIR = path.join(ROOT_DIR, 'src-tauri');
+const BINARIES_DIR = path.join(TAURI_DIR, 'binaries');
+const RESOURCES_BIN_DIR = path.join(TAURI_DIR, 'resources', 'bin');
+
+const NATIVE_DEPS = [
+  { pkg: 'better-sqlite3', file: 'better_sqlite3.node', srcDir: 'build/Release' },
+  { pkg: 'sqlite-vec', file: 'sqlite-vec.node', srcDir: 'prebuilds/linux-x64' }, // Simplified example
+  { pkg: 'node-pty', file: 'pty.node', srcDir: 'build/Release' },
+  { pkg: 'argon2', file: 'argon2.node', srcDir: 'lib/binding/napi-v3' }
+];
+
+console.log('[Sidecar Build] Starting...');
+
+// Ensure output directories exist
+if (!fs.existsSync(BINARIES_DIR)) {
+  fs.mkdirSync(BINARIES_DIR, { recursive: true });
+}
+if (!fs.existsSync(RESOURCES_BIN_DIR)) {
+  fs.mkdirSync(RESOURCES_BIN_DIR, { recursive: true });
+}
+
+// 0. Pre-bundle the TypeScript server entry into a single CommonJS file.
+//
+// pkg cannot consume TypeScript: it snapshots the .ts sources verbatim and the
+// resulting binary aborts on first import with
+// "SyntaxError: Cannot use import statement outside a module". Bundling to JS
+// first gives pkg a real JavaScript entry point.
+//
+// Native addons are marked external so they stay real `require()` calls: pkg
+// then walks them from node_modules into the snapshot instead of esbuild
+// trying (and failing) to inline a .node binary.
+//
+// esbuild `--target` matches the Node runtime pkg actually embeds. This is not
+// cosmetic: the embedded runtime's NODE_MODULE_VERSION must equal the ABI the
+// native addons in node_modules were compiled for, or better-sqlite3 aborts
+// with ERR_DLOPEN_FAILED. The workspace toolchain is Node 20, so both the
+// esbuild target and the pkg targets below are node20.
+// esbuild replaces `import.meta` with an empty object in the CommonJS output
+// format, so any bundled dependency that reads `import.meta.url` gets
+// `fileURLToPath(undefined)` and dies on load (node-cron does exactly this to
+// locate its daemon.js). Define it as a real file URL for the bundle instead.
+const IMPORT_META_SHIM = `var __importMetaUrl = require('url').pathToFileURL(__filename).href;`;
+const NODE_CRON_FORK_SHIM =
+  `var __nodeCronChildProcess = require('child_process'); ` +
+  `var __nodeCronOriginalFork = __nodeCronChildProcess.fork; ` +
+  `__nodeCronChildProcess.fork = function(modulePath, ...args) { ` +
+  `var resourceDir = process.env.NEUROSYNC_RESOURCE_DIR; ` +
+  `var isNodeCronDaemon = typeof modulePath === 'string' && ` +
+  `modulePath.includes('node-cron') && modulePath.endsWith('daemon.cjs'); ` +
+  `if (isNodeCronDaemon && resourceDir) { ` +
+  `var stagedDaemon = require('path').join(resourceDir, 'resources', 'bin', 'daemon.cjs'); ` +
+  `if (require('fs').existsSync(stagedDaemon)) modulePath = stagedDaemon; } ` +
+  `return __nodeCronOriginalFork.call(this, modulePath, ...args); };`;
+const SERVER_BANNER = `${IMPORT_META_SHIM};${NODE_CRON_FORK_SHIM}`;
+const IMPORT_META_DEFINE = '--define:import.meta.url=__importMetaUrl';
+
+const SERVER_BUNDLE = path.join(ROOT_DIR, 'dist', 'server.cjs');
+const ESBUILD_EXTERNALS = [
+  'better-sqlite3',
+  'node-pty',
+  'argon2',
+  'sqlite-vec',
+  'node-llama-cpp',
+  'poolifier',
+  'node-cron',
+  'esbuild',
+].map((pkgName) => `--external:${pkgName}`).join(' ');
+
+console.log('[Sidecar Build] Pre-bundling src/server/index.ts with esbuild...');
+try {
+  execSync(
+    `npx esbuild src/server/index.ts --bundle --platform=node --target=node20 --format=cjs ` +
+    `--outfile="${SERVER_BUNDLE}" --banner:js="${SERVER_BANNER}" ${IMPORT_META_DEFINE} ${ESBUILD_EXTERNALS}`,
+    { cwd: ROOT_DIR, stdio: 'inherit' }
+  );
+  console.log(`[Sidecar Build] Bundled server entry -> ${path.relative(ROOT_DIR, SERVER_BUNDLE)}`);
+} catch (e) {
+  console.error('[Sidecar Build] esbuild pre-bundle failed:', e.message);
+  process.exit(1);
+}
+
+// 0b. Pre-bundle the worker-thread entry points.
+//
+// The CoreExec and Cerebro pools spawn their workers with poolifier, i.e. with
+// `worker_threads` pointing at a FILE PATH. A path inside pkg's virtual
+// snapshot cannot be discovered by poolifier's own existsSync check, so the
+// worker bundles are emitted next to the server bundle in dist/ and shipped in
+// the snapshot via the package.json `pkg.assets` manifest. Their own npm
+// requires stay external so pkg resolves them exactly as it does for the
+// server.
+//
+// The names here must match the packaged branch of resolveWorkerFile() in
+// src/core/coreexec/worker-pool.ts and src/core/memory/cerebro/worker-pool.ts.
+const WORKER_ENTRIES = [
+  { entry: 'src/core/coreexec/worker.ts', name: 'worker.js', externalPackages: true },
+  { entry: 'src/core/memory/cerebro/worker.ts', name: 'worker-cerebro.js', externalPackages: true },
+  // ScoutDaemon's parser worker is staged on the real filesystem, away from
+  // pkg's node_modules snapshot, so bundle its npm dependencies too.
+  { entry: 'src/core/scoutdaemon/gitnexus-worker.ts', name: 'gitnexus-worker.js', externalPackages: false },
+];
+
+// Two destinations per worker, because worker_threads needs a real file in
+// both worlds:
+//   dist/                      — shipped inside the pkg snapshot, which is what
+//                                the packaged runtime resolves by default and
+//                                where its npm requires resolve through pkg.
+//   src-tauri/resources/bin/   — a real file on the host filesystem, staged by
+//                                Tauri as a bundle resource, used as a fallback
+//                                via NEUROSYNC_RESOURCE_DIR.
+const WORKER_OUTPUT_DIRS = ['dist', path.join('src-tauri', 'resources', 'bin')];
+
+for (const worker of WORKER_ENTRIES) {
+  for (const outDir of WORKER_OUTPUT_DIRS) {
+    const outfile = path.join(ROOT_DIR, outDir, worker.name);
+    console.log(`[Sidecar Build] Pre-bundling worker ${worker.entry} -> ${path.relative(ROOT_DIR, outfile)}...`);
+    try {
+      const packageMode = worker.externalPackages ? '--packages=external ' : '';
+      execSync(
+        `npx esbuild ${worker.entry} --bundle --platform=node --target=node20 --format=cjs ` +
+        `${packageMode}--banner:js="${IMPORT_META_SHIM}" ${IMPORT_META_DEFINE} --outfile="${outfile}"`,
+        { cwd: ROOT_DIR, stdio: 'inherit' }
+      );
+    } catch (e) {
+      console.error(`[Sidecar Build] worker pre-bundle failed for ${worker.entry}:`, e.message);
+      process.exit(1);
+    }
+  }
+}
+
+// node-cron's ESM daemon path is resolved relative to its module URL. In the
+// pkg snapshot that path is not a physical child-process entry, so create a
+// real, self-contained CommonJS daemon resource and include a copy in dist for
+// pkg's asset manifest. The server banner redirects only node-cron's daemon
+// forks to the real resource when Tauri supplies NEUROSYNC_RESOURCE_DIR.
+for (const outDir of ['dist', path.join('src-tauri', 'resources', 'bin')]) {
+  const outfile = path.join(ROOT_DIR, outDir, 'daemon.cjs');
+  console.log(`[Sidecar Build] Bundling node-cron daemon -> ${path.relative(ROOT_DIR, outfile)}...`);
+  try {
+    execSync(
+      `npx esbuild node_modules/node-cron/dist/daemon.cjs --bundle --platform=node --target=node20 ` +
+      `--format=cjs --outfile="${outfile}"`,
+      { cwd: ROOT_DIR, stdio: 'inherit' }
+    );
+  } catch (e) {
+    console.error('[Sidecar Build] node-cron daemon bundling failed:', e.message);
+    process.exit(1);
+  }
+}
+
+// 1. Run pkg to generate binaries
+//
+// pkg is invoked in directory mode (`.`) on purpose: the package.json `pkg`
+// config (native-addon assets) is only resolved this way. Passing the bundle
+// file directly silently drops the assets, and the binary then dies at runtime
+// with "Could not locate the bindings file". `package.json.bin` points at the
+// bundled JS entry produced above.
+console.log('[Sidecar Build] Compiling Node.js binary with pkg...');
+try {
+  // Map standard pkg targets to Tauri target triples
+  execSync('npx pkg . --target node20-linux-x64,node20-macos-x64,node20-win-x64 --out-path src-tauri/binaries', {
+    cwd: ROOT_DIR,
+    stdio: 'inherit'
+  });
+} catch (e) {
+  console.error('[Sidecar Build] pkg compilation failed:', e.message);
+  process.exit(1);
+}
+
+// Tauri expects sidecar binaries to have the target triple suffix.
+// pkg outputs files like: neurosyncmega-linux, neurosyncmega-macos, neurosyncmega-win.exe
+// bundle.externalBin declares the base path "binaries/neurosyncmega", so the CLI
+// resolves the on-disk artifact as <base>-<target-triple>. We must therefore emit:
+// neurosyncmega-x86_64-unknown-linux-gnu, neurosyncmega-x86_64-apple-darwin,
+// neurosyncmega-x86_64-pc-windows-msvc.exe
+
+const renameMap = {
+  'neurosyncmega-linux': 'neurosyncmega-x86_64-unknown-linux-gnu',
+  'neurosyncmega-macos': 'neurosyncmega-x86_64-apple-darwin',
+  'neurosyncmega-win.exe': 'neurosyncmega-x86_64-pc-windows-msvc.exe'
+};
+
+for (const [src, dest] of Object.entries(renameMap)) {
+  const srcPath = path.join(BINARIES_DIR, src);
+  const destPath = path.join(BINARIES_DIR, dest);
+  if (fs.existsSync(srcPath)) {
+    fs.renameSync(srcPath, destPath);
+    console.log(`[Sidecar Build] Renamed ${src} to ${dest}`);
+  }
+}
+
+// 2. Extract Native C-Extensions
+console.log('[Sidecar Build] Copying native C-extensions to resources/bin...');
+let missingDeps = 0;
+
+for (const dep of NATIVE_DEPS) {
+  const potentialPaths = [
+    path.join(ROOT_DIR, 'node_modules', dep.pkg, dep.srcDir, dep.file),
+    // Some packages dynamically select bindings based on platform. 
+    // For a real production build you'd map triples accurately, but we copy the local architecture bindings.
+    path.join(ROOT_DIR, 'node_modules', dep.pkg, 'build', 'Release', dep.file),
+    path.join(ROOT_DIR, 'node_modules', dep.pkg, 'lib', 'binding', 'napi-v3', dep.file),
+    path.join(ROOT_DIR, 'node_modules', dep.pkg, 'prebuilds', 'linux-x64', dep.file)
+  ];
+
+  let found = false;
+  for (const p of potentialPaths) {
+    if (fs.existsSync(p)) {
+      const destPath = path.join(RESOURCES_BIN_DIR, dep.file);
+      fs.copyFileSync(p, destPath);
+      console.log(`[Sidecar Build] Copied ${dep.file} successfully.`);
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    console.warn(`[Sidecar Build] WARNING: Could not locate compiled binding for ${dep.pkg} (${dep.file})`);
+    missingDeps++;
+  }
+}
+
+console.log('[Sidecar Build] Sidecar compilation and resource bundling complete.');
+if (missingDeps > 0) {
+  console.warn(`[Sidecar Build] Completed with ${missingDeps} missing native dependencies.`);
+}

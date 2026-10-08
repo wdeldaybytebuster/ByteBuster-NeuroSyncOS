@@ -41,9 +41,9 @@ describe('ScopeLogic LLM-driven DAG proposal', () => {
     // A schema-shaped response with a distinctive 3-node structure and confidence.
     const llmDag = {
       nodes: [
-        { id: 'ingest', dependencies: [], prompt: 'Ingest the daily sales CSV export' },
-        { id: 'dedupe', dependencies: ['ingest'], prompt: 'Deduplicate rows by order id' },
-        { id: 'report', dependencies: ['dedupe'], prompt: 'Email a summary report to ops' },
+        { id: 'ingest', dependencies: [], prompt: 'Ingest the daily sales CSV export', harness_profile: 'planner' },
+        { id: 'dedupe', dependencies: ['ingest'], prompt: 'Deduplicate rows by order id', harness_profile: 'generator', params: { mode: 'strict' } },
+        { id: 'report', dependencies: ['dedupe'], prompt: 'Email a summary report to ops', plugin: 'report_writer' },
       ],
       confidence: 0.87,
     };
@@ -60,6 +60,10 @@ describe('ScopeLogic LLM-driven DAG proposal', () => {
     expect(reply.dagProposal?.nodes.some(n => /Deduplicate rows by order id/.test(n.prompt))).toBe(true);
     // Model self-reported confidence is threaded through.
     expect(reply.dagProposal?.confidence).toBe(0.87);
+    expect(reply.dagProposal?.nodes[0]?.harness_profile).toBe('planner');
+    expect(reply.dagProposal?.nodes[1]?.harness_profile).toBe('generator');
+    expect(reply.dagProposal?.nodes[1]?.params).toEqual({ mode: 'strict' });
+    expect(reply.dagProposal?.nodes[2]?.plugin).toBe('report_writer');
   });
 
   it('falls back to the template DAG (no confidence) when the LLM call throws', async () => {
@@ -108,5 +112,24 @@ describe('ScopeLogic LLM-driven DAG proposal', () => {
     const templateReply = templateOnly.processUserInput("Please use CoreExec to restart things. that's it");
     expect(templateReply.dagProposal).toBeUndefined();
     expect(templateReply.response).toMatch(/SA-07/);
+  });
+
+  it('carries the LLM self-reported "reasoning" field through to the proposal', async () => {
+    const llmDag = {
+      reasoning: 'A single ingest-then-report pipeline covers the described workflow.',
+      nodes: [{ id: 'n1', dependencies: [], prompt: 'ingest and report daily sales' }],
+      confidence: 0.8,
+    };
+    const generateFn = async () => JSON.stringify(llmDag);
+    const session = new ScopeLogicSession(generateFn);
+    const reply = await session.processUserInputAsync('Build a sales pipeline. done');
+    expect(reply.dagProposal?.reasoning).toBe('A single ingest-then-report pipeline covers the described workflow.');
+  });
+
+  it('always populates a real (non-fabricated) reasoning on the template fallback path', () => {
+    const session = new ScopeLogicSession();
+    const reply = session.processUserInput("Build a pipeline. that's it");
+    expect(reply.dagProposal?.reasoning).toBeTruthy();
+    expect(reply.dagProposal?.reasoning).toMatch(/Deterministic template/);
   });
 });

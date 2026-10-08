@@ -1,88 +1,32 @@
-import { serve } from '@hono/node-server';
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import { RouteSwitchEngine } from '../core/routeswitch/engine';
-import { FreeModeGovernor, systemGovernor } from '../core/routeswitch/governor';
-import { instantiateProvider } from '../core/routeswitch/provider-factory';
-import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from '../core/coreexec/engine';
-import { db, initDB } from '../core/basevault/db';
-import { WorkflowRunSchema, TaskSchema, partitionBySchema } from '../core/basevault/schema';
-import { scoutRouter } from '../core/scoutdaemon/sse';
-import { serveStatic } from '@hono/node-server/serve-static';
-import { injectLLMGenerator, ReflectionExecutor } from '../core/memory/cerebro/reflection';
-import path from 'path';
-import fs from 'fs';
+// §6.0 — Genesis Hardware Profiler integration
+// This bootstrapper runs the profiler if --profile is passed.
+// It outputs the hardware constraints as JSON and exits.
+// Tauri orchestrates this: it runs `sidecar --profile` first, reads the JSON,
+// then sets UV_THREADPOOL_SIZE and memory ceilings BEFORE spawning the main sidecar.
+// This strictly enforces Axiom 6 for the edge node constraint.
 
-import { readiness } from '../core/basevault/readiness';
-import { log } from '../core/observability/logger';
+if (process.argv.includes('--profile')) {
+  import('../core/scoutdaemon/hardware-profiler.js').then(async ({ runGenesisProfiler, getEnvRule }) => {
+    try {
+      await runGenesisProfiler(false); // Runs probe and writes to DB only if missing
 
-const app = new Hono();
+      const uv = getEnvRule('UV_THREADPOOL_SIZE', '3');
+      const maxOldSpace = getEnvRule('max_old_space_size_mb', '1024');
 
-// Global CORS to allow Vite frontend to access API
-app.use('/*', cors());
-
-// Rate Limiter Memory Store
-const rateLimits = new Map<string, { count: number, resetTime: number }>();
-
-app.use('/*', async (c, next) => {
-  // 1. Payload Size Limit (64 KB)
-  const contentLength = c.req.header('content-length');
-  if (contentLength && parseInt(contentLength, 10) > 64 * 1024) {
-    return c.json({ error: 'Payload Too Large' }, 413);
-  }
-
-  // 2. Rate Limiting (120 req/min per client)
-  const ip = c.req.header('x-forwarded-for') || '127.0.0.1';
-  const now = Date.now();
-  let limit = rateLimits.get(ip);
-  if (!limit || limit.resetTime < now) {
-    limit = { count: 0, resetTime: now + 60000 };
-  }
-  if (limit.count >= 120) {
-    return c.json({ error: 'Too Many Requests' }, 429);
-  }
-  limit.count++;
-  rateLimits.set(ip, limit);
-
-  // 3. Authentication & Exemptions
-  const path = c.req.path;
-  if (path.startsWith('/health') || path.startsWith('/api/config')) {
-    return next();
-  }
-  
-  if (!readiness.configured) {
-    return next();
-  }
-
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader) {
-    // If we're hitting API routes but missing auth
-    if (path.startsWith('/api/')) {
-      return c.json({ error: 'Unauthorized' }, 401);
+      console.log(JSON.stringify({
+        UV_THREADPOOL_SIZE: uv,
+        NODE_OPTIONS: `--max-old-space-size=${maxOldSpace}`
+      }));
+      
+      process.exit(0);
+    } catch (err) {
+      console.error('[NeuroSync] Boot: Profiler failed', err);
+      process.exit(1);
     }
-  }
-
-  await next();
-});
-
-// Initialize Database
-initDB();
-
-// Initialize Scheduler
-import { initScheduler } from '../core/coreexec/scheduler';
-initScheduler();
-
-// Crash recovery: re-drive any workflow_runs left 'running'/'pending' by a hard
-// crash through the existing idempotent executeRun loop, so the "resumes from
-// the last completed step" guarantee actually holds after a non-graceful death.
-// Fire-and-forget per run (executeRun logs/parks its own failures); resumeInProgressRuns
-// itself logs how many it found so this is observable rather than silent.
-resumeInProgressRuns();
-
-// Serve Static UI in Production
-const distPath = path.resolve(__dirname, '../../dist/ui');
-if (fs.existsSync(distPath)) {
-  app.use('/*', serveStatic({ root: 'dist/ui' }));
+  });
+} else {
+  // Main server process (environment is constrained by Tauri before execution)
+  import('./server-main.js');
 }
 
 

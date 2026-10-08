@@ -1,9 +1,32 @@
-import { LLMProvider } from '../providers';
+import { GenerationStreamHooks, LLMProvider, ProviderCapabilities } from '../providers';
 
 export class MockProvider implements LLMProvider {
   id = 'mock';
 
-  async generate(prompt: string, estimatedTokens: number, schema?: any): Promise<string> {
+  /**
+   * Capability matrix for the synthetic offline mock (P8-4).
+   * No real inference runs, so every modality/feature is explicitly
+   * declared unsupported except structured output — `generate()` returns
+   * schema-shaped JSON payloads when a schema is supplied.
+   */
+  readonly capabilities: ProviderCapabilities = {
+    supportsVision: false,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    contextWindowTokens: 4096,
+    inputTypes: ['text'],
+    // Mock is a synthetic offline provider — no real modality.
+    // Declared explicitly for P8-4 contract completeness.
+  };
+
+  // Synthetic offline provider: no real inference, so no real per-token
+  // confidence. `streamHooks` is intentionally ignored (heuristic fallback).
+  async generate(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    _streamHooks?: GenerationStreamHooks,
+  ): Promise<string> {
     // Simulate realistic delay based on requested token size
     const delayMs = Math.min(Math.max(estimatedTokens * 0.5, 50), 2000);
     await new Promise(resolve => setTimeout(resolve, delayMs));

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Folder, File, ChevronUp, X, FolderOpen } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface PathBrowserProps {
   isOpen: boolean;
@@ -29,7 +29,7 @@ export function PathBrowser({ isOpen, onClose, onSelect, mode, fileFilter, title
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API}/api/system/browse-directory`, {
+      const res = await authFetch(`${API}/api/system/browse-directory`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: dirPath || undefined }),

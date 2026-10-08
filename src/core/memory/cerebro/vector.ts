@@ -1,6 +1,66 @@
 import { db } from '../../basevault/db';
 import crypto from 'crypto';
 
+/**
+ * CerebroDashboard's "Base Score" / "Match Boost" sliders (Memory Search
+ * Settings, keyword-fallback section) persisted `cerebro_keyword_base` /
+ * `cerebro_keyword_boost` to system_settings since their introduction, but
+ * nothing ever read either key back — `_keywordFallbackSearch` always used
+ * the hardcoded formula `0.7 + (matchCount * 0.05)`. These are the defaults,
+ * matching that formula exactly so a fresh install (no settings row yet, or
+ * any test that never touches system_settings) behaves identically to
+ * before this change.
+ */
+export const DEFAULT_KEYWORD_BASE = 0.7;
+export const DEFAULT_KEYWORD_BOOST = 0.05;
+
+const KEYWORD_SETTINGS_CACHE_TTL_MS = 2000;
+let cachedKeywordBase = DEFAULT_KEYWORD_BASE;
+let cachedKeywordBoost = DEFAULT_KEYWORD_BOOST;
+let cachedKeywordSettingsAt = 0;
+
+/**
+ * Short-TTL cached read of the two keyword-fallback settings, same pattern
+ * as `isFreeModeUnlocked` in `src/core/routeswitch/governor.ts` — a UI
+ * change takes effect within a couple seconds without a DB hit on every
+ * search call. Exported so `search`/`_keywordFallbackSearch` callers outside
+ * this module (e.g. tests) can also read the currently-effective values.
+ */
+export function getKeywordScoringSettings(): { baseScore: number; matchBoost: number } {
+  const now = Date.now();
+  if (now - cachedKeywordSettingsAt > KEYWORD_SETTINGS_CACHE_TTL_MS) {
+    cachedKeywordSettingsAt = now;
+    try {
+      const rows = db
+        .prepare(
+          `SELECT key, value FROM system_settings WHERE key IN ('cerebro_keyword_base', 'cerebro_keyword_boost')`,
+        )
+        .all() as { key: string; value: string }[];
+
+      let baseScore = DEFAULT_KEYWORD_BASE;
+      let matchBoost = DEFAULT_KEYWORD_BOOST;
+      for (const row of rows) {
+        const n = Number(row.value);
+        if (!Number.isFinite(n)) continue;
+        if (row.key === 'cerebro_keyword_base') baseScore = n;
+        if (row.key === 'cerebro_keyword_boost') matchBoost = n;
+      }
+      cachedKeywordBase = baseScore;
+      cachedKeywordBoost = matchBoost;
+    } catch {
+      // DB not initialized yet, or table missing — safe defaults.
+      cachedKeywordBase = DEFAULT_KEYWORD_BASE;
+      cachedKeywordBoost = DEFAULT_KEYWORD_BOOST;
+    }
+  }
+  return { baseScore: cachedKeywordBase, matchBoost: cachedKeywordBoost };
+}
+
+/** Test-only: force the keyword-scoring settings cache to re-read. */
+export function _resetKeywordScoringCache(): void {
+  cachedKeywordSettingsAt = 0;
+}
+
 export interface MemoryRecord {
   id: string;
   content: string;
@@ -27,15 +87,37 @@ export class CerebroVectorStore {
       INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, content, type, projectId ?? null, now, 0, now);
+  public static insert(content: string, type: string, embedding?: Float32Array, projectId?: string | null, isAutoIngested: boolean = false, sourceTool?: string): string {
+    const id = crypto.randomUUID();
+    const now = Date.now();
 
-    // 2. Insert Vector if provided
-    if (embedding) {
+    if (isAutoIngested) {
       db.prepare(`
-        INSERT INTO cerebro_memories_vec (id, embedding)
-        VALUES (?, ?)
-      `).run(id, embedding);
-    }
+        INSERT INTO memory_quarantine (id, content, type, project_id, last_accessed_at, access_count, created_at, taint_flag, source_tool)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, content, type, projectId ?? null, now, 0, now, 1, sourceTool ?? null);
 
+      if (embedding) {
+        db.prepare(`
+          INSERT INTO memory_quarantine_vec (id, embedding)
+          VALUES (?, vec_quantize_binary(?))
+        `).run(id, embedding);
+      }
+    } else {
+      // 1. Insert Meta
+      db.prepare(`
+        INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at, source_tool)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, content, type, projectId ?? null, now, 0, now, sourceTool ?? null);
+
+      // 2. Insert Vector if provided
+      if (embedding) {
+        db.prepare(`
+          INSERT INTO cerebro_memories_vec (id, embedding)
+          VALUES (?, vec_quantize_binary(?))
+        `).run(id, embedding);
+      }
+    }
     return id;
   }
 
@@ -61,7 +143,7 @@ export class CerebroVectorStore {
       SELECT m.id, m.content, m.type, m.project_id, m.last_accessed_at, m.access_count, m.created_at, v.distance
       FROM cerebro_memories_vec v
       JOIN cerebro_memories_meta m ON v.id = m.id
-      WHERE v.embedding MATCH ? AND k = ?
+      WHERE v.embedding MATCH vec_quantize_binary(?) AND k = ?
       ${filterSQL}
       ${scopeSQL}
       ORDER BY v.distance ASC
@@ -86,6 +168,10 @@ export class CerebroVectorStore {
   private static _keywordFallbackSearch(query: string, typeFilter?: string, limit: number = 5, projectId?: string): MemoryRecord[] {
     // Deterministic fallback: Token filter length > 3
     // Formula: Similarity = 0.7 + (matchCount * 0.05)
+    // Formula: Similarity = baseScore + (matchCount * matchBoost), read from
+    // CerebroDashboard's "Base Score" / "Match Boost" settings (defaults
+    // 0.7 / 0.05, matching the pre-existing hardcoded formula).
+    const { baseScore, matchBoost } = getKeywordScoringSettings();
 
     const queryTokens = query.toLowerCase().split(/\W+/).filter(t => t.length > 3);
 
@@ -114,7 +200,7 @@ export class CerebroVectorStore {
         }
       }
 
-      const similarity = matchCount > 0 ? 0.7 + (matchCount * 0.05) : 0;
+      const similarity = matchCount > 0 ? baseScore + (matchCount * matchBoost) : 0;
       
       return {
         ...record,

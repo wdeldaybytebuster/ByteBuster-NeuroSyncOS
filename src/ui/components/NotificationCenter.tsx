@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle, AlertTriangle, Key, FileUp } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface OsTodo {
   id: string;
@@ -21,13 +21,15 @@ export function NotificationCenter() {
 
   const fetchTodos = async () => {
     try {
-      const res = await fetch(`${API}/api/todos`);
+      const res = await authFetch(`${API}/api/todos`);
       const data = await res.json();
       if (data.success) {
         setTodos(data.todos);
       }
-    } catch (err) {
-      console.error('Failed to fetch OS Todos', err);
+    } catch (err: any) {
+      if (!(err instanceof TypeError || err.message === 'Failed to fetch')) {
+        console.error('Failed to fetch OS Todos', err);
+      }
     } finally {
       setLoading(false);
     }
@@ -43,15 +45,17 @@ export function NotificationCenter() {
   const handleResolve = async (todoId: string, actionType: string) => {
     try {
       const resolutionData = resolutionInputs[todoId] || (actionType === 'APPROVE_BOOLEAN' ? 'approved' : '');
-      await fetch(`${API}/api/todos/resolve`, {
+      await authFetch(`${API}/api/todos/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ todoId, resolutionData })
       });
       // Refresh list
       fetchTodos();
-    } catch (err) {
-      console.error('Failed to resolve todo', err);
+    } catch (err: any) {
+      if (!(err instanceof TypeError || err.message === 'Failed to fetch')) {
+        console.error('Failed to resolve todo', err);
+      }
     }
   };
 
@@ -108,7 +112,7 @@ export function NotificationCenter() {
             {todo.required_action_type === 'FILE_UPLOAD' && (
               <div className="flex-1 flex gap-2 items-center text-sm text-gray-400 bg-gray-900 border border-gray-600 rounded px-3 py-1 border-dashed">
                 <FileUp size={16} />
-                <span>[Mock] Provide required file path</span>
+                <span>Provide required file path</span>
                 <input 
                   type="text" 
                   placeholder="/path/to/file.pdf" 

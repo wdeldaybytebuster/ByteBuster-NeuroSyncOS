@@ -3,8 +3,9 @@ import { ReactFlow, Controls, Background, BackgroundVariant, MiniMap, Handle, Po
 import type { Node, Edge } from '@xyflow/react';
 import { useNavigation } from '../layouts/OSLayout';
 import { X, Brain, Globe, User, FolderOpen } from 'lucide-react';
+import { ModeLabel } from './ModeLabel';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 // Tier colors
 const TIER_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
@@ -48,7 +49,7 @@ export function OKFMindmap({ isOpen, onClose }: OKFMindmapProps) {
 
   const handleNodeSelect = useCallback(async (nodeId: string) => {
     try {
-      const res = await fetch(`${API}/api/okf/file-content?nodeId=${encodeURIComponent(nodeId)}`);
+      const res = await authFetch(`${API}/api/okf/file-content?nodeId=${encodeURIComponent(nodeId)}`);
       const data = await res.json();
       if (data.success) {
         setSelectedFile(data);
@@ -63,7 +64,7 @@ export function OKFMindmap({ isOpen, onClose }: OKFMindmapProps) {
       if (activeTier !== 'ALL') url += `tier=${activeTier}&`;
       if (activeProjectId) url += `projectId=${encodeURIComponent(activeProjectId)}`;
 
-      const res = await fetch(url);
+      const res = await authFetch(url);
       const data = await res.json();
       if (data.success) {
         // Layout nodes in a radial/grid pattern
@@ -110,7 +111,7 @@ export function OKFMindmap({ isOpen, onClose }: OKFMindmapProps) {
         <div className="h-14 shrink-0 flex items-center justify-between px-4 border-b border-white/5 bg-black/60">
           <div className="flex items-center gap-3">
             <Brain size={18} className="text-teal-400" />
-            <span className="text-sm font-bold text-white uppercase tracking-wider">OKF Knowledge Mindmap</span>
+            <span className="text-sm font-bold text-white uppercase tracking-wider"><ModeLabel simple="Notes & Docs Map" dev="OKF Knowledge Mindmap" /></span>
           </div>
 
           {/* Tier tabs */}

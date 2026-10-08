@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { RouteSwitchConfig } from './RouteSwitchConfig';
 import { RoutingDials } from './RoutingDials';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
+import { authFetch, openEventSource } from '../lib/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,6 +12,8 @@ interface SettingsModalProps {
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { isDeveloperMode } = useDeveloperMode();
+  const hardwareTier = useHardwareTier();
+  const isConstrained = hardwareTier === 'constrained';
   const [provider, setProvider] = useState('mock');
   const [statusMsg, setStatusMsg] = useState('');
   
@@ -23,14 +27,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   // Load from localStorage and backend on mount
   useEffect(() => {
-    fetch('/api/system/settings')
+    authFetch('/api/system/settings')
       .then(res => res.json())
       .then(data => {
         if (data.success && data.settings && data.settings.llm_api_key) {
           setApiKey(data.settings.llm_api_key);
         }
       })
-      .catch(console.error);
+      .catch((err: any) => { if (!(err instanceof TypeError || err.message === 'Failed to fetch')) console.error(err); });
 
     const saved = localStorage.getItem('neurosync_provider_config');
     if (saved) {
@@ -58,7 +62,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         payload.config = { modelPath };
       }
 
-      const res = await fetch('http://localhost:3743/api/routeswitch/provider', {
+      const res = await authFetch('http://localhost:3743/api/routeswitch/provider', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -67,11 +71,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       
       if (data.success) {
         if (provider === 'openai-compatible' && apiKey) {
-          await fetch('/api/system/settings', {
+          await authFetch('/api/system/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ llm_api_key: apiKey })
-          }).catch(console.error);
+          }).catch((err: any) => { if (!(err instanceof TypeError || err.message === 'Failed to fetch')) console.error(err); });
         }
         
         setStatusMsg(`✅ ${data.message}`);
@@ -100,7 +104,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleBackup = () => {
     setBackupProgress(0);
-    const eventSource = new EventSource('/api/system/backup');
+    const eventSource = openEventSource('/api/system/backup');
     eventSource.addEventListener('backup-progress', (e) => {
       const data = JSON.parse(e.data);
       setBackupProgress(data.progress);
@@ -126,7 +130,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     formData.append('backup_file', restoreFile);
 
     try {
-      const res = await fetch('/api/system/restore', {
+      const res = await authFetch('/api/system/restore', {
         method: 'POST',
         body: formData
       });
@@ -150,7 +154,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 1000
     }}>
-      <div className="glass-panel p-6 max-w-md w-full flex flex-col gap-4 animate-fade-in" style={{
+      <div className={`${isConstrained ? 'solid-panel' : 'glass-panel'} p-6 max-w-md w-full flex flex-col gap-4 animate-fade-in`} style={{
         background: 'var(--bg-glass)',
         border: '1px solid var(--border-glass)',
         borderRadius: '12px',

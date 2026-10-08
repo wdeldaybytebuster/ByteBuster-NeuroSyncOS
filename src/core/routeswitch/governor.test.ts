@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { FreeModeGovernor, ESTIMATED_COST_PER_1K_TOKENS_USD, _resetFreeModeCache } from './governor';
+import {
+  FreeModeGovernor,
+  ESTIMATED_COST_PER_1K_TOKENS_USD,
+  _resetFreeModeCache,
+  _resetBudgetCache,
+  budgetPercentToMaxTokens,
+  BASE_BUDGET_CEILING_TOKENS,
+} from './governor';
 import { db, initDB } from '../basevault/db';
 
 describe('FreeModeGovernor() — §3.2 24h usage tracking + cost derivation', () => {
@@ -132,6 +139,85 @@ describe('FreeModeGovernor() — §3.2 24h usage tracking + cost derivation', ()
     ]; // Total = 3300
 
     expect(() => g.assertCanProceedDAG(nodes)).toThrow(/Governor blocked execution: Estimated DAG tokens \(3300\)/);
+  });
+});
+
+describe('FreeModeGovernor budget setting — CoreExec "Budget & Rigour" dial', () => {
+  beforeAll(() => {
+    initDB();
+  });
+
+  const setBudget = (percent: number | null) => {
+    if (percent === null) {
+      db.prepare("DELETE FROM system_settings WHERE key = 'budget'").run();
+    } else {
+      db.prepare(
+        "INSERT INTO system_settings (key, value) VALUES ('budget', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      ).run(String(percent));
+    }
+    _resetBudgetCache();
+  };
+
+  afterEach(() => {
+    setBudget(null);
+  });
+
+  it('budgetPercentToMaxTokens scales linearly against the base 100,000-token ceiling', () => {
+    expect(budgetPercentToMaxTokens(100)).toBe(BASE_BUDGET_CEILING_TOKENS);
+    expect(budgetPercentToMaxTokens(70)).toBe(70000);
+    expect(budgetPercentToMaxTokens(10)).toBe(10000);
+    expect(budgetPercentToMaxTokens(0)).toBe(0);
+    // Out-of-range inputs are clamped, not trusted blindly.
+    expect(budgetPercentToMaxTokens(150)).toBe(BASE_BUDGET_CEILING_TOKENS);
+    expect(budgetPercentToMaxTokens(-20)).toBe(0);
+  });
+
+  it('canProceed ignores the setting entirely when absent (constructor ceiling wins)', () => {
+    setBudget(null);
+    const g = new FreeModeGovernor(500);
+    expect(g.canProceed(400)).toBe(true);
+    expect(g.canProceed(600)).toBe(false);
+    expect(g.getStatus().maxTokens).toBe(500);
+  });
+
+  it('a low Budget setting makes the governor block a request that a high Budget would have allowed', () => {
+    // Same estimated usage, same starting state — only the persisted Budget
+    // setting differs. This is the "changes a real decision" proof: at 10%
+    // budget (10,000 tokens) a 6,000-token request pushes cumulative usage to
+    // 12,000 and is blocked; at 100% budget (100,000 tokens) the identical
+    // request sails through.
+    setBudget(10);
+    const lowBudgetGov = new FreeModeGovernor(); // default ctor value, overridden by setting
+    expect(lowBudgetGov.canProceed(6000)).toBe(true); // first 6k fits under 10k
+    lowBudgetGov.recordUsage(6000);
+    expect(lowBudgetGov.canProceed(6000)).toBe(false); // 12k > 10k ceiling — BLOCKED
+
+    setBudget(100);
+    const highBudgetGov = new FreeModeGovernor();
+    highBudgetGov.recordUsage(6000);
+    expect(highBudgetGov.canProceed(6000)).toBe(true); // 12k <= 100k ceiling — ALLOWED
+  });
+
+  it('syncBudgetFromSettings updates maxTokens visibly via getStatus()', () => {
+    setBudget(25);
+    const g = new FreeModeGovernor(999999);
+    g.syncBudgetFromSettings();
+    expect(g.getStatus().maxTokens).toBe(25000);
+  });
+
+  it('reflects a live setting change within the cache TTL window', () => {
+    vi.useFakeTimers();
+    try {
+      setBudget(20);
+      const g = new FreeModeGovernor();
+      expect(g.canProceed(20000)).toBe(true); // 20% of 100k = 20,000 exactly fits
+      // Change the setting and advance past the 2s cache TTL so it re-reads.
+      setBudget(5);
+      vi.advanceTimersByTime(2100);
+      expect(g.canProceed(20000)).toBe(false); // 5% of 100k = 5,000 — no longer fits
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

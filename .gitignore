@@ -19,8 +19,11 @@ cookies2.txt
 # Build output
 dist/
 
-# Worker thread bundle, regenerated at process boot (see worker-pool.ts)
-src/core/coreexec/worker.generated.cjs
+# Worker thread bundles, regenerated at process boot by esbuild (see the
+# worker-pool.ts generators under core/coreexec and core/memory/cerebro).
+# Glob covers EVERY generator location and enforces the "No Transient Artifact
+# Edits" rule — never commit or edit *.generated.cjs.
+*.generated.cjs
 
 # Data files (SQLite)
 .data/
@@ -51,9 +54,20 @@ local_models/
 # Database backups
 backup-*.db
 backup-*.db-journal
+# Data directory backups — covers .data.bak_YYYYMMDD_HHMMSS and any variant
+.data.bak*/
+
+# Playwright test artifacts — regenerable, must never be committed
+e2e-report/
+test-results/
+playwright/.cache/
 
 # Python fix scripts (dev-only)
 src/ui/*.py
 
 # Error logs
 ts-errors.txt
+
+# Tauri Binaries and generated bundle resources
+src-tauri/binaries/
+src-tauri/resources/

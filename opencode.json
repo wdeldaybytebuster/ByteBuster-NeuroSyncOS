@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "longcat": {
+      "models": {
+        "LongCat-2.5-Preview": {
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        }
+      }
+    }
+  }
+}

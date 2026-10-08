@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, RotateCcw, RefreshCw, Edit3 } from 'lucide-react';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
 
 interface NodeOutputInspectorProps {
   runId: string;
@@ -29,6 +30,8 @@ export function NodeOutputInspector({
   onEditRerun,
   onRefresh,
 }: NodeOutputInspectorProps) {
+  const hardwareTier = useHardwareTier();
+  const isConstrained = hardwareTier === 'constrained';
   const [tab, setTab] = useState<'output' | 'metadata' | 'errors'>('output');
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +80,7 @@ export function NodeOutputInspector({
         flexDirection: 'column',
         overflow: 'hidden',
       }}
-      className="glass-panel animate-fade-in"
+      className={`${isConstrained ? 'solid-panel' : 'glass-panel'} animate-fade-in`}
     >
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',

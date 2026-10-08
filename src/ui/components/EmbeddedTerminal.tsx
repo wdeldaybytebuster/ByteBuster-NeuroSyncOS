@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import { openWebSocket } from '../lib/api';
 
 const WS_BASE = 'ws://localhost:3743';
 
@@ -44,7 +45,7 @@ export function EmbeddedTerminal({ projectId, accentColor = '#00FFCC' }: Embedde
     };
     safeFit();
 
-    const ws = new WebSocket(`${WS_BASE}/api/portgrid/terminal/${encodeURIComponent(projectId)}`);
+    const ws = openWebSocket(`${WS_BASE}/api/portgrid/terminal/${encodeURIComponent(projectId)}`);
 
     const sendResize = () => {
       if (ws.readyState === WebSocket.OPEN) {

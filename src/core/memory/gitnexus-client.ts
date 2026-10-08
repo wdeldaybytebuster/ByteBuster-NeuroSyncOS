@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { db } from '../basevault/db';
+import { egressFetch } from '../routeswitch/egress';
 
 /**
  * GitNexusClient — optional, best-effort bridge to a locally-installed GitNexus
@@ -128,6 +129,18 @@ async function fetchIndexedRepos(host: string, port: number): Promise<string[]> 
   const res = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(QUERY_TIMEOUT_MS) });
   if (!res.ok) return [];
   const body = (await res.json()) as { repos?: string[] };
+  // §2.3 C9 — through the governed egress door. `internal: true`: this is a
+  // LOCAL eval-server (host from its READY line, assumed loopback), so the
+  // kill switch must not sever it — but a non-loopback host is now blocked
+  // (fail-safe: returns [] → the modality degrades silently, per the file
+  // contract above). timeoutMs replaces the old inline AbortSignal.
+  const res = await egressFetch(
+    `http://${host}:${port}/health`,
+    { internal: true, timeoutMs: QUERY_TIMEOUT_MS },
+    { action: 'fetch', owner: 'memory/gitnexus-client' },
+  );
+  if (!res.ok) return [];
+  const body = JSON.parse(res.text) as { repos?: string[] };
   return body.repos ?? [];
 }
 
@@ -202,11 +215,18 @@ async function ensureServer(): Promise<RunningServer | null> {
 async function gracefulKill(s: RunningServer): Promise<void> {
   try {
     if (s.shutdownToken) {
-      await fetch(`http://${s.host}:${s.port}/shutdown`, {
-        method: 'POST',
-        headers: { 'X-Shutdown-Token': s.shutdownToken },
-        signal: AbortSignal.timeout(3000),
-      }).catch(() => undefined);
+      // §2.3 C9 — governed egress (internal/local); egress never throws, and
+      // the outer catch below still ignores anything unexpected.
+      await egressFetch(
+        `http://${s.host}:${s.port}/shutdown`,
+        {
+          internal: true,
+          timeoutMs: 3000,
+          method: 'POST',
+          headers: { 'X-Shutdown-Token': s.shutdownToken },
+        },
+        { action: 'fetch', owner: 'memory/gitnexus-client' },
+      );
     }
   } catch { /* ignore */ }
   try { s.child.kill('SIGKILL'); } catch { /* ignore */ }
@@ -233,9 +253,23 @@ export async function queryCodeStructure(query: string, projectId?: string): Pro
       body: JSON.stringify({ search_query: query, repo, limit: 2 }),
       signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
     });
+    // §2.3 C9 — governed egress (internal/local eval-server, POST JSON);
+    // timeoutMs replaces the old inline AbortSignal. On any block/failure
+    // egress returns ok:false → null → silent degradation (never throws).
+    const res = await egressFetch(
+      `http://${s.host}:${s.port}/tool/query`,
+      {
+        internal: true,
+        timeoutMs: QUERY_TIMEOUT_MS,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ search_query: query, repo, limit: 2 }),
+      },
+      { action: 'fetch', owner: 'memory/gitnexus-client' },
+    );
 
     if (!res.ok) return null;
-    const text = (await res.text()).trim();
+    const text = res.text.trim();
     if (!text) return null;
     // The eval-server renders disambiguation / lookup failures as plain-text
     // bodies starting with "Error:" — treat those as "no result", not context.
@@ -260,4 +294,50 @@ export async function shutdownGitNexus(): Promise<void> {
 /** Test/observability helper. */
 export function _getState(): ClientState {
   return state;
+}
+
+// ── One-shot `gitnexus query` CLI bridge ──────────────────────────────────
+// Used by CoreExec's `gitnexus_mapper` plugin. Kept here (not in worker.ts)
+// so all `child_process` usage stays inside the audit's CHILD_PROCESS_ALLOWLIST
+// and never leaks raw shell exec into the orchestrator (SA-01).
+
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+const execFileAsync = promisify(execFile);
+
+/**
+ * Run `gitnexus query --json <query>` against the local GitNexus index.
+ * Tries the global `gitnexus` binary first, falls back to `npx gitnexus@latest`
+ * on ENOENT (mirrors spawnEvalServer's invocation-resolution strategy).
+ * The args array is fixed-length and never shell-interpolated.
+ *
+ * Returns `{ stdout, stderr }` on success. Throws on non-zero exit or timeout.
+ */
+export async function runGitNexusQuery(
+  query: string,
+  cwd: string,
+): Promise<{ stdout: string; stderr: string }> {
+  if (isDisabled()) {
+    throw new Error('gitnexus_mapper: GitNexus CLI is disabled (VITEST or NEUROSYNC_GITNEXUS_DISABLED=1)');
+  }
+
+  const MAX_BUFFER = 10 * 1024 * 1024; // 10 MB — AST JSON payloads can be large
+  const QUERY_TIMEOUT_MS = 30000;
+
+  const attempt = (cmd: string, args: string[]) =>
+    execFileAsync(cmd, args, {
+      cwd,
+      timeout: QUERY_TIMEOUT_MS,
+      maxBuffer: MAX_BUFFER,
+    });
+
+  try {
+    return await attempt('gitnexus', ['query', '--json', query]);
+  } catch (err: any) {
+    // ENOENT on the global binary → try npx once.
+    if (err?.code === 'ENOENT') {
+      return attempt('npx', ['gitnexus@latest', 'query', '--json', query]);
+    }
+    throw err;
+  }
 }

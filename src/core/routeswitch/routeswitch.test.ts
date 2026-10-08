@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FreeModeGovernor } from './governor';
 import { RouteSwitchEngine } from './engine';
+import { OKFGraphQuery } from '../okf/graph-query';
 
 describe('RouteSwitch & Governor', () => {
   it('Governor should track usage correctly', () => {
@@ -21,6 +22,20 @@ describe('RouteSwitch & Governor', () => {
     expect(res.provider).toBe('mock');
     expect(res.content).toContain('[MOCK RESPONSE]');
     expect(gov.getStatus().tokensUsed).toBe(100);
+  });
+
+  it('skips automatic OKF injection for context-isolated harness requests', async () => {
+    const contextSpy = vi.spyOn(OKFGraphQuery, 'resolveContext').mockReturnValue([]);
+    const engine = new RouteSwitchEngine(new FreeModeGovernor(500));
+
+    await engine.execute({
+      prompt: 'This is a sufficiently long isolated single-turn generation prompt.',
+      estimatedTokens: 100,
+      useKnowledgeContext: false,
+    });
+
+    expect(contextSpy).not.toHaveBeenCalled();
+    contextSpy.mockRestore();
   });
 
   it('RouteSwitchEngine should throw if quota exceeded', async () => {

@@ -1,4 +1,5 @@
 import { OpenAICompatibleProvider } from './openai-compatible';
+import { GenerationStreamHooks, ProviderCapabilities } from '../providers';
 import { OpenCodeDiscoveryService } from '../discovery';
 
 export interface OpenCodeProviderConfig {
@@ -17,15 +18,50 @@ const OPENCODE_ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
  * user to know and enter a base URL themselves.
  */
 export class OpenCodeProvider extends OpenAICompatibleProvider {
+  /**
+   * Capability matrix for OpenCode Zen's curated gateway (P8-4).
+   *
+   * Declared here, on the subclass, mirroring `LlamaCppProvider`: assigning to
+   * the `readonly capabilities` property inherited from
+   * `OpenAICompatibleProvider` is a compile error (TS2540), but a subclass that
+   * re-declares the field may assign it inside its own constructor. Every field
+   * is stated in full rather than inferred from the provider id — the resolved
+   * values are the previous parent-default + override merge (vision, structured
+   * output and a 128k context window).
+   */
+  readonly capabilities: Required<Pick<ProviderCapabilities, 'supportsVision' | 'supportsFunctionCalling' | 'supportsStructuredOutput' | 'inputTypes'>> & Partial<Pick<ProviderCapabilities, 'contextWindowTokens'>> = {
+    supportsVision: true,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+  };
+
   constructor(config: OpenCodeProviderConfig, customId?: string) {
     super({
       baseUrl: OPENCODE_ZEN_BASE_URL,
       ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
       modelId: config.modelId || 'auto',
     }, customId || 'opencode');
+
+    // Explicit capability override (P8-4). Stated in full rather than spread
+    // from the parent default — assignment is now to the concreted subclass
+    // field declared above.
+    this.capabilities = {
+      supportsVision: true,
+      supportsFunctionCalling: false,
+      supportsStructuredOutput: true,
+      contextWindowTokens: 128000,
+      inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+    };
   }
 
-  override async generate(prompt: string, estimatedTokens: number, schema?: any): Promise<string> {
+  // HEURISTIC FALLBACK: `streamHooks` ignored — see OpenAICompatibleProvider.generate.
+  override async generate(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    _streamHooks?: GenerationStreamHooks,
+  ): Promise<string> {
     const cfg = this.config;
     if (cfg.modelId && cfg.modelId.toLowerCase() !== 'auto') {
       return this._generateWithConfig(prompt, estimatedTokens, schema, cfg);
@@ -49,7 +85,10 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
         return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id });
       } catch (err: any) {
         lastErr = err;
-        if (!/429|rate.?limit/i.test(err?.message || '')) throw err;
+        // Treat both rate-limits and intermittent empty-content failures (a known issue
+        // with some OpenCode Zen free models on longer prompts) as retriable so we
+        // advance to the next candidate model.
+        if (!/429|rate.?limit|no content/i.test(err?.message || '')) throw err;
       }
     }
     throw lastErr;

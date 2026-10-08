@@ -46,8 +46,8 @@ export function createRunAndTasks(projectId: string, taskCount: number) {
  * @returns true if claimed, false if already claimed, completed, or failed
  */
 export const claimTask = db.transaction((taskId: string, leaseTime: number): boolean => {
-  const getTask = db.prepare('SELECT status, claim_lease FROM tasks WHERE id = ?');
-  const task = getTask.get(taskId) as { status: string; claim_lease: number | null } | undefined;
+  const getTask = db.prepare('SELECT status, claim_lease, started_at FROM tasks WHERE id = ?');
+  const task = getTask.get(taskId) as { status: string; claim_lease: number | null; started_at: number | null } | undefined;
 
   if (!task) {
     return false; // Task does not exist
@@ -57,8 +57,9 @@ export const claimTask = db.transaction((taskId: string, leaseTime: number): boo
   const isExpired = task.claim_lease !== null && task.claim_lease < Date.now();
   
   if (task.status === 'unclaimed' || (task.status === 'claimed' && isExpired)) {
-    const update = db.prepare("UPDATE tasks SET status = 'claimed', claim_lease = ? WHERE id = ?");
-    update.run(leaseTime, taskId);
+    const startedAt = task.started_at || Date.now();
+    const update = db.prepare("UPDATE tasks SET status = 'claimed', claim_lease = ?, started_at = ? WHERE id = ?");
+    update.run(leaseTime, startedAt, taskId);
     return true;
   }
 
