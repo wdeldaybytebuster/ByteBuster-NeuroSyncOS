@@ -1,4 +1,4 @@
-import { OpenAICompatibleProvider } from './openai-compatible';
+import { OpenAICompatibleProvider, isTimeoutError } from './openai-compatible';
 import { GenerationStreamHooks, ProviderCapabilities } from '../providers';
 import { OpenCodeDiscoveryService } from '../discovery';
 
@@ -9,6 +9,13 @@ export interface OpenCodeProviderConfig {
 }
 
 const OPENCODE_ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
+
+/**
+ * P2-1: hard cap on free-model rotation. Each candidate costs a full chat
+ * timeout budget (30 s); without a cap a long catalog stalls the request
+ * far past any reasonable latency.
+ */
+export const OPENCODE_MAX_CANDIDATES = 3;
 
 /**
  * OpenCode Zen — a curated AI gateway (https://opencode.ai/zen). First-class
@@ -55,16 +62,16 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
     };
   }
 
-  // HEURISTIC FALLBACK: `streamHooks` ignored — see OpenAICompatibleProvider.generate.
+  // HEURISTIC FALLBACK: `streamHooks` forwarded — see OpenAICompatibleProvider.generate.
   override async generate(
     prompt: string,
     estimatedTokens: number,
     schema?: any,
-    _streamHooks?: GenerationStreamHooks,
+    streamHooks?: GenerationStreamHooks,
   ): Promise<string> {
     const cfg = this.config;
     if (cfg.modelId && cfg.modelId.toLowerCase() !== 'auto') {
-      return this._generateWithConfig(prompt, estimatedTokens, schema, cfg);
+      return this._generateWithConfig(prompt, estimatedTokens, schema, cfg, streamHooks);
     }
 
     const freeModels = await OpenCodeDiscoveryService.getFreeModels();
@@ -80,15 +87,16 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
     // failing the whole platform because the one auto-picked model was busy
     // — same rationale as OpenRouterProvider.
     let lastErr: unknown;
-    for (const model of freeModels) {
+    for (const model of freeModels.slice(0, OPENCODE_MAX_CANDIDATES)) {
       try {
-        return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id });
+        return await this._generateWithConfig(prompt, estimatedTokens, schema, { ...cfg, modelId: model.id }, streamHooks);
       } catch (err: any) {
         lastErr = err;
-        // Treat both rate-limits and intermittent empty-content failures (a known issue
-        // with some OpenCode Zen free models on longer prompts) as retriable so we
-        // advance to the next candidate model.
-        if (!/429|rate.?limit|no content/i.test(err?.message || '')) throw err;
+        // Treat rate-limits, intermittent empty-content failures (a known issue
+        // with some OpenCode Zen free models on longer prompts), and P2-1
+        // transport timeouts as retriable so we advance to the next candidate
+        // model. Anything else throws immediately.
+        if (!/429|rate.?limit|no content|timeout|timed out/i.test(err?.message || '') && !isTimeoutError(err)) throw err;
       }
     }
     throw lastErr;

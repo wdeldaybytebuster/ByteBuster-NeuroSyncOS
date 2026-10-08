@@ -7,6 +7,7 @@ import { AgentStopSupervisor } from './agent-stop';
 import { selectOptimalModel, Benchmark, Model } from './model-selector/dynamic-router';
 import { db } from '../basevault/db';
 import { ProviderHealthState } from './interceptor';
+import { isTimeoutError } from './adapters/openai-compatible';
 import { OKFGraphQuery } from '../okf/graph-query';
 import { log } from '../observability/logger';
 
@@ -205,6 +206,10 @@ export class RouteSwitchEngine {
    * Returns the response content or throws on error.
    */
   private async _executeWithProvider(provider: LLMProvider, request: RouteRequest): Promise<{ content: string; confidence: number }> {
+    // P2-1: the engine keeps AbortController ownership. The controller below
+    // drives AgentStop preemption; the provider only ever receives the signal
+    // (combined with its own AbortSignal.timeout via AbortSignal.any) — it
+    // must never create a competing controller.
     const abortController = new AbortController();
     this.agentStop.reset();
 
@@ -400,6 +405,13 @@ export class RouteSwitchEngine {
           break;
         } catch (err: any) {
           lastError = err;
+          // P2-1: a transport timeout is retriable, NOT exhaustion. Fall
+          // through to the next provider with health state untouched — a slow
+          // network must never mark a provider exhausted.
+          if (isTimeoutError(err)) {
+            log.warn(`[RouteSwitch] Provider ${provider.id} timed out (retriable; health untouched). Trying next in chain...`);
+            continue;
+          }
           log.warn(`[RouteSwitch] Provider ${provider.id} failed: ${err.message}. Trying next in chain...`);
           // Mark as potentially exhausted if it looks like a rate limit
           if (err.message && (err.message.includes('429') || err.message.includes('rate limit') || err.message.includes('Too Many Requests'))) {

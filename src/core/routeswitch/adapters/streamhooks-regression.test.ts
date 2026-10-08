@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MockProvider } from './mock-provider';
-import { OpenAICompatibleProvider } from './openai-compatible';
+import { OpenAICompatibleProvider, isTimeoutError } from './openai-compatible';
 import { OpenRouterProvider } from './openrouter';
 import { OpenCodeProvider } from './opencode';
 import { GenerationStreamHooks, LLMProvider } from '../providers';
@@ -69,5 +69,65 @@ describe('non-llama-cpp adapters are unaffected by streamHooks', () => {
     expect(hookCalls).toBe(0);
 
     fetchMock.mockRestore();
+  });
+
+  // ── P2-1: timeout contract ──────────────────────────────────────────
+  it('P2-1: passes a combined abort signal (timeout + engine hooks) to fetch', async () => {
+    let seenSignal: AbortSignal | null | undefined;
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((async (_url: any, init?: any) => {
+      seenSignal = init?.signal as AbortSignal | undefined;
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) } as any;
+    }) as any);
+
+    const p = new OpenAICompatibleProvider({ baseUrl: 'http://localhost:1234/v1', modelId: 'auto' });
+    const engineController = new AbortController();
+    const res = await p.generate('Test prompt', 10, undefined, { signal: engineController.signal });
+    expect(res).toBe('ok');
+    // A real signal was sent (the adapter-owned timeout), and it tracks the
+    // engine-owned parent via AbortSignal.any: aborting the parent aborts it.
+    expect(seenSignal).toBeDefined();
+    expect(seenSignal!.aborted).toBe(false);
+    engineController.abort();
+    expect(seenSignal!.aborted).toBe(true);
+
+    fetchMock.mockRestore();
+  });
+
+  it('P2-1: works without hooks (connectivity path) — timeout signal still sent', async () => {
+    let seenSignal: AbortSignal | null | undefined;
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((async (_url: any, init?: any) => {
+      seenSignal = init?.signal as AbortSignal | undefined;
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) } as any;
+    }) as any);
+
+    const p = new OpenAICompatibleProvider({ baseUrl: 'http://localhost:1234/v1', modelId: 'auto' });
+    await p.generate('Hello, respond with a single word to confirm connectivity.', 20);
+    expect(seenSignal).toBeDefined();
+    expect(seenSignal!.aborted).toBe(false);
+
+    fetchMock.mockRestore();
+  });
+
+  it('P2-1: a fetch TimeoutError surfaces as a named TimeoutError (retriable)', async () => {
+    const nativeTimeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    const fetchMock = vi.spyOn(global, 'fetch').mockRejectedValue(nativeTimeout);
+
+    const p = new OpenAICompatibleProvider({ baseUrl: 'http://localhost:1234/v1', modelId: 'auto' });
+    const err = await p.generate('Test prompt', 10).then(
+      () => null,
+      (e) => e as unknown,
+    );
+    expect(err).not.toBeNull();
+    expect(isTimeoutError(err)).toBe(true);
+    expect((err as Error).name).toBe('TimeoutError');
+
+    fetchMock.mockRestore();
+  });
+
+  it('P2-1: isTimeoutError does not mistake AgentStop aborts for timeouts', () => {
+    const abort = new DOMException('This operation was aborted', 'AbortError');
+    expect(isTimeoutError(abort)).toBe(false);
+    expect(isTimeoutError(new Error('boom'))).toBe(false);
+    expect(isTimeoutError(null)).toBe(false);
   });
 });

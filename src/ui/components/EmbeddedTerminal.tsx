@@ -4,7 +4,23 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { openWebSocket } from '../lib/api';
 
-const WS_BASE = 'ws://localhost:3743';
+/**
+ * P2-3 — terminal WS base: the page's own host in the browser (tracks a
+ * custom NEUROSYNC_PORT automatically), compiled default under node/tests.
+ */
+function resolveWsBase(): string {
+  try {
+    if (typeof window !== 'undefined' && typeof window.location?.host === 'string' && window.location.host) {
+      const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+      return `${proto}://${window.location.host}`;
+    }
+  } catch {
+    /* no DOM — fall through to the compiled default */
+  }
+  return 'ws://localhost:3743';
+}
+
+const WS_BASE = resolveWsBase();
 
 interface EmbeddedTerminalProps {
   projectId: string;

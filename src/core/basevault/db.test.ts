@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db, initDB, dbPath, migratePendingProposalBlob } from './db';
+import { db, initDB, dbPath, migratePendingProposalBlob, SCHEMA_VERSION, getUserVersion, setUserVersion } from './db';
 import fs from 'fs';
 
 describe('BaseVault SQLite Database', () => {
@@ -134,5 +134,40 @@ describe('BaseVault SQLite Database', () => {
 
     expect(project).toBeDefined();
     expect(project.name).toBe('Test Project');
+  });
+
+  // ── P2-4: user_version contract (uses the shared :memory: db only —
+  // never opens the real file DB) ──────────────────────────────────────
+  it('uses an isolated :memory: database under tests (never the real file DB)', () => {
+    expect(dbPath).toBe(':memory:');
+    expect(db.name).toBe(':memory:');
+  });
+
+  it('stamps user_version to SCHEMA_VERSION at the end of initDB', () => {
+    expect(getUserVersion()).toBe(SCHEMA_VERSION);
+  });
+
+  it('is idempotent: a second initDB keeps version stamped and schema intact', () => {
+    initDB();
+    expect(getUserVersion()).toBe(SCHEMA_VERSION);
+    const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all() as { name: string }[]).map(t => t.name);
+    expect(tables).toContain('projects');
+    expect(tables).toContain('workflow_runs');
+    expect(tables).toContain('tasks');
+  });
+
+  it('migrates a legacy unstamped DB (v0 + tables present) to the current version', () => {
+    // Simulate a pre-P2-4 database: version never stamped, tables present.
+    setUserVersion(0);
+    expect(getUserVersion()).toBe(0);
+    initDB();
+    expect(getUserVersion()).toBe(SCHEMA_VERSION);
+    // All 19 gated ALTERs still applied exactly once (idempotent try/catch).
+    const taskCols = (db.prepare(`PRAGMA table_info(tasks)`).all() as { name: string }[]).map(c => c.name);
+    expect(taskCols).toContain('node_type');
+    expect(taskCols).toContain('started_at');
+    const runCols = (db.prepare(`PRAGMA table_info(workflow_runs)`).all() as { name: string }[]).map(c => c.name);
+    expect(runCols).toContain('completed_at');
+    expect(runCols).toContain('track');
   });
 });

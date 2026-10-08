@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { OpenAICompatibleProvider } from './openai-compatible';
-import { OpenCodeProvider } from './opencode';
+import { OpenAICompatibleProvider, isTimeoutError } from './openai-compatible';
+import { OpenCodeProvider, OPENCODE_MAX_CANDIDATES } from './opencode';
+import { OpenCodeDiscoveryService } from '../discovery';
 
 /**
  * Regression + repro suite for the live-testing finding documented in
@@ -141,5 +142,59 @@ describe('reasoning-model empty-content handling (openai-compatible adapters)', 
     const p = new OpenAICompatibleProvider({ baseUrl: 'http://localhost:1234/v1', modelId: 'auto' });
     await expect(p.generate('hello', 150)).rejects.toThrow(/LLM API error 500/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ── P2-1: timeout + rotation cap ─────────────────────────────────────
+  it('P2-1: caps free-model rotation at OPENCODE_MAX_CANDIDATES (3), even with more models discovered', async () => {
+    expect(OPENCODE_MAX_CANDIDATES).toBe(3);
+    vi.spyOn(OpenCodeDiscoveryService, 'getFreeModels').mockResolvedValue(
+      ['m1-free', 'm2-free', 'm3-free', 'm4-free', 'm5-free'].map((id) => ({ id, name: id, context_length: 0, pricing: null }))
+    );
+    const rateLimited = {
+      ok: false,
+      status: 429,
+      json: async () => ({ error: { message: 'rate limited' } }),
+      text: async () => 'rate limited',
+    } as any;
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(rateLimited);
+
+    const p = new OpenCodeProvider({ apiKey: 'fake-key-not-real' });
+    await expect(p.generate('hello world, longer prompt here', 150)).rejects.toThrow(/429/);
+    // 5 models discovered, 3 attempted — the loop is capped.
+    expect(fetchMock).toHaveBeenCalledTimes(OPENCODE_MAX_CANDIDATES);
+  });
+
+  it('P2-1: a TimeoutError on one candidate advances to the next instead of failing', async () => {
+    vi.spyOn(OpenCodeDiscoveryService, 'getFreeModels').mockResolvedValue(
+      ['m1-free', 'm2-free'].map((id) => ({ id, name: id, context_length: 0, pricing: null }))
+    );
+    const nativeTimeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockRejectedValueOnce(nativeTimeout)
+      .mockResolvedValueOnce(
+        jsonResponse({ choices: [{ message: { content: 'recovered on m2' }, finish_reason: 'stop' }] })
+      );
+
+    const p = new OpenCodeProvider({ apiKey: 'fake-key-not-real' });
+    const res = await p.generate('hello world, longer prompt here', 150);
+    expect(res).toBe('recovered on m2');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('P2-1: a timed-out candidate surfaces a TimeoutError when every candidate times out', async () => {
+    vi.spyOn(OpenCodeDiscoveryService, 'getFreeModels').mockResolvedValue(
+      ['m1-free'].map((id) => ({ id, name: id, context_length: 0, pricing: null }))
+    );
+    const nativeTimeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    vi.spyOn(global, 'fetch').mockRejectedValue(nativeTimeout);
+
+    const p = new OpenCodeProvider({ apiKey: 'fake-key-not-real' });
+    const err = await p.generate('hello world, longer prompt here', 150).then(
+      () => null,
+      (e) => e as unknown,
+    );
+    expect(err).not.toBeNull();
+    expect(isTimeoutError(err)).toBe(true);
   });
 });

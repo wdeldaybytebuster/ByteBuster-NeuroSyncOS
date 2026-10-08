@@ -19,6 +19,7 @@ import {
   resetRateLimits,
   getIp,
 } from './perimeter';
+import { NEUROSYNC_PORT } from './port';
 
 // ─── CORS allowlist ──────────────────────────────────────────────────────────
 
@@ -28,16 +29,19 @@ describe('C5 CORS allowlist (closes T1 — drive-by browser origin)', () => {
   app.get('/api/ping', c => c.json({ ok: true }));
 
   it('the allowlist contains exactly the known UI origins (incl. both Tauri shells)', () => {
+    // P2-3: the static-UI pair derives from NEUROSYNC_PORT (default 3743);
+    // 3742/5173/tauri entries stay static. Sorted on both sides so the
+    // contract holds under env port overrides too.
     expect([...ALLOWED_ORIGINS].sort()).toEqual([
       'http://127.0.0.1:3742',
-      'http://127.0.0.1:3743',
+      `http://127.0.0.1:${NEUROSYNC_PORT}`,
       'http://127.0.0.1:5173',
       'http://localhost:3742',
-      'http://localhost:3743',
+      `http://localhost:${NEUROSYNC_PORT}`,
       'http://localhost:5173',
       'http://tauri.localhost',
       'tauri://localhost',
-    ]);
+    ].sort());
   });
 
   it('allowlisted origin (Vite dev) gets Access-Control-Allow-Origin echoed back', async () => {

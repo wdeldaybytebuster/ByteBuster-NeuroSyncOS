@@ -41,6 +41,76 @@ const DEFAULT_MAX_TOKENS_FLOOR = 1024;
 const REASONING_RETRY_MULTIPLIER = 4;
 const REASONING_RETRY_CAP = 8000;
 
+/**
+ * P2-1 — raw AbortSignal.timeout budgets (NOT egressFetch: LLM traffic to
+ * user-configured/public gateways must not pass the kill-switch, the
+ * private-address block, or the auth-stripping redirect rules — those are
+ * the governed-egress door for agent fetch/scrape, not for provider calls).
+ * Chat (completions) gets 30 s; embeddings get 15 s.
+ */
+export const OPENAI_COMPAT_TIMEOUT_MS =
+  Number(process.env.OPENAI_COMPAT_TIMEOUT_MS) || 30_000;
+export const OPENAI_COMPAT_EMBEDDING_TIMEOUT_MS =
+  Number(process.env.OPENAI_COMPAT_EMBEDDING_TIMEOUT_MS) || 15_000;
+
+/**
+ * P2-1 — TimeoutError classifier. True for native timeout aborts
+ * (AbortSignal.timeout rejects with a DOMException named 'TimeoutError'),
+ * for the normalized timeout errors this adapter throws, and for anything
+ * carrying such a failure as its cause. AgentStop/operator aborts surface
+ * as 'AbortError' and are deliberately NOT timeouts.
+ */
+export function isTimeoutError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  if ((err as { name?: unknown }).name === 'TimeoutError') return true;
+  const code = (err as { code?: unknown }).code;
+  if (code === 'TimeoutError' || code === 23) return true;
+  const message = (err as { message?: unknown }).message;
+  if (typeof message === 'string' && /timed out after \d+ms|TimeoutError/i.test(message)) return true;
+  const cause = (err as { cause?: unknown }).cause;
+  if (cause && cause !== err) return isTimeoutError(cause);
+  return false;
+}
+
+/**
+ * P2-1 — combine the adapter-owned timeout signal with the engine-owned
+ * streamHooks.signal (AgentStop cancellation). The engine keeps
+ * AbortController ownership; this adapter never creates a controller of its
+ * own, it only derives a linked signal. Falls back to a manual link when
+ * AbortSignal.any is unavailable on the runtime.
+ */
+function combineSignals(timeoutSignal: AbortSignal, parent?: AbortSignal): AbortSignal {
+  if (!parent) return timeoutSignal;
+  const anyFn = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === 'function') return anyFn.call(AbortSignal, [timeoutSignal, parent]);
+  const controller = new AbortController();
+  const forward = (): void => {
+    try {
+      controller.abort(parent.aborted ? parent.reason : timeoutSignal.reason);
+    } catch { /* already aborted */ }
+  };
+  if (timeoutSignal.aborted || parent.aborted) forward();
+  else {
+    timeoutSignal.addEventListener('abort', forward, { once: true });
+    parent.addEventListener('abort', forward, { once: true });
+  }
+  return controller.signal;
+}
+
+/**
+ * P2-1 — normalize a fetch rejection into a named TimeoutError when the
+ * timeout signal fired (or the rejection already is one); otherwise rethrow
+ * untouched. Declared `: never` — it always throws.
+ */
+function rethrowAsTimeoutIfTimedOut(err: unknown, timeoutSignal: AbortSignal, budgetMs: number, label: string): never {
+  if (timeoutSignal.aborted || isTimeoutError(err)) {
+    const timeoutErr = new Error(`LLM request timed out after ${budgetMs}ms (${label})`);
+    timeoutErr.name = 'TimeoutError';
+    throw timeoutErr;
+  }
+  throw err;
+}
+
 export class OpenAICompatibleProvider implements LLMProvider {
   id: string;
 
@@ -86,10 +156,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
     prompt: string,
     estimatedTokens: number,
     schema?: any,
-    _streamHooks?: GenerationStreamHooks,
+    streamHooks?: GenerationStreamHooks,
   ): Promise<string> {
     const effectiveConfig = await this._resolveEffectiveConfig();
-    return this._generateWithConfig(prompt, estimatedTokens, schema, effectiveConfig);
+    return this._generateWithConfig(prompt, estimatedTokens, schema, effectiveConfig, streamHooks);
   }
 
   /**
@@ -98,12 +168,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
    * Lets subclasses (OpenCodeProvider, OpenRouterProvider) retry against a
    * *different* candidate model on rate-limit without any shared mutable
    * state or re-triggering discovery.
+   *
+   * P2-1: `streamHooks` (engine-owned AbortController signal) is threaded
+   * through — including into the reasoning-exhaustion retry — and combined
+   * with the adapter-owned AbortSignal.timeout via AbortSignal.any.
    */
   protected async _generateWithConfig(
     prompt: string,
     estimatedTokens: number,
     schema: any,
     effectiveConfig: OpenAICompatibleConfig,
+    streamHooks?: GenerationStreamHooks,
     /**
      * Internal-only: set when this call is the one-shot retry after a
      * reasoning-exhaustion detection, so we don't retry a retry. Not part of
@@ -184,11 +259,22 @@ export class OpenAICompatibleProvider implements LLMProvider {
       }
     }
 
-    let response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    // P2-1: raw AbortSignal.timeout for the whole chat attempt, combined
+    // with the engine-owned streamHooks.signal (AgentStop) via AbortSignal.any.
+    const timeoutSignal = AbortSignal.timeout(OPENAI_COMPAT_TIMEOUT_MS);
+    const signal = combineSignals(timeoutSignal, streamHooks?.signal);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal,
+      });
+    } catch (err) {
+      rethrowAsTimeoutIfTimedOut(err, timeoutSignal, OPENAI_COMPAT_TIMEOUT_MS, 'chat completions');
+    }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'unknown error');
@@ -202,11 +288,16 @@ export class OpenAICompatibleProvider implements LLMProvider {
       // markdown fences/preamble, so best-effort JSON still usually works.
       if (response.status === 400 && body.response_format && /response_format/i.test(errorText)) {
         const { response_format: _unused, ...bodyWithoutSchema } = body;
-        response = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(bodyWithoutSchema),
-        });
+        try {
+          response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(bodyWithoutSchema),
+            signal,
+          });
+        } catch (err) {
+          rethrowAsTimeoutIfTimedOut(err, timeoutSignal, OPENAI_COMPAT_TIMEOUT_MS, 'chat completions');
+        }
         if (!response.ok) {
           const retryErrorText = await response.text().catch(() => 'unknown error');
           throw new Error(`LLM API error ${response.status}: ${retryErrorText}`);
@@ -242,9 +333,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
       if (isReasoningExhaustion && !_isReasoningRetry) {
         // One bounded retry with a much larger budget before giving up.
+        // P2-1: streamHooks threads through so the retry gets a fresh timeout
+        // budget combined with the same engine-owned abort signal.
         const retryConfig: OpenAICompatibleConfig = { ...effectiveConfig };
         const retryTokens = Math.min(maxTokens * REASONING_RETRY_MULTIPLIER, REASONING_RETRY_CAP);
-        return this._generateWithConfig(prompt, retryTokens, schema, retryConfig, true);
+        return this._generateWithConfig(prompt, retryTokens, schema, retryConfig, streamHooks, true);
       }
 
       if (isReasoningExhaustion) {
@@ -285,11 +378,19 @@ export class OpenAICompatibleProvider implements LLMProvider {
       model: effectiveConfig.modelId, // or a specific embedding model if configured, but for now we use modelId
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    // P2-1: raw AbortSignal.timeout for embeddings (15 s budget).
+    const embeddingTimeout = AbortSignal.timeout(OPENAI_COMPAT_EMBEDDING_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: embeddingTimeout,
+      });
+    } catch (err) {
+      rethrowAsTimeoutIfTimedOut(err, embeddingTimeout, OPENAI_COMPAT_EMBEDDING_TIMEOUT_MS, 'embeddings');
+    }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'unknown error');

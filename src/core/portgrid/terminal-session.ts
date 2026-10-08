@@ -541,16 +541,15 @@ export function installTerminalShutdownHooks(): void {
   shutdownHooked = true;
   // Node's 'exit' event cannot await async work (the event loop is not
   // processed further once it fires) — this listener is a synchronous-only
-  // last resort for exit paths that don't go through SIGINT/SIGTERM below
-  // (e.g. a natural process end). It still issues every session's kill()
+  // last resort for exit paths that don't go through the centralized
+  // server shutdown (src/server/shutdown.ts, the SINGLE owner of
+  // SIGINT/SIGTERM). It still issues every session's kill()
   // signal synchronously; it just can't wait for confirmed exit or run the
   // post-exit cleanup, same fundamental constraint the old synchronous
   // dispose() never had to contend with on this specific path.
+  //
+  // P2-2: SIGINT/SIGTERM handling moved OUT of this module — the centralized
+  // shutdown calls disposeAllTerminalSessions() (with a real await) before
+  // its single process.exit, so per-signal handlers here would race it.
   process.on('exit', () => { void disposeAllTerminalSessions(); });
-  // SIGINT/SIGTERM DO have a chance to await real async work before the
-  // process actually exits — do so, so the auto-scan learning-loop trigger
-  // (and registry cleanup) reliably fires on a normal graceful shutdown
-  // (Ctrl+C, `kill`, a process manager stop) instead of racing process.exit().
-  process.on('SIGINT', () => { void (async () => { await disposeAllTerminalSessions(); process.exit(0); })(); });
-  process.on('SIGTERM', () => { void (async () => { await disposeAllTerminalSessions(); process.exit(0); })(); });
 }

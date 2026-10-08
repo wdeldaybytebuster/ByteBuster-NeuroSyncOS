@@ -15,9 +15,11 @@ let reflectionInterval: NodeJS.Timeout | null = null;
 let reflectionWorker: import('worker_threads').Worker | null = null;
 
 /**
- * Test-only helper: clears the periodic refresh loop and stops every active
- * cron job. Production code does NOT need to call this — the process
- * lifecycle owns the loop until SIGINT.
+ * Clears the periodic refresh loop and stops every active cron job.
+ * Test helper AND the one production stop path: the centralized server
+ * shutdown (src/server/shutdown.ts, P2-2) calls this via server-main's
+ * installShutdownHandlers wiring — the process lifecycle no longer relies
+ * on per-module SIGINT handlers.
  */
 export function _stopSchedulerLoopForTests(): void {
   if (refreshTimeout) {

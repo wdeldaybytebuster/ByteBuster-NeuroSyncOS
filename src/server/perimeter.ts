@@ -20,16 +20,18 @@
  */
 import type { MiddlewareHandler } from 'hono';
 import { cors } from 'hono/cors';
+import { NEUROSYNC_PORT } from './port';
 
 /**
  * CORS allowlist — the known UI origins (verified in §2.1-C5(f)):
- * Vite dev on 3742, Hono static UI on 3743, tauri dev devUrl 5173
+ * Vite dev on 3742, Hono static UI on NEUROSYNC_PORT (default 3743,
+ * derived — follows env overrides), tauri dev devUrl 5173
  * (currently broken, allow-listed so it works the moment §5-6 is fixed),
- * and both Tauri v3 shell origins.
+ * and both Tauri v3 shell origins. 3742/5173/tauri entries stay static.
  */
 export const ALLOWED_ORIGINS = new Set([
   'http://localhost:3742', 'http://127.0.0.1:3742',   // Vite dev
-  'http://localhost:3743', 'http://127.0.0.1:3743',   // Hono static UI
+  `http://localhost:${NEUROSYNC_PORT}`, `http://127.0.0.1:${NEUROSYNC_PORT}`,   // Hono static UI (P2-3 derived)
   'http://localhost:5173', 'http://127.0.0.1:5173',   // tauri dev devUrl (currently broken)
   'tauri://localhost',                                 // Tauri v3 Linux/macOS shell
   'http://tauri.localhost',                            // Tauri v3 Windows shell

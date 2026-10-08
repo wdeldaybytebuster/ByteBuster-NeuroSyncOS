@@ -18,12 +18,39 @@
  *     minted by `fetchTicket()` and appended as `?ticket=`.
  */
 
+/** Compiled default API origin (node/tests, or a browser without a location). */
+const DEFAULT_API = 'http://localhost:3743';
+
+/**
+ * P2-3 — Local API origin: the page's own origin in the browser (so a custom
+ * NEUROSYNC_PORT Just Works — the UI is served by the API itself in prod,
+ * and vite proxies /api in dev), compiled default otherwise.
+ */
+function resolveApiOrigin(): string {
+  try {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.location?.origin === 'string' &&
+      window.location.origin.startsWith('http')
+    ) {
+      return window.location.origin;
+    }
+  } catch {
+    /* no DOM — fall through to the compiled default */
+  }
+  return DEFAULT_API;
+}
+
 /** Local API origin (dev + prod are the same host: the UI is served by it). */
-export const API = 'http://localhost:3743';
+export const API = resolveApiOrigin();
 
 const SESSION_KEY = 'neurosync.session';
 const AUTH_HEADER = 'Authorization';
 const API_HOST = new URL(API).host;
+// P2-3: the compiled default stays bearer-eligible even when API resolved to
+// the page origin (vite dev on :3742 keeps absolute :3743 call sites working
+// until the deferred App/Settings/RunHistory/Statusline sweep lands).
+const DEFAULT_API_HOST = new URL(DEFAULT_API).host;
 
 // ── session token (localStorage) ─────────────────────────────────────────────
 
@@ -100,7 +127,7 @@ function isApiUrl(url: string): boolean {
   const parsed = parseUrl(url);
   if (!parsed) return false;
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-  if (parsed.host === API_HOST) return true;
+  if (parsed.host === API_HOST || parsed.host === DEFAULT_API_HOST) return true;
   const href = pageHref();
   return !!href && parsed.origin === new URL(href).origin;
 }

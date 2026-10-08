@@ -32,15 +32,20 @@ const app = new Hono();
 // a foreign origin never receives Access-Control-Allow-Origin). Registered
 // before auth so OPTIONS preflight short-circuits ahead of the 401.
 import { perimeterCors, rateLimitMiddleware, wsUpgradeGuard } from './perimeter';
+import { NEUROSYNC_PORT } from './port';
+import { shutdownDrainingMiddleware } from './shutdown';
 // §2.2-C6 — the operator credential gate replaces the old anonymous block
 // (readiness-derived gating + header-presence-only check both failed open).
 import { authMiddleware } from './auth/middleware';
 import { registerAuthRoutes } from './auth/routes';
 import { isSetupComplete, openSetupWindow, setBindAddress } from './auth/credentials';
+// P2-2: drain guard mounts FIRST so a shutting-down server 503s before any
+// perimeter bookkeeping, auth, or route handling.
+app.use('/*', shutdownDrainingMiddleware);
 app.use('/*', perimeterCors);
 
 const transport = new NodeTransport();
-const mdnsDiscovery = new MDNSDiscovery(3743);
+const mdnsDiscovery = new MDNSDiscovery(NEUROSYNC_PORT); // P2-3: single PORT const (shared with serve below)
 
 /**
  * §2.1-C4 — mDNS discovery no longer auto-connects (PortGrid consent boundary).
@@ -215,6 +220,11 @@ function untrackWsHeartbeat(ws: any): void {
 }
 const wsHeartbeatTimer = setInterval(wsHeartbeatSweep, WS_HEARTBEAT_MS);
 (wsHeartbeatTimer as unknown as { unref?: () => void })?.unref?.();
+
+/** P2-2 — stop the WS heartbeat interval (called by the centralized shutdown). */
+export function stopWsHeartbeat(): void {
+  clearInterval(wsHeartbeatTimer);
+}
 
 app.get(
   '/api/portgrid/terminal/:projectId',
@@ -659,7 +669,7 @@ app.get('/api/basevault/run/:runId', (c) => {
 
 // ─── Server Start ─────────────────────────────────────────────────────────────
 
-const port = 3743;
+const port = NEUROSYNC_PORT; // P2-3: single const (shared with MDNS above), env NEUROSYNC_PORT || 3743
 
 /**
  * §2.1-C5 — loopback bind (closes T2/T6: LAN + all-interfaces exposure).
@@ -701,3 +711,20 @@ const server = serve({
 // Attach the WebSocket upgrade handler to the underlying http.Server so the
 // PortGrid terminal endpoint (/api/portgrid/terminal/:projectId) can upgrade.
 injectWebSocket(server);
+
+// ─── P2-2 centralized graceful shutdown (single SIGINT/SIGTERM owner) ───────
+// setBindAddress/openSetup ran before serve() above; injectWebSocket stays
+// after serve — this wiring only ADDS the shutdown owner, moving nothing.
+import { installShutdownHandlers } from './shutdown';
+import { _stopSchedulerLoopForTests as stopSchedulerLoop } from '../core/coreexec/scheduler';
+import { workerPool } from '../core/coreexec/worker-pool';
+installShutdownHandlers({
+  server: server as unknown as import('./shutdown').ShutdownServer,
+  stopHeartbeat: stopWsHeartbeat,
+  stopMdns: () => mdnsDiscovery.stop(),
+  stopTransport: () => transport.dispose(),
+  stopIdle: () => idleDetector.stop(),
+  stopReflection: () => ReflectionExecutor.stopDaemon(),
+  stopScheduler: () => stopSchedulerLoop(),
+  stopWorkerPool: () => workerPool.destroy(),
+});

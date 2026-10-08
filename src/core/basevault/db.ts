@@ -108,9 +108,36 @@ db.pragma('busy_timeout = 5000');
 
 db.function('sha256', (text: string) => createHash('sha256').update(text || '').digest('hex'));
 
+// ── P2-4: schema version gate (user_version) ─────────────────────────────────
+// SCHEMA_VERSION 1 covers the base CREATE TABLE set plus the 19 legacy ALTER
+// TABLE migrations below. Legacy databases predate versioning (user_version 0
+// with tables already present) — baseline detect treats ANY version < N as
+// needing migration, and the ALTERs stay idempotent try/catch so re-running
+// them on an already-migrated legacy DB is a safe no-op. Fresh DBs (v0, no
+// tables) take the same path. Version writes use db.pragma, which applies
+// immediately outside any transaction.
+export const SCHEMA_VERSION = 1;
+
+export function getUserVersion(): number {
+  try {
+    const v = db.pragma('user_version', { simple: true }) as unknown as number;
+    return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function setUserVersion(v: number): void {
+  db.pragma(`user_version = ${v}`);
+}
+
 // Schema Initialization Function
 export function initDB() {
   if (!isMainThread && process.env.NODE_ENV !== 'test') return;
+  // P2-4 baseline detect: v0 + tables present (legacy) or v0 + no tables
+  // (fresh) both need migration; only an already-stamped version skips it.
+  const prevVersion = getUserVersion();
+  const needsMigration = prevVersion < SCHEMA_VERSION;
   db.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
@@ -490,6 +517,9 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_cerebro_memories_project ON cerebro_memories_meta(project_id);
   `);
 
+  // P2-4 version gate (region 1: 16 ALTERs). Keeps every try/catch below
+  // intact; skips them entirely once user_version is stamped.
+  if (needsMigration) {
   try {
     db.exec(`ALTER TABLE projects ADD COLUMN workspace_path TEXT;`);
   } catch (e: any) {
@@ -648,6 +678,7 @@ export function initDB() {
       console.error('Error adding track column to workflow_runs:', e);
     }
   }
+  } // end P2-4 version gate (region 1)
 
   migratePendingProposalBlob();
 
@@ -679,6 +710,8 @@ export function initDB() {
   // Adds node_type to tasks so 'verify' step nodes are distinguishable from
   // 'action' nodes in the dispatch loop and in PortGrid approval UI.
   // NULL = legacy action node (fully backwards-compatible).
+  // P2-4 version gate (region 2: node_type + learning-approvals source_tool).
+  if (needsMigration) {
   try {
     db.exec(`ALTER TABLE tasks ADD COLUMN node_type TEXT;`);
   } catch (e: any) {
@@ -694,6 +727,7 @@ export function initDB() {
       console.error('Error adding source_tool column to cerebro_learning_approvals:', e);
     }
   }
+  } // end P2-4 version gate (region 2)
 
   // Delta Sync Event Log
   try {
@@ -761,6 +795,8 @@ export function initDB() {
     console.error('Error creating sync_event_log table:', e);
   }
 
+  // P2-4 version gate (region 3: tasks.started_at).
+  if (needsMigration) {
   try {
     db.exec(`ALTER TABLE tasks ADD COLUMN started_at INTEGER;`);
   } catch (e: any) {
@@ -768,6 +804,11 @@ export function initDB() {
       console.error('Error adding started_at column to tasks:', e);
     }
   }
+  } // end P2-4 version gate (region 3)
+
+  // P2-4: stamp the schema version at the end of initDB (immediate pragma
+  // write). Only upgrades — never downgrades a newer stamp.
+  if (needsMigration) setUserVersion(SCHEMA_VERSION);
 }
 
 /**

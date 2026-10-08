@@ -265,6 +265,8 @@ llmRouter.post('/providers/:id/test', async (c) => {
     const provider = instantiateProvider(row.type, config, apiKey);
 
     const startMs = Date.now();
+    // P2-1: inherits the provider's raw AbortSignal.timeout chat budget
+    // (30 s default) — no hooks here, just the adapter-owned timeout.
     const result = await provider.generate('Hello, respond with a single word to confirm connectivity.', 20);
     const latencyMs = Date.now() - startMs;
 
