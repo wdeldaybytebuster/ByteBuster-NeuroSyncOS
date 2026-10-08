@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Database, RefreshCw, CheckCircle, AlertTriangle, XCircle, FileText, Folder } from 'lucide-react';
 import { ModeLabel } from './ModeLabel';
-import { API, authFetch } from '../lib/api';
+import { API, authFetch, LONG_TASK_BUDGET_MS } from '../lib/api';
 
 
 interface IndexedFile {
@@ -69,11 +69,13 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setScanning(true);
     try {
+      // P2-B2 — a project scan walks + chunks every doc (embedding passes
+      // over the whole corpus); it legitimately outlives the 30 s default.
       const res = await authFetch(`${API}/api/okf/scan-project`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId }),
-      });
+      }, LONG_TASK_BUDGET_MS);
       const data = await res.json();
       if (data.success) {
         setScannedDocs([...data.unprocessed, ...data.processed]);
@@ -90,11 +92,13 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setConverting(filePath);
     try {
+      // P2-B2 — document conversion runs chunking + embedding inference per
+      // file; it legitimately outlives the 30 s default.
       const res = await authFetch(`${API}/api/okf/convert-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, filePath }),
-      });
+      }, LONG_TASK_BUDGET_MS);
       const data = await res.json();
       if (data.success) {
         // Mark as processed locally
@@ -114,11 +118,13 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setSyncing(true);
     try {
+      // P2-B2 — sync re-embeds changed docs across the project; bulk
+      // inference legitimately outlives the 30 s default.
       const res = await authFetch(`${API}/api/okf/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId }),
-      });
+      }, LONG_TASK_BUDGET_MS);
       const data = await res.json();
       if (!data.success) {
         setError(data.error || 'Sync failed');

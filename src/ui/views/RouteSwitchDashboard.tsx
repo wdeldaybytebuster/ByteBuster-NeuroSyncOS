@@ -5,7 +5,7 @@ import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plu
 import { PathBrowser } from '../components/PathBrowser';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
-import { API, authFetch } from '../lib/api';
+import { API, authFetch, LLM_TASK_BUDGET_MS } from '../lib/api';
 
 const ACCENT = '#FFB300';
 
@@ -373,7 +373,9 @@ function SetupView() {
     setTestResult(null);
     setTestingProviderId(id);
     try {
-      const d = await authFetch(`${API}/api/llm/providers/${id}/test`, { method: 'POST' }).then(r => r.json());
+      // P2-B2 — a provider self-test runs a REAL inference round-trip (up
+      // to a 30 s provider budget + handshake overhead); LLM_TASK_BUDGET_MS.
+      const d = await authFetch(`${API}/api/llm/providers/${id}/test`, { method: 'POST' }, LLM_TASK_BUDGET_MS).then(r => r.json());
       setTestResult(d.test || { connected: false, error: 'Unknown error' });
     } catch { setTestResult({ connected: false, error: 'Network error' }); }
   };

@@ -4,7 +4,7 @@ import { useNavigation } from '../layouts/OSLayout';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { Database, Shield, Trash2, HardDrive, Upload, Download, ScanLine, Clock, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
-import { API, authFetch, openEventSource } from '../lib/api';
+import { API, authFetch, openEventSource, LONG_TASK_BUDGET_MS } from '../lib/api';
 
 const ACCENT = '#D4AF37';
 
@@ -238,7 +238,9 @@ function SetupView() {
     const formData = new FormData();
     formData.append('backup_file', file);
     try {
-      await authFetch(`${API}/api/system/restore`, { method: 'POST', body: formData });
+      // P2-B2 — full-DB restore replays an entire backup (bulk I/O); it
+      // legitimately outlives the 30 s default, so it gets the long budget.
+      await authFetch(`${API}/api/system/restore`, { method: 'POST', body: formData }, LONG_TASK_BUDGET_MS);
     } catch {}
   };
 
@@ -356,8 +358,10 @@ function SetupView() {
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-gray-300">Schema Migrations</h3>
             <p className="text-[10px] text-gray-500">Run introspective migrations to upgrade the schema idempotently when updating NeuroSync versions.</p>
+            {/* P2-B2 — schema migration walks every table idempotently; it
+                legitimately outlives the 30 s default, so LONG_TASK_BUDGET_MS. */}
             <button
-              onClick={async () => { setMigrating(true); setMigrationResult(null); try { const res = await authFetch(`${API}/api/system/migrate`, { method: 'POST' }); const d = await res.json(); setMigrationResult(d.success ? d.message : d.error); } catch { setMigrationResult('Error: could not reach backend.'); } finally { setMigrating(false); } }}
+              onClick={async () => { setMigrating(true); setMigrationResult(null); try { const res = await authFetch(`${API}/api/system/migrate`, { method: 'POST' }, LONG_TASK_BUDGET_MS); const d = await res.json(); setMigrationResult(d.success ? d.message : d.error); } catch { setMigrationResult('Error: could not reach backend.'); } finally { setMigrating(false); } }}
               disabled={migrating}
               className={`w-full px-4 py-2.5 rounded-lg font-bold text-xs transition-all border ${migrating ? 'opacity-50 border-white/10 text-gray-400' : 'border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}
             >

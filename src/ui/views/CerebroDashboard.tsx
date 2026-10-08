@@ -6,7 +6,7 @@ import { OKFMindmap } from '../components/OKFMindmap';
 import { ModeLabel } from '../components/ModeLabel';
 import { HelpTip } from '../components/HelpTip';
 import { useDeveloperMode } from '../components/DeveloperModeContext';
-import { API, authFetch } from '../lib/api';
+import { API, authFetch, LLM_TASK_BUDGET_MS } from '../lib/api';
 
 const ACCENT = '#2DD4BF';
 const ACCENT_GOLD = '#D4AF37';
@@ -110,7 +110,9 @@ function DashboardView() {
   const handleSearch = async () => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     try {
-      const res = await authFetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) });
+      // P2-B2 — vector search scans the project's embedding corpus
+      // (inference-adjacent latency); LLM_TASK_BUDGET_MS, not the default.
+      const res = await authFetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) }, LLM_TASK_BUDGET_MS);
       const d = await res.json();
       if (d.success) setSearchResults(d.results || []);
     } catch { setSearchResults([]); }

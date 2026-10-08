@@ -160,13 +160,112 @@ function headersToRecord(headers?: HeadersInit): Record<string, string> {
   return { ...headers };
 }
 
+// ── fetch budgets (P2-B2) ────────────────────────────────────────────────────
+
+function readUiEnv(name: string): string | undefined {
+  try {
+    const env = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } })?.process?.env;
+    const v = env?.[name];
+    return typeof v === 'string' ? v : undefined;
+  } catch {
+    return undefined; // browser bundle — no env, compiled default applies
+  }
+}
+
+/**
+ * P2-B2 — default budget for every authFetch/fetchTicket call (30 s,
+ * `UI_FETCH_TIMEOUT_MS` override). Derivation: the single-leg provider
+ * budget is 30 s (OPENAI_COMPAT_TIMEOUT_MS, openai-compatible.ts:51-52),
+ * so a dashboard poll that outlives it is by definition hung — bound it to
+ * the same horizon. Browser bundles have no env (compiled default); node /
+ * tests honour the override.
+ */
+export const UI_FETCH_TIMEOUT_MS: number = (() => {
+  const n = Number(readUiEnv('UI_FETCH_TIMEOUT_MS'));
+  return Number.isInteger(n) && (n as number) > 0 ? (n as number) : 30_000;
+})();
+
+/**
+ * P2-B2 — named extended budgets for the long-running sites that would
+ * otherwise trip the 30 s default. Passed as authFetch's 3rd arg with a
+ * justification comment at each call site — never a silent opt-out.
+ *  - LONG_TASK_BUDGET_MS (5 min): full-DB restore / schema migrate / OKF
+ *    project scans — bulk I/O + embedding passes over the whole corpus.
+ *  - LLM_TASK_BUDGET_MS (2 min): single LLM-inference-backed prompts
+ *    (ScopeLogic interview, vector search, provider self-test) — covers a
+ *    60 s council (council.ts) plus provider retry headroom.
+ */
+export const LONG_TASK_BUDGET_MS = 300_000;
+export const LLM_TASK_BUDGET_MS = 120_000;
+
+/**
+ * A timeout signal that aborts with a DOMException named 'AbortError' (NOT
+ * 'TimeoutError'), so every existing `err.name === 'AbortError'` branch
+ * across the 122 authFetch call sites keeps classifying correctly — the
+ * ONLY behaviour change is that hung requests now fail instead of hanging
+ * forever. The timer is unref'd where supported so node/test processes are
+ * never held open by an in-flight budget (browser: unref absent, no-op).
+ */
+function budgetSignal(ms: number): AbortSignal {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    try {
+      controller.abort(new DOMException(`fetch timed out after ${ms}ms`, 'AbortError'));
+    } catch { /* already settled */ }
+  }, ms);
+  try {
+    (timer as unknown as { unref?: () => void }).unref?.();
+  } catch { /* browser — no unref */ }
+  return controller.signal;
+}
+
+/**
+ * Combine the caller's signal (when present) with the budget signal.
+ * COMBINE, not opt-out: an explicit per-call controller (chatbot :50,
+ * ScopeLogicChat :55, App.tsx polls) keeps working AND gains the default
+ * bound — whichever fires first wins, reasons propagate unchanged.
+ * exactOptionalPropertyTypes discipline: presence-checked, never
+ * `signal: undefined` written into the init.
+ */
+function combinedSignal(callerSignal: AbortSignal | null | undefined, ms: number): AbortSignal {
+  const parts = callerSignal ? [callerSignal, budgetSignal(ms)] : [budgetSignal(ms)];
+  const anyFn = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === 'function') return anyFn.call(AbortSignal, parts);
+  const controller = new AbortController();
+  const forward = (): void => {
+    try {
+      const culprit = parts.find((s) => s.aborted);
+      controller.abort(culprit ? culprit.reason : undefined);
+    } catch { /* already aborted */ }
+  };
+  if (parts.some((s) => s.aborted)) forward();
+  else for (const s of parts) s.addEventListener('abort', forward, { once: true });
+  return controller.signal;
+}
+
+function resolveBudgetMs(timeoutMs: number | undefined): number {
+  return typeof timeoutMs === 'number' && Number.isInteger(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : UI_FETCH_TIMEOUT_MS;
+}
+
 // ── authFetch ────────────────────────────────────────────────────────────────
 
 /**
  * `fetch` with the session bearer attached (API URLs only) and a 401 signal
  * that opens AuthGate (except for the auth endpoints themselves).
+ *
+ * P2-B2 — every call is bounded: the signal sent is
+ * `AbortSignal.any([init?.signal, budget])` (COMBINE, not opt-out), default
+ * 30 s (`UI_FETCH_TIMEOUT_MS`), overridable per call via `timeoutMs` for the
+ * named long-running sites (restore/migrate, OKF scans, ScopeLogic prompt,
+ * vector search, provider self-test — each carries a justification comment).
  */
-export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function authFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  timeoutMs?: number,
+): Promise<Response> {
   const url = toUrlString(input);
   const next: RequestInit = { ...(init ?? {}) };
 
@@ -176,6 +275,12 @@ export async function authFetch(input: RequestInfo | URL, init?: RequestInit): P
       next.headers = { ...headersToRecord(init?.headers), [AUTH_HEADER]: `Bearer ${token}` };
     }
   }
+
+  // Presence discipline under exactOptionalPropertyTypes: init?.signal is
+  // only forwarded when actually present — never `signal: undefined` — and
+  // the combined signal is always a REAL AbortSignal.
+  const callerSignal = init?.signal ?? null;
+  next.signal = combinedSignal(callerSignal, resolveBudgetMs(timeoutMs));
 
   const response = await fetch(url, next);
   if (response.status === 401 && !isAuthEndpoint(url)) emitUnauthorized();
@@ -196,6 +301,9 @@ export async function fetchTicket(): Promise<string | null> {
     const res = await fetch(`${API}/api/auth/ticket`, {
       method: 'POST',
       headers: { [AUTH_HEADER]: `Bearer ${token}` },
+      // P2-B2 — same default budget as authFetch: minting is a quick POST,
+      // never a stream, so a hung ticket call must fail instead of hanging.
+      signal: budgetSignal(UI_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const body = (await res.json()) as { ticket?: string };

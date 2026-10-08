@@ -3,7 +3,7 @@ import { RouteSwitchConfig } from './RouteSwitchConfig';
 import { RoutingDials } from './RoutingDials';
 import { useDeveloperMode } from './DeveloperModeContext';
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
-import { authFetch, openEventSource } from '../lib/api';
+import { authFetch, openEventSource, LONG_TASK_BUDGET_MS } from '../lib/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -130,10 +130,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     formData.append('backup_file', restoreFile);
 
     try {
+      // P2-B2 — full-DB restore replays an entire backup (bulk I/O); it
+      // legitimately outlives the 30 s default, so it gets the long budget.
       const res = await authFetch('/api/system/restore', {
         method: 'POST',
         body: formData
-      });
+      }, LONG_TASK_BUDGET_MS);
       const data = await res.json();
       if (data.success) {
         setRestoreStatus('✅ Restore complete. OS is rebooting...');

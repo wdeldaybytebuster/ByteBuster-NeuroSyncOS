@@ -4,7 +4,7 @@ import { useDeveloperMode } from './DeveloperModeContext';
 import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
 import { useNavigation } from '../layouts/OSLayout';
 import type { DAGNode } from '../../core/basevault/schema';
-import { API, authFetch } from '../lib/api';
+import { API, authFetch, LLM_TASK_BUDGET_MS } from '../lib/api';
 
 
 export interface DAGProposalPayload {
@@ -42,7 +42,10 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
     setLoading(true);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    // P2-B2 — the interview prompt is LLM-inference-backed (up to a 60 s
+    // council + routing headroom), so both the local controller and the
+    // authFetch budget use LLM_TASK_BUDGET_MS, not the old 30 s.
+    const timeoutId = setTimeout(() => controller.abort(), LLM_TASK_BUDGET_MS);
 
     try {
       // Route through NeuroSync's own backend (ScopeLogic interview) — never a raw
@@ -53,7 +56,7 @@ export function ScopeLogicChat({ onProposal }: ScopeLogicChatProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg, projectId: activeProjectId || null }),
         signal: controller.signal
-      });
+      }, LLM_TASK_BUDGET_MS);
       clearTimeout(timeoutId);
 
       if (!res.ok) {
