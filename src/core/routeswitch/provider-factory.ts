@@ -59,11 +59,14 @@ export function instantiateProvider(
         customId
       );
     case 'freellmapi':
-      return new FreeLLMProvider({
-        baseUrl: config.baseUrl || 'http://localhost:3001/v1',
-        ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
-        ...(config.modelId !== undefined ? { modelId: config.modelId } : {}),
-      });
+      return new FreeLLMProvider(
+        {
+          baseUrl: config.baseUrl || 'http://localhost:3001/v1',
+          ...(apiKey !== undefined ? { apiKey } : {}),
+          ...(config.modelId !== undefined ? { modelId: config.modelId } : {}),
+        },
+        customId
+      );
     case 'llama-cpp':
       return new LlamaCppProvider(
         { modelPath: config.modelPath, contextSize: config.contextSize, gpuLayers: config.gpuLayers },

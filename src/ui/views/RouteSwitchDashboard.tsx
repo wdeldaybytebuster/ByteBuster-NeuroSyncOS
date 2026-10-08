@@ -343,6 +343,7 @@ function SetupView() {
     setFormSaving(true);
     const config = formType === 'openai-compatible' ? { baseUrl: formBaseUrl, modelId: formModelId }
       : formType === 'llama-cpp' ? { modelPath: formModelPath }
+      : formType === 'freellmapi' ? { baseUrl: formBaseUrl || undefined, modelId: formModelId || undefined }
       : (formType === 'opencode' && zenEnabled) || formType === 'openrouter' ? { modelId: formModelId || undefined }
       : {};
     const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true, isPaidTier: formIsPaidTier };

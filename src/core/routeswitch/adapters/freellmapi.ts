@@ -83,14 +83,14 @@ export class FreeLLMProvider extends OpenAICompatibleProvider {
     inputTypes: ['text', 'image'] as Array<'text' | 'image' | 'audio' | 'video'>,
   };
 
-  constructor(config: FreeLLMProviderConfig) {
+  constructor(config: FreeLLMProviderConfig, customId?: string) {
     super(
       {
         baseUrl: config.baseUrl || FREELLMAPI_BASE_URL,
         ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
         modelId: config.modelId || 'auto',
       },
-      'freellmapi'
+      customId || 'freellmapi'
     );
 
     // Explicit capability override (P8-4). Stated in full rather than spread
