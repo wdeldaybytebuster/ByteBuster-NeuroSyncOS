@@ -16,7 +16,10 @@ function getMasterKey(): Buffer {
     fs.mkdirSync(dataDir, { recursive: true });
   }
   const key = crypto.randomBytes(32);
-  fs.writeFileSync(masterKeyPath, key);
+  fs.writeFileSync(masterKeyPath, key, { mode: 0o600 });
+  // Lock permissions to owner-only (rw-------) even if umask is permissive.
+  // Defense-in-depth: the key must never be world-readable.
+  fs.chmodSync(masterKeyPath, 0o600);
   return key;
 }
 
