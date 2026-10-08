@@ -1,7 +1,9 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { OpenAICompatibleProvider, isTimeoutError } from './openai-compatible';
 import { OpenCodeProvider, OPENCODE_MAX_CANDIDATES } from './opencode';
 import { OpenCodeDiscoveryService } from '../discovery';
+import { instantiateProvider, isOpencodeZenEnabled, OPENCODE_ZEN_FLAG_KEY } from '../provider-factory';
+import { db, initDB } from '../../basevault/db';
 
 /**
  * Regression + repro suite for the live-testing finding documented in
@@ -196,5 +198,47 @@ describe('reasoning-model empty-content handling (openai-compatible adapters)', 
     );
     expect(err).not.toBeNull();
     expect(isTimeoutError(err)).toBe(true);
+  });
+});
+
+// ── P3-S1: Zen retired-type gate (flag off by default, NO removal) ─────────
+// The adapter above stays directly constructible (spies above keep proving
+// its generate/rotation logic); only the FACTORY gate is new.
+describe('P3-S1: opencode factory gate — explicit retired-type error while disabled', () => {
+  beforeAll(() => {
+    initDB();
+  });
+
+  afterEach(() => {
+    try {
+      db.prepare('DELETE FROM system_settings WHERE key = ?').run(OPENCODE_ZEN_FLAG_KEY);
+    } catch { /* uninitialized db — flag is trivially absent */ }
+    vi.restoreAllMocks();
+  });
+
+  it('flag reads fail-closed: unset (and unparseable) ⇒ disabled', () => {
+    expect(isOpencodeZenEnabled()).toBe(false);
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run(OPENCODE_ZEN_FLAG_KEY, 'maybe');
+    expect(isOpencodeZenEnabled()).toBe(false);
+  });
+
+  it("factory throws the explicit retired-type error for 'opencode' while the flag is off", () => {
+    expect(isOpencodeZenEnabled()).toBe(false);
+    expect(() => instantiateProvider('opencode', {}, undefined)).toThrow(/retired/i);
+  });
+
+  it("factory constructs OpenCodeProvider for 'opencode' once the flag is explicitly enabled", () => {
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run(OPENCODE_ZEN_FLAG_KEY, 'true');
+    expect(isOpencodeZenEnabled()).toBe(true);
+    const p = instantiateProvider('opencode', { modelId: 'x' }, undefined);
+    expect(p).toBeInstanceOf(OpenCodeProvider);
+  });
+
+  it('unknown types get an explicit error instead of a silent Mock fallback', () => {
+    expect(() => instantiateProvider('nope-not-a-type', {}, undefined)).toThrow(/unknown provider type/i);
   });
 });

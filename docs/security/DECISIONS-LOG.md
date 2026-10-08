@@ -12,9 +12,13 @@ Convention: each entry = context, options, decision, rationale, evidence, revers
   already resolved the hang risk (candidate cap + timeout).
 - Evidence: `docs/security/FOLLOWUPS-P2-ROLLIN.md:65-74`; adapter
   `src/core/routeswitch/adapters/opencode.ts:13,20`; factory
-  `src/core/routeswitch/provider-factory.ts:4,9,42-43`; discovery
-  `src/core/routeswitch/discovery.ts:125-145`; UI
-  `src/ui/views/RouteSwitchDashboard.tsx:341,386,472,503,542-553`.
+  `src/core/routeswitch/provider-factory.ts:4,9,42-43` (+P3-S1 gate:
+  `OPENCODE_ZEN_FLAG_KEY`, `isOpencodeZenEnabled`, `OPENCODE_RETIRED_MESSAGE`,
+  `case 'opencode'` retired-throw, explicit `default:` unknown-type error);
+  discovery `src/core/routeswitch/discovery.ts:125-145` (untouched); UI
+  `src/ui/views/RouteSwitchDashboard.tsx:341,388,474,505,544,548,555-556`
+  (zenEnabled flag + retired label/disabled option; PortGridDashboard terminal
+  copy untouched — it names the OpenCode CLI agent, not the Zen provider).
 - Reversibility: fully reversible (flag flip).
 
 ## D2 — R-2 key rotation: option B (scheduled rotation + riders)

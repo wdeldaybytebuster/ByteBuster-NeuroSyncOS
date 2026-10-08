@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { RouteSwitchEngine } from '../../core/routeswitch/engine';
-import { instantiateProvider, PROVIDER_TYPES } from '../../core/routeswitch/provider-factory';
+import { instantiateProvider, PROVIDER_TYPES, isOpencodeZenEnabled, OPENCODE_RETIRED_MESSAGE } from '../../core/routeswitch/provider-factory';
 import { FreeModeGovernor } from '../../core/routeswitch/governor';
 import { ProviderHealthState } from '../../core/routeswitch/interceptor';
 import { db } from '../../core/basevault/db';
@@ -141,6 +141,13 @@ llmRouter.post('/providers', async (c) => {
       return c.json({ success: false, error: `type must be one of: ${PROVIDER_TYPES.join(', ')}` }, 400);
     }
 
+    // P3-S1 (Zen option C): retired types are rejected EXPLICITLY at create
+    // time — before any DB write — so syncProviderToEngine below can never
+    // throw on a row this endpoint just created.
+    if (type === 'opencode' && !isOpencodeZenEnabled()) {
+      return c.json({ success: false, error: OPENCODE_RETIRED_MESSAGE }, 400);
+    }
+
     const id = `prov_${crypto.randomUUID().replace(/-/g, '').substring(0, 12)}`;
     const now = Date.now();
     const configJson = JSON.stringify(config || {});
@@ -188,6 +195,18 @@ llmRouter.put('/providers/:id', async (c) => {
     const existing = db.prepare('SELECT id FROM llm_providers WHERE id = ?').get(id);
     if (!existing) {
       return c.json({ success: false, error: 'Provider not found' }, 404);
+    }
+
+    // P3-S1 (Zen option C): PUT was previously unvalidated — a type change to
+    // a retired (or unknown) type is rejected EXPLICITLY before any DB write,
+    // mirroring POST /providers above.
+    if (type !== undefined) {
+      if (!PROVIDER_TYPES.includes(type)) {
+        return c.json({ success: false, error: `type must be one of: ${PROVIDER_TYPES.join(', ')}` }, 400);
+      }
+      if (type === 'opencode' && !isOpencodeZenEnabled()) {
+        return c.json({ success: false, error: OPENCODE_RETIRED_MESSAGE }, 400);
+      }
     }
 
     const now = Date.now();

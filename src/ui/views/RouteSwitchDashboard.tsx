@@ -303,6 +303,10 @@ function SetupView() {
   // Free Mode paid-provider lock. Default LOCKED (false) = safe: paid-flagged
   // providers are skipped in the routing chain until the user explicitly unlocks.
   const [freeModeUnlocked, setFreeModeUnlocked] = useState(false);
+  // P3-S1 (Zen option C): retired-by-default flag. Default OFF (false) = safe:
+  // the opencode provider type cannot be created or instantiated until an
+  // operator explicitly enables it. Follows the free_mode_unlocked idiom.
+  const [zenEnabled, setZenEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mcpConnections, setMcpConnections] = useState<{id:string;name:string;transport:string;status:string}[]>([]);
   const [projects, setProjects] = useState<{id:string;name:string}[]>([]);
@@ -322,6 +326,7 @@ function SetupView() {
         if (d.settings.external_calls_enabled !== undefined) setExternalEnabled(d.settings.external_calls_enabled === 'true' || d.settings.external_calls_enabled === true);
         if (d.settings.grammar_constrained !== undefined) setGrammarEnabled(d.settings.grammar_constrained === 'true' || d.settings.grammar_constrained === true);
         if (d.settings.free_mode_unlocked !== undefined) setFreeModeUnlocked(d.settings.free_mode_unlocked === 'true' || d.settings.free_mode_unlocked === true);
+        if (d.settings.opencode_zen_enabled !== undefined) setZenEnabled(d.settings.opencode_zen_enabled === 'true' || d.settings.opencode_zen_enabled === true);
       }
     }).catch(() => {});
   }, []);
@@ -338,7 +343,7 @@ function SetupView() {
     setFormSaving(true);
     const config = formType === 'openai-compatible' ? { baseUrl: formBaseUrl, modelId: formModelId }
       : formType === 'llama-cpp' ? { modelPath: formModelPath }
-      : (formType === 'opencode' || formType === 'openrouter') ? { modelId: formModelId || undefined }
+      : (formType === 'opencode' && zenEnabled) || formType === 'openrouter' ? { modelId: formModelId || undefined }
       : {};
     const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true, isPaidTier: formIsPaidTier };
     try {
@@ -443,6 +448,15 @@ function SetupView() {
     } catch {}
   };
 
+  // P3-S1 (Zen option C): retired-type flag — persisted immediately (its own
+  // POST) like the free-mode lock, using the generic settings GET/POST.
+  const handleToggleZen = async (enabled: boolean) => {
+    setZenEnabled(enabled);
+    try {
+      await authFetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ opencode_zen_enabled: enabled ? 'true' : 'false' }) });
+    } catch {}
+  };
+
   const providerLabel = (id: string) => providers.find(p => p.id === id)?.name || id;
 
   return (
@@ -471,7 +485,7 @@ function SetupView() {
                       {p.name}
                       {p.isPaidTier && <span className="text-[8px] font-mono font-bold uppercase tracking-wide border border-amber-500/40 text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded shrink-0">Paid</span>}
                     </div>
-                    <div className="text-[10px] text-gray-500 font-mono">{p.type} {p.hasApiKey ? '• key set' : ''} {p.config.baseUrl ? `• ${p.config.baseUrl}` : ''}{p.config.modelPath ? `• ${p.config.modelPath}` : ''}{(p.type === 'opencode' || p.type === 'openrouter') ? `• model: ${p.config.modelId || 'auto'}` : ''}</div>
+                    <div className="text-[10px] text-gray-500 font-mono">{p.type}{p.type === 'opencode' && !zenEnabled ? ' (retired — disabled)' : ''} {p.hasApiKey ? '• key set' : ''} {p.config.baseUrl ? `• ${p.config.baseUrl}` : ''}{p.config.modelPath ? `• ${p.config.modelPath}` : ''}{(p.type === 'opencode' || p.type === 'openrouter') ? `• model: ${p.config.modelId || 'auto'}` : ''}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -502,7 +516,7 @@ function SetupView() {
                 <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Type</label>
                 <select value={formType} onChange={e => setFormType(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50">
                   <option value="freellmapi">FreeLLMAPI (self-hosted proxy)</option>
-                  <option value="opencode">OpenCode Zen</option>
+                  <option value="opencode" disabled={!zenEnabled}>OpenCode Zen{!zenEnabled ? ' (retired — disabled)' : ''}</option>
                   <option value="openrouter">OpenRouter</option>
                   <option value="llama-cpp">Local GGUF (llama.cpp)</option>
                   <option value="openai-compatible">OpenAI Compatible (custom endpoint)</option>
@@ -541,7 +555,7 @@ function SetupView() {
                 </p>
               </div>
             )}
-            {(formType === 'opencode' || formType === 'openrouter') && (
+            {((formType === 'opencode' && zenEnabled) || formType === 'openrouter') && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">API Key</label>
@@ -683,6 +697,10 @@ function SetupView() {
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
             <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Force AI to answer in a strict format" dev="Grammar-Constrained Decoding (GBNF)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Keeps AI answers in a predictable structure so the app can always read them" dev="Force valid JSON output via logit masking" /></span></div>
             <input type="checkbox" checked={grammarEnabled} onChange={e => setGrammarEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
+          </label>
+          <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
+            <div><span className="text-xs font-bold text-white block">OpenCode Zen (retired)</span><span className="text-[10px] text-gray-500">Retired provider type — stays disabled unless explicitly enabled. Existing Zen rows fail closed with an explicit error until then.</span></div>
+            <input type="checkbox" checked={zenEnabled} onChange={e => handleToggleZen(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
         </div>
       </section>

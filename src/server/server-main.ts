@@ -423,12 +423,25 @@ app.post('/api/sync/peers', async (c) => {
 import { decrypt } from '../core/basevault/crypto';
 
 function bootProviderRegistry() {
+  // P3-S1 continue-never-throw: one retired/unknown row (e.g. Zen while the
+  // flag is off) must NEVER abort the whole registry — skip it with a warning
+  // and keep loading the rest. Previously any single throw landed in the
+  // catch below and fell back to env/mock for ALL rows.
+  const safeInstantiate = (type: string, config: any, apiKey: string, id: string) => {
+    try {
+      return instantiateProvider(type, config, apiKey, id);
+    } catch (err: any) {
+      log.warn(`[NeuroSync] Boot: skipping provider row ${id} (type '${type}'): ${err?.message}`);
+      return null;
+    }
+  };
   try {
     const rows = db.prepare(`SELECT id, type, config_json, api_key_encrypted FROM llm_providers WHERE is_enabled = 1`).all() as any[];
     for (const row of rows) {
       const config = JSON.parse(row.config_json || '{}');
       const apiKey = row.api_key_encrypted ? decrypt(row.api_key_encrypted) : '';
-      const provider = instantiateProvider(row.type, config, apiKey, row.id);
+      const provider = safeInstantiate(row.type, config, apiKey, row.id);
+      if (!provider) continue;
       routeSwitch.registerProvider(provider);
     }
 
@@ -445,24 +458,30 @@ function bootProviderRegistry() {
           if (pRow) {
             const pConfig = JSON.parse(pRow.config_json || '{}');
             const pKey = pRow.api_key_encrypted ? decrypt(pRow.api_key_encrypted) : '';
-            const primary = instantiateProvider(pRow.type, pConfig, pKey, pRow.id);
-            routeSwitch.setProvider(primary);
+            const primary = safeInstantiate(pRow.type, pConfig, pKey, pRow.id);
+            if (primary) {
+              routeSwitch.setProvider(primary);
+              log.info(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
+              return;
+            }
+            // Retired/unknown primary — fall through to first-registered below.
+            }
           }
-          log.info(`[NeuroSync] Boot: Primary provider set from global rule: ${primaryId} (${rows.length} total registered)`);
-          return;
         }
       }
-    }
 
     // If we got DB providers but no global rule, set the first one as active primary
     if (rows.length > 0) {
-      const firstRow = rows[0];
-      const firstConfig = JSON.parse(firstRow.config_json || '{}');
-      const firstKey = firstRow.api_key_encrypted ? decrypt(firstRow.api_key_encrypted) : '';
-      const firstProvider = instantiateProvider(firstRow.type, firstConfig, firstKey, firstRow.id);
-      routeSwitch.setProvider(firstProvider);
-      log.info(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
-      return;
+      for (const firstRow of rows) {
+        const firstConfig = JSON.parse(firstRow.config_json || '{}');
+        const firstKey = firstRow.api_key_encrypted ? decrypt(firstRow.api_key_encrypted) : '';
+        const firstProvider = safeInstantiate(firstRow.type, firstConfig, firstKey, firstRow.id);
+        if (!firstProvider) continue;
+        routeSwitch.setProvider(firstProvider);
+        log.info(`[NeuroSync] Boot: ${rows.length} provider(s) loaded from DB. Primary set to: ${firstRow.id} (no global rule yet)`);
+        return;
+      }
+      // Every row was skipped (all retired/unknown) — fall through to env/mock.
     }
   } catch (err) {
     log.warn('[NeuroSync] Boot: Failed to load providers from DB, falling back to env/mock:', err);
