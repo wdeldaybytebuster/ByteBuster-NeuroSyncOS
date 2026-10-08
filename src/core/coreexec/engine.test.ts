@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import { db, initDB, dbPath } from '../basevault/db';
 import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from './engine';
 import { workerPool } from './worker-pool';
-import { systemConfig } from './settings';
+import { systemConfig, HARDWARE_SAFE_MAX_WORKERS } from './settings';
 import fs from 'fs';
 import crypto from 'crypto';
 
@@ -403,7 +403,10 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     return { runId, taskIds };
   }
 
-  it('dispatches all 3 independent eligible tasks concurrently when claim_batch_size is unset (default/unbounded)', async () => {
+  it('dispatches all 3 independent eligible tasks concurrently when claim_batch_size explicitly exceeds task count', async () => {
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES ('claim_batch_size', '10') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run();
     let concurrent = 0;
     let maxConcurrentSeen = 0;
     injectCoreExecGenerateFn(async (_request) => {
@@ -417,9 +420,28 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     const { runId } = seedThreeIndependentGenericTasks();
     await executeRun(runId);
 
-    // All 3 had no dependencies and ample worker headroom — with no batch
-    // cap, they all landed in the same dispatch tick's Promise.all.
+    // All 3 had no dependencies and ample worker headroom — with an explicit
+    // batch cap above the task count, they all landed in the same tick.
     expect(maxConcurrentSeen).toBe(3);
+  });
+
+  it('caps per-tick claims at HARDWARE_SAFE_MAX_WORKERS when claim_batch_size is unset (Axiom-6 ceiling)', async () => {
+    let concurrent = 0;
+    let maxConcurrentSeen = 0;
+    injectCoreExecGenerateFn(async (_request) => {
+      concurrent++;
+      maxConcurrentSeen = Math.max(maxConcurrentSeen, concurrent);
+      await new Promise((r) => setTimeout(r, 30));
+      concurrent--;
+      return 'ok';
+    });
+
+    const { runId } = seedThreeIndependentGenericTasks();
+    await executeRun(runId);
+
+    // Unset setting ⇒ default ceiling applies: at most min(3 tasks,
+    // HARDWARE_SAFE_MAX_WORKERS) concurrently in one tick.
+    expect(maxConcurrentSeen).toBe(Math.min(3, HARDWARE_SAFE_MAX_WORKERS));
   });
 
   it('caps concurrent dispatch at 1 when claim_batch_size=1, serializing otherwise-parallel tasks', async () => {

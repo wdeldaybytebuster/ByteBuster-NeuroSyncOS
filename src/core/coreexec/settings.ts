@@ -45,11 +45,13 @@ export function getConfiguredMaxConcurrent(defaultValue: number): number {
 }
 
 /** Max tasks claimed off the eligible queue per engine.ts dispatch tick.
- * Defaults to unbounded (Number.MAX_SAFE_INTEGER) so an unset setting
- * reproduces the pre-existing behavior of dispatching every available slot
- * (previously capped only by availableSlots, never by a separate batch size). */
+ * Defaults to HARDWARE_SAFE_MAX_WORKERS (Axiom-6 ceiling: cpus-1, min 1) so
+ * an unset setting can never claim an unbounded batch and saturate the
+ * libuv threadpool / heap on a constrained edge node. Previously unbounded
+ * (Number.MAX_SAFE_INTEGER — capped only by availableSlots); a saved value
+ * still overrides explicitly. Floored at 1. */
 export function getClaimBatchSize(): number {
-  return readIntSetting('claim_batch_size', Number.MAX_SAFE_INTEGER, 1);
+  return readIntSetting('claim_batch_size', HARDWARE_SAFE_MAX_WORKERS, 1);
 }
 
 import os from 'os';

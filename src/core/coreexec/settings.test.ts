@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { db, initDB } from '../basevault/db';
-import { getPollingIntervalMs, getConfiguredMaxConcurrent, getClaimBatchSize } from './settings';
+import { getPollingIntervalMs, getConfiguredMaxConcurrent, getClaimBatchSize, HARDWARE_SAFE_MAX_WORKERS } from './settings';
 
 const KEYS = ['polling_interval', 'max_concurrent', 'claim_batch_size'];
 
@@ -47,8 +47,8 @@ describe('coreexec/settings — live system_settings reads for scheduler/pool tu
   });
 
   describe('getClaimBatchSize', () => {
-    it('defaults to unbounded when unset (pre-existing behavior: capped only by available slots)', () => {
-      expect(getClaimBatchSize()).toBe(Number.MAX_SAFE_INTEGER);
+    it('defaults to HARDWARE_SAFE_MAX_WORKERS (Axiom-6 ceiling) when unset, never unbounded', () => {
+      expect(getClaimBatchSize()).toBe(HARDWARE_SAFE_MAX_WORKERS);
     });
 
     it('reflects a saved claim_batch_size', () => {
