@@ -13,13 +13,10 @@ export const llmRouter = new Hono();
 export let activeEngine: RouteSwitchEngine | null = null;
 export let activeGovernor: FreeModeGovernor | null = null;
 
-export const injectLLMEngine = (engine: RouteSwitchEngine, governor: FreeModeGovernor) => {
-  activeEngine = engine;
-  activeGovernor = governor;
-};
-
-// Current active configuration state
-let currentConfig = {
+// Current active configuration state — mutated by both /api/llm/config and
+// /api/routeswitch/provider so the GET /api/llm/config endpoint always reflects
+// the live provider, even when the switch happened via the routeswitch endpoint.
+export let currentConfig = {
   provider: 'openai-compatible',
   baseUrl: 'http://localhost:1234/v1',
   modelId: 'Auto',
@@ -28,11 +25,21 @@ let currentConfig = {
   councilRisk: 70
 };
 
+export const injectLLMEngine = (engine: RouteSwitchEngine, governor: FreeModeGovernor) => {
+  activeEngine = engine;
+  activeGovernor = governor;
+};
+
 llmRouter.get('/config', (c) => {
   return c.json({
     success: true,
     config: currentConfig,
-    telemetry: activeGovernor ? activeGovernor.getStatus() : null
+    telemetry: activeGovernor ? activeGovernor.getStatus() : null,
+    health: ProviderHealthState.getAllStates(),
+    // Honest AgentStop capability of the *currently-active* provider: real
+    // preemptive early-termination (llama-cpp streams real per-token confidence)
+    // vs. heuristic fallback (HTTP/synthetic providers). Backs the UI badge.
+    agentStop: activeEngine ? activeEngine.getAgentStopMode() : null,
   });
 });
 
@@ -56,6 +63,8 @@ llmRouter.post('/config', async (c) => {
   }
 
   const body = await c.req.json();
+  // currentConfig may already have been mutated by /api/routeswitch/provider;
+  // spread body on top so /api/llm/config remains the canonical update path.
   currentConfig = { ...currentConfig, ...body };
 
   try {
@@ -347,6 +356,43 @@ llmRouter.put('/routing-rules', async (c) => {
       `).run(id, scope, normalizedScopeId, chainJson, now, now);
       return c.json({ success: true, id, message: 'Routing rule created' });
     }
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COUNCIL MODE DECISION LOG — read-only observability endpoint
+// Surfaces the confidence/disagreement signal persisted by RouteSwitchEngine
+// (council_decisions table) so high-risk arbitration outcomes are queryable
+// instead of vanishing after being computed.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** List recent Council Mode decisions, most recent first. */
+llmRouter.get('/council-log', (c) => {
+  try {
+    const rawLimit = Number(c.req.query('limit'));
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 100) : 20;
+
+    const rows = db.prepare(`
+      SELECT id, scope, scope_id, provider_count, confidence, disagreement_score, chosen_response_length, created_at
+      FROM council_decisions
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(limit) as any[];
+
+    const decisions = rows.map((row) => ({
+      id: row.id,
+      scope: row.scope,
+      scopeId: row.scope_id,
+      providerCount: row.provider_count,
+      confidence: row.confidence,
+      disagreementScore: row.disagreement_score,
+      chosenResponseLength: row.chosen_response_length,
+      createdAt: row.created_at,
+    }));
+
+    return c.json({ success: true, decisions });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }

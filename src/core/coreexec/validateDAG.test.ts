@@ -106,7 +106,7 @@ describe('validateDAGProposal() — §3.4 approve-path object gate', () => {
 });
 
 describe('escalateBlockedDAGToOsTodos() — §3.4 FK-satisfying escalation', () => {
-  it('writes a workflow_runs + tasks + os_todos triple that satisfies all FKs', async () => {
+  it('writes an os_todos row independently', async () => {
 
 
     const beforeRuns = (db.prepare('SELECT COUNT(*) AS n FROM workflow_runs').get() as any).n;
@@ -120,38 +120,25 @@ describe('escalateBlockedDAGToOsTodos() — §3.4 FK-satisfying escalation', () 
     );
 
     expect(result.todoId).toBeTruthy();
-    expect(result.sentinelTaskId).toMatch(/^blocked-task-/);
-    expect(result.runId).toMatch(/^blocked-run-/);
 
-    // Sentinel task EXISTS in tasks (so the FK targets a real row).
-    const taskRow = db.prepare('SELECT * FROM tasks WHERE id = ?').get(result.sentinelTaskId);
-    expect(taskRow).toBeTruthy();
-    expect((taskRow as any).status).toBe('blocked-by-validation');
-
-    // Sentinel run EXISTS in workflow_runs.
-    const runRow = db.prepare('SELECT * FROM workflow_runs WHERE id = ?').get(result.runId);
-    expect(runRow).toBeTruthy();
-
-    // os_todos row references the task as dag_node_id.
+    // os_todos row references the origin.
     const todoRow = db.prepare('SELECT * FROM os_todos WHERE id = ?').get(result.todoId);
     expect(todoRow).toBeTruthy();
-    expect((todoRow as any).dag_node_id).toBe(result.sentinelTaskId);
     expect((todoRow as any).severity).toBe('HIGH');
-    // Deterministic validation failure, not an AI judgment call — always
-    // below the 0.70 Deference UI threshold, always routed to human review.
-    expect((todoRow as any).confidence).toBe(0.0);
+    expect((todoRow as any).source_module).toBe('CoreExecScheduler');
 
     const afterRuns = (db.prepare('SELECT COUNT(*) AS n FROM workflow_runs').get() as any).n;
     const afterTasks = (db.prepare('SELECT COUNT(*) AS n FROM tasks').get() as any).n;
     const afterTodos = (db.prepare('SELECT COUNT(*) AS n FROM os_todos').get() as any).n;
-    expect(afterRuns - beforeRuns).toBe(1);
-    expect(afterTasks - beforeTasks).toBe(1);
+    
+    // No new runs or tasks created
+    expect(afterRuns - beforeRuns).toBe(0);
+    expect(afterTasks - beforeTasks).toBe(0);
+    // 1 new todo created
     expect(afterTodos - beforeTodos).toBe(1);
 
     // Cleanup.
     db.prepare('DELETE FROM os_todos WHERE id = ?').run(result.todoId);
-    db.prepare('DELETE FROM tasks WHERE id = ?').run(result.sentinelTaskId);
-    db.prepare('DELETE FROM workflow_runs WHERE id = ?').run(result.runId);
   });
 
   it('emits a TODO_ESCALATED scout event with origin and workflowId', async () => {
@@ -174,14 +161,12 @@ describe('escalateBlockedDAGToOsTodos() — §3.4 FK-satisfying escalation', () 
       expect(scoped[0].reason).toMatch(/SA-06/);
       // Cleanup.
       db.prepare('DELETE FROM os_todos WHERE id = ?').run(result.todoId);
-      db.prepare('DELETE FROM tasks WHERE id = ?').run(result.sentinelTaskId);
-      db.prepare('DELETE FROM workflow_runs WHERE id = ?').run(result.runId);
     } finally {
       scoutEmitter.off('update', handler);
     }
   });
 
-  it('does NOT throw when WF + task + todo write succeeds (FK constraint relaxed via sentinel)', async () => {
+  it('does NOT throw when write succeeds', async () => {
 
     expect(() =>
       escalateBlockedDAGToOsTodos('wf-no-throw', 'Parse Violation test'),

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
-import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plug, ListOrdered } from 'lucide-react';
+import { Zap, Activity, AlertTriangle, Server, Cloud, CloudOff, Shield, Key, Plug, ListOrdered, Gavel } from 'lucide-react';
 import { PathBrowser } from '../components/PathBrowser';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#FFB300';
 
 // Shared glow box (amber glow)
@@ -17,17 +19,44 @@ interface UsageData {
   requests?: number;
 }
 
+// Compact relative-time formatter for the Council Mode decision log.
+function formatRelativeTime(ts: number): string {
+  const diffMs = Date.now() - ts;
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
+}
+
 // ─── Dashboard View ─────────────────────────────────────────────────────────
+interface FleetProvider { id: string; name: string; type: string; isEnabled: boolean; }
+interface CouncilDecision {
+  id: string;
+  scope: string | null;
+  scopeId: string | null;
+  providerCount: number;
+  confidence: number;
+  disagreementScore: number;
+  chosenResponseLength: number;
+  createdAt: number;
+}
+
 function DashboardView() {
   const { activeProjectId } = useNavigation();
   const [usage, setUsage] = useState<UsageData>({ tokens: 0, costUsd: 0, requests: 0 });
   const [config, setConfig] = useState<any>(null);
   const [alerts, setAlerts] = useState<string[]>([]);
+  const [fleetProviders, setFleetProviders] = useState<FleetProvider[]>([]);
+  const [councilDecisions, setCouncilDecisions] = useState<CouncilDecision[]>([]);
 
   // Poll usage every 5s
   useEffect(() => {
     const fetchUsage = () => {
-      fetch(`${API}/api/llm/usage`).then(r => r.json()).then(d => { if (d.success && d.usage24h) setUsage(d.usage24h); }).catch(() => {});
+      authFetch(`${API}/api/llm/usage`).then(r => r.json()).then(d => { if (d.success && d.usage24h) setUsage(d.usage24h); }).catch(() => {});
     };
     fetchUsage();
     const iv = setInterval(fetchUsage, 5000);
@@ -35,12 +64,58 @@ function DashboardView() {
   }, [activeProjectId]);
 
   // Fetch config for provider status
+  // Fetch config for provider status and forecasting alerts
   useEffect(() => {
-    fetch(`${API}/api/llm/config`).then(r => r.json()).then(d => { if (d.success) setConfig(d); }).catch(() => {});
+    const fetchConfig = () => {
+      authFetch(`${API}/api/llm/config`).then(r => r.json()).then(d => {
+        if (d.success) {
+          setConfig(d);
+          
+          const newAlerts: string[] = [];
+          
+          if (d.telemetry) {
+            if (d.telemetry.tokensUsed >= d.telemetry.maxTokens) {
+              newAlerts.push(`Governor Block: Token limit reached (${d.telemetry.tokensUsed.toLocaleString()} / ${d.telemetry.maxTokens.toLocaleString()}). No further requests allowed.`);
+            } else if (d.telemetry.tokensUsed >= d.telemetry.maxTokens * 0.9) {
+              newAlerts.push(`Governor Warning: Nearing token limit (${d.telemetry.tokensUsed.toLocaleString()} / ${d.telemetry.maxTokens.toLocaleString()}).`);
+            }
+          }
+          
+          if (d.health) {
+            for (const [providerId, state] of Object.entries(d.health)) {
+              if ((state as any).isExhausted) {
+                const name = fleetProviders.find(p => p.id === providerId)?.name || providerId;
+                newAlerts.push(`Provider Error: ${name} is exhausted or rate-limited. Routing chain will bypass it.`);
+              }
+            }
+          }
+          
+          setAlerts(newAlerts);
+        }
+      }).catch(() => {});
+    };
+    fetchConfig();
+    const iv = setInterval(fetchConfig, 5000);
+    return () => clearInterval(iv);
+  }, [fleetProviders]);
+
+  // Fetch real provider registry for the Fleet Health widget (was 3 hardcoded rows)
+  useEffect(() => {
+    const fetchProviders = () => {
+      authFetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setFleetProviders(d.providers); }).catch(() => {});
+    };
+    fetchProviders();
+    const iv = setInterval(fetchProviders, 10000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Fetch recent Council Mode (high-risk arbitration) decisions
+  useEffect(() => {
+    authFetch(`${API}/api/llm/council-log?limit=10`).then(r => r.json()).then(d => { if (d.success) setCouncilDecisions(d.decisions); }).catch(() => {});
   }, []);
 
   const currentMode = config?.config?.provider === 'mock' ? 'Offline Mode' : config?.config?.provider === 'openai-compatible' ? 'Free-Cloud Mode' : 'Local Mode';
-  const dailyCap = config?.telemetry?.dailyTokenCap || 50000;
+  const dailyCap = config?.telemetry?.maxTokens || 100000;
   const tokensUsed = usage.tokens || 0;
   const callsRemaining = Math.max(0, Math.floor((dailyCap - tokensUsed) / 150));
 
@@ -50,7 +125,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Zap size={16} style={{ color: ACCENT }} /> 24h Telemetry & Quota Ledger
+            <Zap size={16} style={{ color: ACCENT }} /> <ModeLabel simple="AI Usage (Last 24 Hours)" dev="24h Telemetry & Quota Ledger" />
           </h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-white/10 bg-white/5" style={{ color: ACCENT }}>{currentMode}</span>
         </div>
@@ -89,34 +164,32 @@ function DashboardView() {
       {/* Widget B: LLM Fleet Health & Fallback Monitor */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Activity size={16} style={{ color: ACCENT }} /> LLM Fleet Health & Fallback Monitor
+          <Activity size={16} style={{ color: ACCENT }} /> <ModeLabel simple="AI Model Status" dev="LLM Fleet Health & Fallback Monitor" /> <HelpTip text="If your first-choice AI model isn't available, the app automatically tries the next one on the list — that's the 'fallback' order shown below." />
         </h2>
 
         <div className="space-y-2">
-          {/* Provider rows */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-green-500/20">
-            <div className="flex items-center gap-3">
-              <Server size={14} className="text-green-400" />
-              <div><div className="text-xs font-bold text-white">Local Mock Provider</div><div className="text-[10px] text-gray-500 font-mono">Level 3 — Air-gapped fallback</div></div>
+          {/* Provider rows — real entries from the llm_providers registry */}
+          {fleetProviders.length === 0 ? (
+            <div className="text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">
+              No providers configured yet. Add one in Set-up → Provider Registry.
             </div>
-            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-[10px] font-mono text-green-400">ACTIVE</span></div>
-          </div>
-
-          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5">
-            <div className="flex items-center gap-3">
-              <Cloud size={14} className="text-amber-400" />
-              <div><div className="text-xs font-bold text-white">OpenRouter (Free Tier)</div><div className="text-[10px] text-gray-500 font-mono">Level 1 — Agent Preference</div></div>
+          ) : fleetProviders.map(p => (
+            <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg bg-black/30 border ${p.isEnabled ? 'border-green-500/20' : 'border-white/5 opacity-60'}`}>
+              <div className="flex items-center gap-3">
+                {p.type === 'openai-compatible'
+                  ? (p.isEnabled ? <Cloud size={14} className="text-amber-400" /> : <CloudOff size={14} className="text-gray-500" />)
+                  : <Server size={14} className={p.isEnabled ? 'text-green-400' : 'text-gray-500'} />}
+                <div>
+                  <div className={`text-xs font-bold ${p.isEnabled ? 'text-white' : 'text-gray-400'}`}>{p.name}</div>
+                  <div className="text-[10px] text-gray-500 font-mono">{p.type}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${p.isEnabled ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></span>
+                <span className={`text-[10px] font-mono ${p.isEnabled ? 'text-green-400' : 'text-gray-600'}`}>{p.isEnabled ? 'ACTIVE' : 'DISABLED'}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500"></span><span className="text-[10px] font-mono text-amber-400">{config?.config?.provider === 'openai-compatible' ? 'CONNECTED' : 'STANDBY'}</span></div>
-          </div>
-
-          <div className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5 opacity-60">
-            <div className="flex items-center gap-3">
-              <CloudOff size={14} className="text-gray-500" />
-              <div><div className="text-xs font-bold text-gray-400">OpenCode Zen (Paid)</div><div className="text-[10px] text-gray-600 font-mono">Level 2 — Category Default</div></div>
-            </div>
-            <span className="text-[10px] font-mono text-gray-600 border border-white/5 px-1.5 py-0.5 rounded bg-black/40">DISABLED</span>
-          </div>
+          ))}
         </div>
 
         {/* Fallback Cascade */}
@@ -135,7 +208,7 @@ function DashboardView() {
       {/* Widget C: Routing Alerts & Forecasting Blockers */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <AlertTriangle size={16} className="text-red-400" /> Routing Alerts & Forecasting Blockers
+          <AlertTriangle size={16} className="text-red-400" /> <ModeLabel simple="AI Connection Alerts" dev="Routing Alerts & Forecasting Blockers" />
         </h2>
 
         {alerts.length === 0 ? (
@@ -156,9 +229,40 @@ function DashboardView() {
 
         {/* Quick-fix Buttons */}
         <div className="flex gap-2 mt-4 pt-3 border-t border-white/5">
-          <button onClick={() => { fetch(`${API}/api/routeswitch/provider`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'mock' }) }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Switch to Local Mock</button>
-          <button onClick={() => { fetch(`${API}/api/llm/clear-error`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Clear Last Provider Error</button>
+          <button onClick={() => { authFetch(`${API}/api/routeswitch/provider`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'mock' }) }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Switch to Local Mock</button>
+          <button onClick={() => { authFetch(`${API}/api/llm/clear-error`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all">Clear Last Provider Error</button>
         </div>
+      </section>
+
+      {/* Widget D: Council Mode Decisions — high-risk arbitration observability */}
+      <section className={GLOW_BOX}>
+        <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
+          <Gavel size={16} style={{ color: ACCENT }} /> <ModeLabel simple="High-Risk Arbitration Log" dev="Council Mode Decisions" /> <HelpTip text="High-risk prompts get routed through multiple AI providers at once so the app can compare their answers. This log shows how confident the app was in the answer it picked, each time that happened." />
+        </h2>
+
+        {councilDecisions.length === 0 ? (
+          <div className="text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">
+            No council-mode decisions yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {councilDecisions.map(d => {
+              const confColor = d.confidence > 0.9 ? '#00FF41' : d.confidence > 0.7 ? '#fbbf24' : '#ef4444';
+              return (
+                <div key={d.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-white/5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-[10px] font-mono text-gray-500 shrink-0">{formatRelativeTime(d.createdAt)}</span>
+                    <span className="text-[10px] font-mono text-gray-600 shrink-0">{d.providerCount} providers</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-[10px] font-mono text-gray-500">Disagreement: <span className="text-gray-300">{d.disagreementScore.toFixed(2)}</span></span>
+                    <span className="text-xs font-bold font-mono" style={{ color: confColor }}>{(d.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -208,11 +312,11 @@ function SetupView() {
 
   // Load providers, rules, MCP, settings, projects
   useEffect(() => {
-    fetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setProviders(d.providers); }).catch(() => {});
-    fetch(`${API}/api/llm/routing-rules`).then(r => r.json()).then(d => { if (d.success) setRules(d.rules); }).catch(() => {});
-    fetch(`${API}/api/system/mcp/connections`).then(r => r.json()).then(d => { if (d.success && d.connections) setMcpConnections(d.connections); }).catch(() => {});
-    fetch(`${API}/api/projects`).then(r => r.json()).then(d => { if (d.projects) setProjects(d.projects); }).catch(() => {});
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/llm/providers`).then(r => r.json()).then(d => { if (d.success) setProviders(d.providers); }).catch(() => {});
+    authFetch(`${API}/api/llm/routing-rules`).then(r => r.json()).then(d => { if (d.success) setRules(d.rules); }).catch(() => {});
+    authFetch(`${API}/api/system/mcp/connections`).then(r => r.json()).then(d => { if (d.success && d.connections) setMcpConnections(d.connections); }).catch(() => {});
+    authFetch(`${API}/api/projects`).then(r => r.json()).then(d => { if (d.projects) setProjects(d.projects); }).catch(() => {});
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.daily_cost_ceiling) setDailyCeiling(Number(d.settings.daily_cost_ceiling));
         if (d.settings.external_calls_enabled !== undefined) setExternalEnabled(d.settings.external_calls_enabled === 'true' || d.settings.external_calls_enabled === true);
@@ -239,12 +343,12 @@ function SetupView() {
     const body = { name: formName, type: formType, config, apiKey: formApiKey || undefined, isEnabled: true, isPaidTier: formIsPaidTier };
     try {
       if (editingId) {
-        await fetch(`${API}/api/llm/providers/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        await authFetch(`${API}/api/llm/providers/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       } else {
-        await fetch(`${API}/api/llm/providers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        await authFetch(`${API}/api/llm/providers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       }
       // Refresh list
-      const d = await fetch(`${API}/api/llm/providers`).then(r => r.json());
+      const d = await authFetch(`${API}/api/llm/providers`).then(r => r.json());
       if (d.success) setProviders(d.providers);
       setShowAddForm(false); setEditingId(null); setFormName(''); setFormApiKey(''); setTestResult(null);
     } catch {}
@@ -253,7 +357,7 @@ function SetupView() {
 
   const handleDeleteProvider = async (id: string) => {
     try {
-      const res = await fetch(`${API}/api/llm/providers/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`${API}/api/llm/providers/${id}`, { method: 'DELETE' });
       const d = await res.json();
       if (d.success) {
         setProviders(prev => prev.filter(p => p.id !== id));
@@ -269,13 +373,14 @@ function SetupView() {
     setTestResult(null);
     setTestingProviderId(id);
     try {
-      const d = await fetch(`${API}/api/llm/providers/${id}/test`, { method: 'POST' }).then(r => r.json());
+      const d = await authFetch(`${API}/api/llm/providers/${id}/test`, { method: 'POST' }).then(r => r.json());
       setTestResult(d.test || { connected: false, error: 'Unknown error' });
     } catch { setTestResult({ connected: false, error: 'Network error' }); }
   };
 
   const handleEditProvider = (p: ProviderEntry) => {
     setEditingId(p.id); setFormName(p.name); setFormType(p.type);
+    if (p.type === 'freellmapi') { setFormApiKey(p.config.apiKey || ''); setFormModelId(p.config.modelId || 'auto'); }
     if (p.type === 'openai-compatible') { setFormBaseUrl(p.config.baseUrl || ''); setFormModelId(p.config.modelId || 'Auto'); }
     if (p.type === 'llama-cpp') { setFormModelPath(p.config.modelPath || ''); }
     if (p.type === 'opencode' || p.type === 'openrouter') { setFormModelId(p.config.modelId || ''); }
@@ -287,8 +392,8 @@ function SetupView() {
     setRuleSaving(true);
     const scopeId = (activeScope === 'global' || activeScope === 'cerebro') ? null : activeScopeId || null;
     try {
-      await fetch(`${API}/api/llm/routing-rules`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: activeScope, scopeId, providerChain: currentChain }) });
-      const d = await fetch(`${API}/api/llm/routing-rules`).then(r => r.json());
+      await authFetch(`${API}/api/llm/routing-rules`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: activeScope, scopeId, providerChain: currentChain }) });
+      const d = await authFetch(`${API}/api/llm/routing-rules`).then(r => r.json());
       if (d.success) setRules(d.rules);
     } catch {}
     setRuleSaving(false);
@@ -310,8 +415,8 @@ function SetupView() {
     const match = rules.find(r => r.scope === activeScope && (r.scopeId || '') === (scopeId || ''));
     if (!match) return;
     try {
-      await fetch(`${API}/api/llm/routing-rules/${match.id}`, { method: 'DELETE' });
-      const d = await fetch(`${API}/api/llm/routing-rules`).then(r => r.json());
+      await authFetch(`${API}/api/llm/routing-rules/${match.id}`, { method: 'DELETE' });
+      const d = await authFetch(`${API}/api/llm/routing-rules`).then(r => r.json());
       if (d.success) setRules(d.rules);
       setCurrentChain([]);
     } catch {}
@@ -321,7 +426,7 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ daily_cost_ceiling: dailyCeiling, external_calls_enabled: externalEnabled, grammar_constrained: grammarEnabled }) });
+      await authFetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ daily_cost_ceiling: dailyCeiling, external_calls_enabled: externalEnabled, grammar_constrained: grammarEnabled }) });
     } catch {}
     setSaving(false);
   };
@@ -332,7 +437,7 @@ function SetupView() {
   const handleToggleFreeModeLock = async (unlocked: boolean) => {
     setFreeModeUnlocked(unlocked);
     try {
-      await fetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ free_mode_unlocked: unlocked ? 'true' : 'false' }) });
+      await authFetch(`${API}/api/system/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ free_mode_unlocked: unlocked ? 'true' : 'false' }) });
     } catch {}
   };
 
@@ -344,9 +449,8 @@ function SetupView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Key size={16} style={{ color: ACCENT }} /> Provider Registry
-          </h2>
-          <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('opencode'); setFormBaseUrl('http://localhost:1234/v1'); setFormModelId(''); setFormModelPath('./local_models/'); setFormApiKey(''); setFormIsPaidTier(false); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
+            <Key size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Your AI Services" dev="Provider Registry" /> <HelpTip text="A 'provider' is whatever runs the AI for you — an app on your own computer (like LM Studio) or an online service you have a key for. Your keys are stored encrypted." />
+          </h2>              <button onClick={() => { setShowAddForm(true); setEditingId(null); setFormName(''); setFormType('freellmapi'); setFormBaseUrl(''); setFormModelId('auto'); setFormModelPath(''); setFormApiKey(''); setFormIsPaidTier(false); setTestResult(null); }} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-black transition-all" style={{ backgroundColor: ACCENT }}>+ Add Provider</button>
         </div>
         <p className="text-xs text-gray-400 mb-4">Named LLM endpoint entries. API keys are encrypted at rest. Create multiple entries of the same type for different models or services.</p>
 
@@ -395,6 +499,7 @@ function SetupView() {
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Type</label>
                 <select value={formType} onChange={e => setFormType(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/50">
+                  <option value="freellmapi">FreeLLMAPI (self-hosted proxy)</option>
                   <option value="opencode">OpenCode Zen</option>
                   <option value="openrouter">OpenRouter</option>
                   <option value="llama-cpp">Local GGUF (llama.cpp)</option>
@@ -417,6 +522,21 @@ function SetupView() {
                   <input type="text" value={formModelPath} onChange={e => setFormModelPath(e.target.value)} placeholder="./local_models/your-model.gguf" className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
                   <button onClick={() => setShowModelBrowser(true)} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all text-[10px] font-bold">Browse</button>
                 </div>
+              </div>
+            )}
+            {formType === 'freellmapi' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">API Key</label>
+                  <input type="password" value={formApiKey} onChange={e => setFormApiKey(e.target.value)} placeholder={editingId ? '(unchanged)' : 'freellmapi-...'} className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Model ID (optional)</label>
+                  <input type="text" value={formModelId} onChange={e => setFormModelId(e.target.value)} placeholder="auto = router picks best free model" className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50" />
+                </div>
+                <p className="text-[10px] text-gray-500 md:col-span-2">
+                  Base URL is baked in ({formType === 'freellmapi' ? 'http://localhost:3001/v1' : 'auto'}). Get a unified key from your FreeLLMAPI dashboard's Keys page. The router auto-fails over across free providers.
+                </p>
               </div>
             )}
             {(formType === 'opencode' || formType === 'openrouter') && (
@@ -451,9 +571,9 @@ function SetupView() {
       {/* Section B: Default & Fallback Chain (Routing Rules) */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <ListOrdered size={16} style={{ color: ACCENT }} /> Default & Fallback Chain
+          <ListOrdered size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Which AI To Try First" dev="Default & Fallback Chain" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Set the provider priority order per scope. Position 1 is primary; remaining are fallbacks tried on failure. Most specific scope wins at runtime.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Put your AI services in order of preference. Number 1 is tried first; if it fails, the app moves down the list automatically." dev="Set the provider priority order per scope. Position 1 is primary; remaining are fallbacks tried on failure. Most specific scope wins at runtime." /></p>
 
         {/* Scope tabs */}
         <div className="flex gap-1 mb-4 bg-black/30 p-1 rounded-lg border border-white/5">
@@ -520,7 +640,7 @@ function SetupView() {
       {/* Section C: Free Mode Governor Limits */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Shield size={16} style={{ color: ACCENT }} /> Free Mode Governor Limits
+          <Shield size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Spending Limits" dev="Free Mode Governor Limits" />
         </h2>
         <div className="space-y-4">
           {/* Paid-provider lock — the real enforcement behind the "blocks paid-provider
@@ -559,7 +679,7 @@ function SetupView() {
             <input type="checkbox" checked={externalEnabled} onChange={e => setExternalEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Grammar-Constrained Decoding (GBNF)</span><span className="text-[10px] text-gray-500">Force valid JSON output via logit masking</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Force AI to answer in a strict format" dev="Grammar-Constrained Decoding (GBNF)" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Keeps AI answers in a predictable structure so the app can always read them" dev="Force valid JSON output via logit masking" /></span></div>
             <input type="checkbox" checked={grammarEnabled} onChange={e => setGrammarEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
         </div>
@@ -568,7 +688,7 @@ function SetupView() {
       {/* Section D: MCP Connection Manager */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Plug size={16} style={{ color: ACCENT }} /> MCP Connection Manager
+          <Plug size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Connected Tools" dev="MCP Connection Manager" /> <HelpTip text="Extra tools the AI can plug into for added abilities (they connect through a standard called MCP)." />
         </h2>
         <div className="space-y-2">
           {mcpConnections.map(conn => (

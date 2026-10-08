@@ -5,6 +5,7 @@ import { ProjectSwitcher } from './ProjectSwitcher';
 import { useNavigation } from '../layouts/OSLayout';
 import { useTheme } from './ThemeContext';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { MODULE_LABELS } from './moduleLabels';
 
 interface AppShellProps {
   moduleId: string;
@@ -21,10 +22,14 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
   const { theme, setTheme } = useTheme();
   const { isDeveloperMode, setDeveloperMode } = useDeveloperMode();
 
+  // Hobbyist Mode shows the plain-English module name from the shared map;
+  // Developer Mode keeps the technical moduleName each dashboard passes in.
+  const displayName = isDeveloperMode ? moduleName : (MODULE_LABELS[moduleId]?.simple ?? moduleName);
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* TOP NAVIGATION BAR */}
-      <header className="h-16 shrink-0 flex items-center justify-between px-4 border-b border-white/5 bg-void/80 backdrop-blur-md z-40">
+      <header className="min-h-[4rem] py-2 shrink-0 flex flex-wrap gap-2 items-center justify-between px-4 border-b border-white/5 bg-void/80 backdrop-blur-md z-40">
         {/* Left: Hamburger + Logo (hero) + Brand + Module Name */}
         <div className="flex items-center gap-4">
           <button onClick={() => setLeftBarOpen(!leftBarOpen)} className="w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all" aria-label="Toggle module navigation">
@@ -32,7 +37,7 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
           </button>
           <img src={moduleLogo} alt={moduleName} className="h-11 w-11 object-contain drop-shadow-lg" style={{ filter: `drop-shadow(0 0 8px ${accentColor}40)` }} />
           <div className="hidden sm:flex flex-col">
-            <span className="text-base font-black tracking-wide" style={{ color: accentColor }}>{moduleName}</span>
+            <span className="text-base font-black tracking-wide" style={{ color: accentColor }}>{displayName}</span>
             <span className="text-[9px] font-mono text-gray-500 tracking-widest uppercase -mt-0.5">ByteBuster NeuroSyncOS v1.0</span>
           </div>
         </div>
@@ -59,13 +64,14 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
         <div className="flex items-center gap-3">
           <button
             onClick={() => setDeveloperMode(!isDeveloperMode)}
-            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all ${isDeveloperMode ? 'text-black' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+            className={`h-8 px-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all ${isDeveloperMode ? 'text-black' : 'text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'}`}
             style={isDeveloperMode ? { backgroundColor: accentColor } : {}}
             aria-label="Toggle Developer Mode"
             aria-pressed={isDeveloperMode}
-            title={isDeveloperMode ? 'Developer Mode: ON — showing raw technical details' : 'Developer Mode: OFF — showing simple explanations'}
+            title={isDeveloperMode ? 'Developer Mode: ON — showing raw technical details. Click for simple explanations.' : 'Simple Mode: ON — showing plain-English labels. Click for raw technical details.'}
           >
             <Code2 size={16} />
+            <span className="text-[10px] font-bold tracking-wide">{isDeveloperMode ? 'Dev' : 'Simple'}</span>
           </button>
           <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-8 h-8 rounded-md flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all" aria-label="Toggle theme">
             {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
@@ -84,9 +90,9 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
       </header>
 
       {/* BODY: Left Bar + Center + Right Bar (flex layout — center shrinks when bars open) */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* LEFT BAR: Module Router */}
-        <aside className={`shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-r border-white/5 shadow-2xl flex flex-col ${leftBarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
+        <aside className={`absolute md:relative shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-r border-white/5 shadow-2xl flex flex-col z-50 ${leftBarOpen ? 'w-64' : 'w-0 border-r-0'}`}>
           <div className="p-4 border-b border-white/5 flex items-center justify-between min-w-[16rem]">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Modules</span>
             <button onClick={() => setLeftBarOpen(false)} className="w-6 h-6 rounded flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10"><X size={14} /></button>
@@ -102,7 +108,7 @@ export function AppShell({ moduleId, moduleName, moduleLogo, accentColor, childr
         </main>
 
         {/* RIGHT BAR: Project Switcher */}
-        <aside className={`shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-l border-white/5 shadow-2xl flex flex-col ${rightBarOpen ? 'w-72' : 'w-0 border-l-0'}`}>
+        <aside className={`absolute md:relative right-0 shrink-0 h-full transition-all duration-300 overflow-hidden bg-void/95 backdrop-blur-xl border-l border-white/5 shadow-2xl flex flex-col z-50 ${rightBarOpen ? 'w-72' : 'w-0 border-l-0'}`}>
           <div className="p-4 border-b border-white/5 flex items-center justify-between min-w-[18rem]">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Context</span>
             <button onClick={() => setRightBarOpen(false)} className="w-6 h-6 rounded flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10"><X size={14} /></button>

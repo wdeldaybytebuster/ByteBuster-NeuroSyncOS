@@ -571,6 +571,22 @@
 .scoutdaemon-cockpit::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
 .scoutdaemon-cockpit::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
+/* Reduced Motion -- UnifiedMasterDashboard Prefers Reduced Motion setting
+   (Set-up view, Control C). PreferencesContext toggles this class on the
+   html element when the setting is on. Applied globally, not per component,
+   because the transition-all / duration- / animate- utility classes are
+   used throughout every dashboard GLOW_BOX -- a per-component gate would
+   need to touch dozens of call sites and inevitably miss some. Respecting
+   prefers-reduced-motion as a browser default is a separate, unrelated
+   concern; this is the explicit user setting actually doing something. */
+html.ns-reduced-motion,
+html.ns-reduced-motion * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* Danger / Kill Switch Styling */
 .scoutdaemon-cockpit .kill-switch {
   background: rgba(220, 38, 38, 0.1);

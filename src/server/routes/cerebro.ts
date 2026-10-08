@@ -3,6 +3,31 @@ import { db } from '../../core/basevault/db';
 import { CerebroVectorStore } from '../../core/memory/cerebro/vector';
 import { ReflectionExecutor } from '../../core/memory/cerebro/reflection';
 import { log } from '../../core/observability/logger';
+import { computeDecayFactor, DEFAULT_DECAY_RATE, DEFAULT_ACCESS_BOOST } from '../../core/memory/cerebro/habituation';
+
+// Reads the user-configurable decay-rate / access-boost multipliers from
+// system_settings (CerebroDashboard's "Habituation Scoring Algorithms"
+// sliders — cerebro_decay_multiplier / cerebro_access_boost). These were
+// previously saved but never consumed anywhere; this helper is the single
+// place that reads them back out, falling back to the same defaults
+// HabituationScorer uses when unset or not a valid number.
+function getDecaySettings(): { decayRate: number; accessBoost: number } {
+  const rows = db
+    .prepare(`SELECT key, value FROM system_settings WHERE key IN ('cerebro_decay_multiplier', 'cerebro_access_boost')`)
+    .all() as { key: string; value: string }[];
+
+  let decayRate = DEFAULT_DECAY_RATE;
+  let accessBoost = DEFAULT_ACCESS_BOOST;
+
+  for (const row of rows) {
+    const n = Number(row.value);
+    if (!Number.isFinite(n)) continue;
+    if (row.key === 'cerebro_decay_multiplier') decayRate = n;
+    if (row.key === 'cerebro_access_boost') accessBoost = n;
+  }
+
+  return { decayRate, accessBoost };
+}
 
 export const cerebroRouter = new Hono();
 
@@ -10,7 +35,7 @@ export const cerebroRouter = new Hono();
 cerebroRouter.get('/health', (c) => {
   try {
     const vectorCountRow = db
-      .prepare('SELECT COUNT(*) AS n FROM cerebro_memories_meta')
+      .prepare('SELECT COUNT(*) AS n FROM cerebro_memories_vec')
       .get() as { n: number } | undefined;
     const lastTouchRow = db
       .prepare('SELECT MAX(last_accessed_at) AS ts FROM cerebro_memories_meta')
@@ -87,7 +112,7 @@ cerebroRouter.post('/vector-search', async (c) => {
 cerebroRouter.get('/learning-approvals', (c) => {
   try {
     const queue = db.prepare(`
-      SELECT id, fact, confidence, status, source_run_id, created_at
+      SELECT id, fact, confidence, status, created_at, conflict_with_id, conflict_reasoning, source_tool
       FROM cerebro_learning_approvals
       WHERE status = 'pending'
       ORDER BY created_at ASC
@@ -103,18 +128,27 @@ cerebroRouter.post('/learning-approvals/:id/approve', async (c) => {
   try {
     const id = c.req.param('id');
     const approval = db.prepare('SELECT * FROM cerebro_learning_approvals WHERE id = ?').get(id) as any;
-    
-    if (!approval) return c.json({ success: false, error: 'Not found' }, 404);
-    
-    // Insert into cerebro_memories_meta
-    const memId = crypto.randomUUID();
-    db.prepare(`
-      INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(memId, approval.fact, 'fact', Date.now(), 0, Date.now());
 
-    // Mark as approved
-    db.prepare(`UPDATE cerebro_learning_approvals SET status = 'approved' WHERE id = ?`).run(id);
+    if (!approval) return c.json({ success: false, error: 'Not found' }, 404);
+
+    const memId = crypto.randomUUID();
+    const approve = db.transaction(() => {
+      // Insert new fact into memory
+      db.prepare(`
+        INSERT INTO cerebro_memories_meta (id, content, type, last_accessed_at, access_count, created_at, source_tool)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(memId, approval.fact, 'fact', Date.now(), 0, Date.now(), approval.source_tool || null);
+
+      // If resolving a conflict, remove the old superseded memory
+      if (approval.conflict_with_id) {
+        db.prepare('DELETE FROM cerebro_memories_meta WHERE id = ?').run(approval.conflict_with_id);
+        db.prepare('DELETE FROM cerebro_memories_vec WHERE id = ?').run(approval.conflict_with_id);
+      }
+
+      // Mark the approval as resolved
+      db.prepare(`UPDATE cerebro_learning_approvals SET status = 'approved' WHERE id = ?`).run(id);
+    });
+    approve();
 
     return c.json({ success: true, message: 'Fact approved and stored in memory.' });
   } catch (err: any) {
@@ -128,6 +162,153 @@ cerebroRouter.post('/learning-approvals/:id/reject', (c) => {
     const id = c.req.param('id');
     db.prepare(`UPDATE cerebro_learning_approvals SET status = 'rejected' WHERE id = ?`).run(id);
     return c.json({ success: true, message: 'Fact rejected.' });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Decay stats — real "Nearing Decay" count for the Habituation Decay widget,
+// replacing its hardcoded 0. Mirrors HabituationScorer.rank's decay term
+// (src/core/memory/cerebro/habituation.ts: decayFactor = e^-(daysSinceAccess*0.3))
+// applied per-row against cerebro_memories_meta.last_accessed_at. A memory
+// "nearing decay" is one whose decayFactor has fallen below 0.1 (~7.7+ days
+// since last access), independent of the boost/similarity terms rank() also
+// applies (those rank search results; this just measures raw idleness).
+cerebroRouter.get('/decay-stats', (c) => {
+  try {
+    const NEARING_DECAY_THRESHOLD = 0.1;
+    const rows = db.prepare('SELECT last_accessed_at FROM cerebro_memories_meta').all() as { last_accessed_at: number }[];
+    const now = Date.now();
+    const { decayRate } = getDecaySettings();
+
+    let nearingDecay = 0;
+    for (const row of rows) {
+      const daysSinceAccess = Math.max(0, (now - row.last_accessed_at) / (1000 * 60 * 60 * 24));
+      const decayFactor = computeDecayFactor(daysSinceAccess, decayRate);
+      if (decayFactor < NEARING_DECAY_THRESHOLD) nearingDecay++;
+    }
+
+    return c.json({ success: true, nearingDecay, total: rows.length, threshold: NEARING_DECAY_THRESHOLD });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// ─── Pruning ────────────────────────────────────────────────────────────────
+// Conservative by design: manual trigger only, never a silent background
+// auto-delete. Preview (dry run) and confirm (destructive) MUST use identical
+// selection logic — both recompute server-side from the same threshold so the
+// UI can never show one set and delete a different one (no TOCTOU / no
+// client-supplied id list is trusted). A memory only becomes prune-eligible
+// once it is already "nearing decay" by the /decay-stats definition, so the
+// default threshold is the SAME 0.1 the decay-stats widget uses — we do not
+// introduce a second, divergent threshold.
+const PRUNE_DECAY_THRESHOLD = 0.1;
+
+// Shared selection: returns memories whose decayFactor has fallen below the
+// given threshold, using the exact same decay formula as /decay-stats
+// (decayFactor = e^-(daysSinceAccess * 0.3)). Content is truncated for display.
+function selectPruneCandidates(threshold: number) {
+  const rows = db
+    .prepare('SELECT id, content, last_accessed_at FROM cerebro_memories_meta')
+    .all() as { id: string; content: string; last_accessed_at: number }[];
+  const now = Date.now();
+  const { decayRate } = getDecaySettings();
+
+  const candidates: {
+    id: string;
+    content: string;
+    decayFactor: number;
+    daysSinceAccess: number;
+  }[] = [];
+
+  for (const row of rows) {
+    const daysSinceAccess = Math.max(0, (now - row.last_accessed_at) / (1000 * 60 * 60 * 24));
+    const decayFactor = computeDecayFactor(daysSinceAccess, decayRate);
+    if (decayFactor < threshold) {
+      candidates.push({
+        id: row.id,
+        content: (row.content ?? '').length > 80 ? row.content.slice(0, 80) + '…' : (row.content ?? ''),
+        decayFactor,
+        daysSinceAccess: Math.round(daysSinceAccess * 10) / 10,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+// Parse an optional threshold query/body param, falling back to the shared
+// default. Guards against NaN / out-of-range values so preview and confirm
+// stay consistent.
+function resolveThreshold(raw: unknown): number {
+  const n = typeof raw === 'string' ? parseFloat(raw) : typeof raw === 'number' ? raw : NaN;
+  if (!Number.isFinite(n) || n <= 0 || n > 1) return PRUNE_DECAY_THRESHOLD;
+  return n;
+}
+
+// Prune preview — DRY RUN, no deletion. Returns the actual candidate list so
+// the UI can show the user exactly what would be removed before they confirm.
+cerebroRouter.get('/prune-preview', (c) => {
+  try {
+    const threshold = resolveThreshold(c.req.query('threshold'));
+    const candidates = selectPruneCandidates(threshold);
+    return c.json({ success: true, candidates, count: candidates.length, threshold });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Prune confirm — DESTRUCTIVE. Recomputes the candidate set server-side from
+// the same threshold (does NOT trust a client id list), deletes matching rows
+// from BOTH cerebro_memories_meta AND cerebro_memories_vec (they share id), and
+// logs the real count to cerebro_prune_log. All in a single transaction.
+cerebroRouter.post('/prune-confirm', async (c) => {
+  try {
+    // Threshold may arrive as a query param or a JSON body param; both must
+    // match what the preview showed the user.
+    let bodyThreshold: unknown;
+    try {
+      const body = await c.req.json();
+      bodyThreshold = body?.threshold;
+    } catch {
+      // No/invalid body is fine — fall through to query param / default.
+    }
+    const threshold = resolveThreshold(c.req.query('threshold') ?? bodyThreshold);
+
+    const candidates = selectPruneCandidates(threshold);
+
+    const prune = db.transaction((ids: string[]) => {
+      const delMeta = db.prepare('DELETE FROM cerebro_memories_meta WHERE id = ?');
+      const delVec = db.prepare('DELETE FROM cerebro_memories_vec WHERE id = ?');
+      for (const id of ids) {
+        delMeta.run(id);
+        delVec.run(id);
+      }
+      db.prepare('INSERT INTO cerebro_prune_log (id, pruned_at, count) VALUES (?, ?, ?)').run(
+        crypto.randomUUID(),
+        Date.now(),
+        ids.length
+      );
+    });
+
+    prune(candidates.map((m) => m.id));
+
+    return c.json({ success: true, pruned: candidates.length, threshold });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Prune history — real rolling 30-day sum of pruned memories, replacing the
+// hardcoded "Pruned (30d): 0" counter. Defaults to 0 when nothing pruned.
+cerebroRouter.get('/prune-history', (c) => {
+  try {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const row = db
+      .prepare('SELECT SUM(count) AS total FROM cerebro_prune_log WHERE pruned_at >= ?')
+      .get(thirtyDaysAgo) as { total: number | null } | undefined;
+    return c.json({ success: true, pruned30d: row?.total ?? 0 });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
@@ -217,9 +398,23 @@ cerebroRouter.post('/chat', async (c) => {
 
     const fullPrompt = `${CEREBRO_SYSTEM_PROMPT}\n\n${routedContextBlock ? `${routedContextBlock}\n` : ''}${historyContext ? `CONVERSATION HISTORY:\n${historyContext}\n\n` : ''}User: ${message}\n\nCerebro:`;
 
+    // estimatedTokens raised 300 -> 900 (2026-07-10): live testing found a
+    // longer/complex Cerebro chat prompt consistently failing with "LLM API
+    // returned no content in response" against OpenCode Zen's free catalog,
+    // while a trivial prompt ("what is a DAG?") succeeded. Many "free" routed
+    // models on these gateways are reasoning models that spend hidden
+    // chain-of-thought tokens before any visible reply, so a small budget can
+    // be entirely consumed before content is emitted. 900 keeps a chat reply
+    // smaller than CoreExec's generic-task budget (1000) and well under
+    // ScopeLogic's DAG-schema budget (2000) — it's a conversational reply, not
+    // structured/analytical output — while giving real headroom above the
+    // shared 1024-token floor in openai-compatible.ts (see
+    // DEFAULT_MAX_TOKENS_FLOOR there, which also gained a bounded
+    // reasoning-exhaustion retry as the primary defense for prompts that still
+    // exceed this).
     const result = await chatEngine.execute({
       prompt: fullPrompt,
-      estimatedTokens: 300,
+      estimatedTokens: 900,
       scope: 'cerebro',
       ...(projectId !== undefined ? { projectId } : {}),
     });

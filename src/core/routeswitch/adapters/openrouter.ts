@@ -1,4 +1,5 @@
 import { OpenAICompatibleProvider } from './openai-compatible';
+import { GenerationStreamHooks, ProviderCapabilities } from '../providers';
 import { ZenDiscoveryService } from '../discovery';
 
 export interface OpenRouterProviderConfig {
@@ -23,6 +24,23 @@ const OPENROUTER_EXTRA_HEADERS = {
  * internally, unlike the generic "OpenAI Compatible" type.
  */
 export class OpenRouterProvider extends OpenAICompatibleProvider {
+  /**
+   * Capability matrix for this adapter (P8-4). Real OpenRouter models commonly
+   * support vision + structured output + large context; declared here rather
+   * than inferred from the provider id.
+   *
+   * Declared on the subclass, mirroring `LlamaCppProvider`: assigning to the
+   * `readonly capabilities` property inherited from `OpenAICompatibleProvider`
+   * is a compile error (TS2540), but a subclass that re-declares the field may
+   * assign it inside its own constructor.
+   */
+  readonly capabilities: Required<Pick<ProviderCapabilities, 'supportsVision' | 'supportsFunctionCalling' | 'supportsStructuredOutput' | 'inputTypes'>> & Partial<Pick<ProviderCapabilities, 'contextWindowTokens'>> = {
+    supportsVision: true,
+    supportsFunctionCalling: false,
+    supportsStructuredOutput: true,
+    inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+  };
+
   constructor(config: OpenRouterProviderConfig, customId?: string) {
     super({
       baseUrl: OPENROUTER_BASE_URL,
@@ -30,9 +48,26 @@ export class OpenRouterProvider extends OpenAICompatibleProvider {
       modelId: config.modelId || 'auto',
       extraHeaders: OPENROUTER_EXTRA_HEADERS,
     }, customId || 'openrouter');
+
+    // Explicit capability override (P8-4). Stated in full rather than spread
+    // from the parent default — assignment is now to the concreted subclass
+    // field declared above.
+    this.capabilities = {
+      supportsVision: true,
+      supportsFunctionCalling: false,
+      supportsStructuredOutput: true,
+      contextWindowTokens: 128000,
+      inputTypes: ['text'] as Array<'text' | 'image' | 'audio' | 'video'>,
+    };
   }
 
-  override async generate(prompt: string, estimatedTokens: number, schema?: any): Promise<string> {
+  // HEURISTIC FALLBACK: `streamHooks` ignored — see OpenAICompatibleProvider.generate.
+  override async generate(
+    prompt: string,
+    estimatedTokens: number,
+    schema?: any,
+    _streamHooks?: GenerationStreamHooks,
+  ): Promise<string> {
     const cfg = this.config;
     if (cfg.modelId && cfg.modelId.toLowerCase() !== 'auto') {
       return this._generateWithConfig(prompt, estimatedTokens, schema, cfg);

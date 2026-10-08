@@ -6,11 +6,13 @@ import { OKFWorkspaceWidget } from '../components/OKFWorkspaceWidget';
 import { OKFMindmap } from '../components/OKFMindmap';
 import { DeferenceUI } from '../components/DeferenceUI';
 import { EmbeddedTerminal } from '../components/EmbeddedTerminal';
-import { buildApprovalItems, partitionByConfidence, partitionByKind, type ApprovalItem } from '../lib/approvalQueue';
+import { buildApprovalItems, partitionByConfidence, partitionByKind, autonomyToThreshold, type ApprovalItem } from '../lib/approvalQueue';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
 import { ReactFlow, Controls, Background, BackgroundVariant, Handle, Position, useNodesState, useEdgesState } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
+import { API, authFetch, openEventSource } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#00FFCC';
 
 // Shared glow box (mint/teal glow)
@@ -38,7 +40,7 @@ function DAGNode({ data }: any) {
 const nodeTypes = { dag: DAGNode };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-interface OsTodo { id: string; severity: string; escalation_reason: string; required_action_type: string; status: string; confidence: number; }
+interface OsTodo { id: string; severity: string; escalation_reason: string; required_action_type: string; status: string; confidence: number; source_tool?: string | null; }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────
 function DashboardView() {
@@ -56,10 +58,24 @@ function DashboardView() {
   const [showMindmap, setShowMindmap] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [autoScanNotice, setAutoScanNotice] = useState<string | null>(null);
+  // CoreExec "Autonomy & Delegation" dial (default 30%, matching the
+  // pre-existing hardcoded 0.70 Deference threshold) — drives the real
+  // confidence split below via autonomyToThreshold(). See approvalQueue.ts.
+  const [autonomySetting, setAutonomySetting] = useState(30);
+
+  // Fetch the Autonomy setting on mount so the approval split reflects
+  // whatever the user last set on the CoreExec dashboard.
+  useEffect(() => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+      if (d.success && d.settings && d.settings.autonomy !== undefined) {
+        setAutonomySetting(Number(d.settings.autonomy));
+      }
+    }).catch(() => {});
+  }, []);
 
   // Fetch pending proposal on mount
   useEffect(() => {
-    fetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
       if (d.success && d.proposal) {
         setPendingProposal(d.proposal);
         setProposalId(d.id ?? null);
@@ -98,18 +114,18 @@ function DashboardView() {
     if (!pendingProposal) return;
     setApproving(true);
     try {
-      await fetch(`${API}/api/coreexec/approve`, {
+      await authFetch(`${API}/api/coreexec/approve`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposal: pendingProposal, projectId: activeProjectId || undefined })
       });
       if (proposalId) {
-        await fetch(`${API}/api/system/proposals/resolve`, {
+        await authFetch(`${API}/api/system/proposals/resolve`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: proposalId })
         });
       } else {
         // Legacy path: no id (shouldn't happen post-migration) — fall back to clear.
-        await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' });
+        await authFetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' });
       }
       clearProposalState();
       navigate('coreexec');
@@ -120,12 +136,12 @@ function DashboardView() {
   // Reject proposal → mark rejected → clear → navigate back to ScopeLogic
   const handleRejectProposal = async () => {
     if (proposalId) {
-      await fetch(`${API}/api/system/proposals/reject`, {
+      await authFetch(`${API}/api/system/proposals/reject`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: proposalId })
       }).catch(() => {});
     } else {
-      await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
+      await authFetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
     }
     clearProposalState();
     navigate('scopelogic');
@@ -133,7 +149,7 @@ function DashboardView() {
 
   // Subscribe to ScoutDaemon SSE for live tool call telemetry
   useEffect(() => {
-    const es = new EventSource(`${API}/api/scout/events`);
+    const es = openEventSource(`${API}/api/scout/events`);
     es.addEventListener('scout-update', (e: any) => {
       try {
         const data = JSON.parse(e.data);
@@ -151,6 +167,10 @@ function DashboardView() {
               : 'Project scanned after terminal close — no new docs found.'
           );
         }
+        // §2.1-C4: peer consent events re-render the Sync Peers lists live.
+        if (data.type === 'PEER_DISCOVERED' || data.type === 'PEER_APPROVED' || data.type === 'PEER_REJECTED') {
+          refreshSyncPeers();
+        }
       } catch {}
     });
     return () => es.close();
@@ -163,6 +183,69 @@ function DashboardView() {
     return () => clearTimeout(t);
   }, [autoScanNotice]);
 
+  // ─── Sync Peers (§2.1-C4: consent BEFORE any connection) ──────────────────
+  // Discovered mDNS nodes land in `pending` and are NOT connected — the
+  // transport only dials after Approve (or a validated manual add) persists
+  // the peer to the single consent list in BaseVault.
+  const [syncPeers, setSyncPeers] = useState<{
+    enabled: boolean; allowPublic: boolean;
+    pending: { hostname?: string; ip: string; port: number }[];
+    approved: { ip: string; port: number; fingerprint?: string }[];
+  }>({ enabled: false, allowPublic: false, pending: [], approved: [] });
+  const [manualIp, setManualIp] = useState('');
+  const [manualPort, setManualPort] = useState('3743');
+  const [peerNotice, setPeerNotice] = useState<string | null>(null);
+
+  const refreshSyncPeers = useCallback(() => {
+    authFetch(`${API}/api/sync/peers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list' }),
+    }).then(r => r.json()).then(d => {
+      if (d && Array.isArray(d.pending)) setSyncPeers(d);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => { refreshSyncPeers(); }, [refreshSyncPeers]);
+
+  // Approve = persist to consent list + connect; Reject = drop from pending.
+  const peerAction = async (action: 'approve' | 'reject', ip: string, port: number) => {
+    const r = await authFetch(`${API}/api/sync/peers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ip, port }),
+    }).catch(() => null);
+    const d = r ? await r.json().catch(() => null) : null;
+    if (d?.success) {
+      setPeerNotice(action === 'approve' ? `Approved ${ip}:${port} — connected.` : `Rejected ${ip}:${port}.`);
+      refreshSyncPeers();
+    } else {
+      setPeerNotice(`${action === 'approve' ? 'Approve' : 'Reject'} failed: ${d?.error || 'network error'}`);
+    }
+  };
+
+  // Manual peer: validated server-side (private-range rule, cap, dedupe) and
+  // written to the SAME consent list used by discovery approvals.
+  const addManualPeer = async () => {
+    const port = Number(manualPort);
+    const r = await authFetch(`${API}/api/sync/manual`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip: manualIp.trim(), port }),
+    }).catch(() => null);
+    const d = r ? await r.json().catch(() => null) : null;
+    if (d?.success) {
+      setPeerNotice(d.message || `Connected to ${manualIp.trim()}:${port}`);
+      setManualIp('');
+      refreshSyncPeers();
+    } else {
+      setPeerNotice(`Manual add failed: ${d?.error || 'network error'}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!peerNotice) return;
+    const t = setTimeout(() => setPeerNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [peerNotice]);
+
   // DAG Canvas state
   const [runs, setRuns] = useState<{id:string;status:string;created_at:number}[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string|null>(null);
@@ -174,7 +257,7 @@ function DashboardView() {
   // project's runs into this widget regardless of which one was active)
   useEffect(() => {
     const qs = activeProjectId ? `?projectId=${activeProjectId}` : '';
-    fetch(`${API}/api/basevault/runs${qs}`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/basevault/runs${qs}`).then(r => r.json()).then(d => {
       if (d.runs) setRuns(d.runs);
     }).catch(() => {});
   }, [activeProjectId]);
@@ -182,7 +265,7 @@ function DashboardView() {
   // Fetch DAG nodes when a run is selected — convert to ReactFlow nodes/edges
   useEffect(() => {
     if (!selectedRunId) { setDagNodes([]); setFlowNodes([]); setFlowEdges([]); return; }
-    fetch(`${API}/api/coreexec/run/${selectedRunId}/status`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/coreexec/run/${selectedRunId}/status`).then(r => r.json()).then(d => {
       if (d.tasks) {
         setDagNodes(d.tasks);
         // Convert tasks to ReactFlow nodes (vertical layout)
@@ -208,34 +291,39 @@ function DashboardView() {
 
   // Fetch approval queue (os_todos)
   useEffect(() => {
-    fetch(`${API}/api/todos`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/todos`).then(r => r.json()).then(d => {
       if (d.success && d.todos) setApprovalQueue(d.todos);
       else if (Array.isArray(d)) setApprovalQueue(d);
     }).catch(() => {});
   }, [activeProjectId]);
 
-  // Confidence badges
-  const badges = [
-    { label: 'Local Only', active: true, color: '#00FFCC' },
-    { label: 'Redacted', active: true, color: '#00FFCC' },
-    { label: 'Human Approved', active: true, color: '#00FFCC' },
-    { label: 'Source Linked', active: false, color: '#6b7280' },
-    { label: 'Low Confidence', active: false, color: '#6b7280' },
-    { label: 'Quota Protected', active: true, color: '#00FF41' },
-    { label: 'Project Scoped', active: true, color: '#00FFCC' },
-    { label: 'Sandbox Enforced', active: true, color: '#00FFCC' },
-  ];
+  // Confidence badges — computed server-side from real signals (llm_providers,
+  // SensitiveDataRedactor, os_todos, the live governor, bwrap availability).
+  // "Quota Protected" keeps its distinct green when active; all other badges
+  // keep the original cyan-active / gray-inactive color logic.
+  const [rawBadges, setRawBadges] = useState<{ label: string; active: boolean }[]>([]);
+  useEffect(() => {
+    authFetch(`${API}/api/system/proof-badges?projectId=${activeProjectId || ''}`).then(r => r.json()).then(d => {
+      if (d.success) setRawBadges(d.badges);
+    }).catch(() => {});
+  }, [activeProjectId, approvalQueue]);
+
+  const BADGE_ACTIVE_COLOR: Record<string, string> = { 'Quota Protected': '#00FF41' };
+  const badges = rawBadges.map(b => ({
+    ...b,
+    color: b.active ? (BADGE_ACTIVE_COLOR[b.label] || '#00FFCC') : '#6b7280',
+  }));
 
   const handleApprove = async (todoId: string) => {
     try {
-      await fetch(`${API}/api/todos/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId, resolutionData: 'approved' }) });
+      await authFetch(`${API}/api/todos/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId, resolutionData: 'approved' }) });
       setApprovalQueue(prev => prev.filter(t => t.id !== todoId));
     } catch {}
   };
 
   const handleDecline = async (todoId: string) => {
     try {
-      await fetch(`${API}/api/todos/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId }) });
+      await authFetch(`${API}/api/todos/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoId }) });
       setApprovalQueue(prev => prev.filter(t => t.id !== todoId));
     } catch {}
   };
@@ -248,7 +336,7 @@ function DashboardView() {
     ? { id: proposalId, confidence: proposalConfidence, proposal: pendingProposal }
     : null;
   const approvalItems = buildApprovalItems(approvalQueue, pendingProposalLike);
-  const { low: lowItems, high: highItems } = partitionByConfidence(approvalItems);
+  const { low: lowItems, high: highItems } = partitionByConfidence(approvalItems, autonomyToThreshold(autonomySetting));
   const todoById = new Map(approvalQueue.map(t => [t.id, t]));
 
   const approveItem = (item: ApprovalItem) =>
@@ -262,11 +350,11 @@ function DashboardView() {
     const { todoIds, proposals } = partitionByKind(approvalItems, ids);
     try {
       if (todoIds.length > 0) {
-        await fetch(`${API}/api/todos/resolve-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+        await authFetch(`${API}/api/todos/resolve-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
       }
       for (const p of proposals) {
-        await fetch(`${API}/api/coreexec/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposal: p.proposal, projectId: activeProjectId || undefined }) });
-        await fetch(`${API}/api/system/proposals/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
+        await authFetch(`${API}/api/coreexec/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposal: p.proposal, projectId: activeProjectId || undefined }) });
+        await authFetch(`${API}/api/system/proposals/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
       }
       if (todoIds.length > 0) setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
       if (proposals.some(p => p.id === proposalId)) clearProposalState();
@@ -277,10 +365,10 @@ function DashboardView() {
     const { todoIds, proposals } = partitionByKind(approvalItems, ids);
     try {
       if (todoIds.length > 0) {
-        await fetch(`${API}/api/todos/reject-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
+        await authFetch(`${API}/api/todos/reject-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todoIds }) });
       }
       for (const p of proposals) {
-        await fetch(`${API}/api/system/proposals/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
+        await authFetch(`${API}/api/system/proposals/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
       }
       if (todoIds.length > 0) setApprovalQueue(prev => prev.filter(t => !todoIds.includes(t.id)));
       if (proposals.some(p => p.id === proposalId)) clearProposalState();
@@ -293,7 +381,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Grid3X3 size={16} style={{ color: ACCENT }} /> {pendingProposal ? 'Workflow Proposal Review' : 'Interactive DAG Canvas'}
+            <Grid3X3 size={16} style={{ color: ACCENT }} /> {pendingProposal ? 'Workflow Proposal Review' : <ModeLabel simple="Workflow Map" dev="Interactive DAG Canvas" />}
           </h2>
           {pendingProposal ? (
             <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400">Pending Approval</span>
@@ -393,9 +481,9 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Shield size={16} className="text-amber-400" /> Attention Required — HITL Approval Queue
+            <Shield size={16} className="text-amber-400" /> <ModeLabel simple="Needs Your Approval" dev="Attention Required — HITL Approval Queue" />
           </h2>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400">Zero-Trust Gate</span>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-red-500/20 bg-red-500/10 text-red-400"><ModeLabel simple="Nothing Runs Without You" dev="Zero-Trust Gate" /></span>
         </div>
 
         {lowItems.length === 0 ? (
@@ -411,13 +499,18 @@ function DashboardView() {
                 ? `DAG PROPOSAL • confidence ${item.confidence.toFixed(2)}`
                 : `${todo?.severity ?? ''} • ${todo?.required_action_type ?? ''} • confidence ${item.confidence.toFixed(2)}`;
               return (
-                <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-black/30 border border-amber-500/20">
+                <div key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg bg-black/30 border border-amber-500/20">
                   <div className="flex items-center gap-3">
                     {item.kind === 'proposal'
                       ? <Sparkles size={14} className="text-amber-400" />
                       : <AlertTriangle size={14} className="text-amber-400" />}
                     <div>
-                      <div className="text-xs font-bold text-white">{item.description}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs font-bold text-white">{item.description}</div>
+                        {todo?.source_tool && (
+                          <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border ${todo.source_tool === 'Deepseek Web' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : todo.source_tool === 'Qwen Studio' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : todo.source_tool === 'Hermes' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`}>{todo.source_tool}</span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-gray-500 font-mono">{subtitle}</div>
                     </div>
                   </div>
@@ -442,7 +535,7 @@ function DashboardView() {
       {/* Widget C: Verifiable Confidence & Local Proof Badges */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Award size={16} style={{ color: ACCENT }} /> Verifiable Confidence Badges
+          <Award size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Trust & Safety Badges" dev="Verifiable Confidence Badges" />
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {badges.map((b, i) => (
@@ -462,7 +555,7 @@ function DashboardView() {
       {/* Widget D: Active Tool Telemetry */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Eye size={16} style={{ color: ACCENT }} /> Active Tool Telemetry
+          <Eye size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Recent Tool Activity" dev="Active Tool Telemetry" />
         </h2>
         <div className="bg-black/30 border border-white/5 rounded-lg p-3 space-y-1.5 max-h-[150px] overflow-y-auto font-mono text-[10px]">
           {toolCalls.map((tc, i) => (
@@ -516,11 +609,103 @@ function DashboardView() {
         )}
       </section>
 
+      {/* Widget D3: Sync Peers — consent BEFORE any connection (§2.1-C4).
+          Discovered nodes sit pending until approved; manual adds validate
+          against the same private-range rule + consent list server-side. */}
+      <section className={GLOW_BOX}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Users size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Sync Peers" dev="Sync Peer Consent (mDNS Discovery)" />
+          </h2>
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${syncPeers.enabled ? 'border-green-500/20 bg-green-500/10 text-green-400' : 'border-white/10 bg-white/5 text-gray-500'}`}>
+            {syncPeers.enabled ? 'SYNC ON' : 'SYNC OFF'}
+          </span>
+        </div>
+        <p className="text-[10px] text-gray-500 mb-3">
+          Nothing connects until you approve it. Discovered devices wait here; approved ones join your trusted list.
+        </p>
+
+        {peerNotice && (
+          <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-white/[0.03] border border-white/10 text-[10px] text-gray-300">
+            <Sparkles size={12} className="shrink-0" style={{ color: ACCENT }} /> {peerNotice}
+          </div>
+        )}
+
+        {/* Pending discovered peers */}
+        <div className="mb-3">
+          <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2">
+            Waiting For Approval ({syncPeers.pending.length})
+          </div>
+          {syncPeers.pending.length === 0 ? (
+            <div className="text-[10px] text-gray-600 p-3 rounded-lg bg-black/20 border border-white/5">No discovered peers.</div>
+          ) : (
+            <div className="space-y-2 max-h-[140px] overflow-y-auto">
+              {syncPeers.pending.map(p => (
+                <div key={`${p.ip}:${p.port}`} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-black/30 border border-amber-500/20">
+                  <div>
+                    <div className="text-xs font-bold text-white font-mono">{p.hostname || p.ip}</div>
+                    <div className="text-[10px] text-gray-500 font-mono">{p.ip}:{p.port}</div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => peerAction('approve', p.ip, p.port)} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all">Approve</button>
+                    <button onClick={() => peerAction('reject', p.ip, p.port)} className="px-2 py-1 rounded text-[9px] font-bold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">Reject</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Approved peers */}
+        <div className="mb-3">
+          <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2">
+            Approved ({syncPeers.approved.length}{syncPeers.approved.length >= 32 ? ' — limit reached' : ''})
+          </div>
+          {syncPeers.approved.length === 0 ? (
+            <div className="text-[10px] text-gray-600 p-3 rounded-lg bg-black/20 border border-white/5">No approved peers yet.</div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {syncPeers.approved.map(p => (
+                <span key={`${p.ip}:${p.port}`} className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                  {p.ip}:{p.port}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Manual peer entry — validated server-side (private range / cap) */}
+        <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+          <input
+            value={manualIp}
+            onChange={e => setManualIp(e.target.value)}
+            placeholder="IP address"
+            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs text-white font-mono placeholder:text-gray-600 focus:border-teal-500/40 outline-none"
+          />
+          <input
+            value={manualPort}
+            onChange={e => setManualPort(e.target.value)}
+            placeholder="Port"
+            className="w-20 px-2.5 py-1.5 rounded-lg bg-black/30 border border-white/10 text-xs text-white font-mono placeholder:text-gray-600 focus:border-teal-500/40 outline-none"
+          />
+          <button
+            onClick={addManualPeer}
+            disabled={!manualIp.trim()}
+            className="px-3 py-1.5 rounded-lg text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add Peer
+          </button>
+        </div>
+        {syncPeers.allowPublic && (
+          <div className="text-[9px] text-amber-500/70 mt-2">⚠ Public-range peers allowed (sync_allow_public enabled).</div>
+        )}
+      </section>
+
       {/* Widget E: OKF Project Knowledge Workspace */}
       <div className="space-y-3">
         <div className="flex justify-end">
           <button onClick={() => setShowMindmap(true)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold border border-teal-500/30 bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 transition-all">
-            Open Knowledge Mindmap
+            <ModeLabel simple="Open Notes & Docs Map" dev="Open Knowledge Mindmap" />
           </button>
         </div>
         <OKFWorkspaceWidget projectId={activeProjectId} accentColor={ACCENT} />
@@ -545,14 +730,14 @@ function SetupView() {
 
   // Fetch tools and permissions from backend
   useEffect(() => {
-    fetch(`${API}/api/system/tools`).then(r => r.json()).then(d => { if (d.success) setTools(d.tools); }).catch(() => {});
-    fetch(`${API}/api/system/agents/permissions`).then(r => r.json()).then(d => { if (d.success) setPermissions(d.permissions); }).catch(() => {});
+    authFetch(`${API}/api/system/tools`).then(r => r.json()).then(d => { if (d.success) setTools(d.tools); }).catch(() => {});
+    authFetch(`${API}/api/system/agents/permissions`).then(r => r.json()).then(d => { if (d.success) setPermissions(d.permissions); }).catch(() => {});
   }, []);
 
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ smart_tips: smartTips, reduced_motion: reducedMotion, aria_enforcement: ariaEnforcement, env_stripping: envStripping, directory_lock: directoryLock, file_arg_validation: fileArgValidation })
       });
@@ -565,9 +750,9 @@ function SetupView() {
       {/* Control A: Capability Broker (Tool Registry) */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Wrench size={16} style={{ color: ACCENT }} /> Capability Broker (Tool Registry)
+          <Wrench size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Available Tools" dev="Capability Broker (Tool Registry)" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Registered tools available across the OS. Read-only capabilities are separated from destructive write capabilities.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="The tools the AI can use. Tools that only read things are kept separate from tools that can change things." dev="Registered tools available across the OS. Read-only capabilities are separated from destructive write capabilities." /></p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {tools.map((tool, i) => (
@@ -591,9 +776,9 @@ function SetupView() {
       {/* Control B: Agent-Tool Permissions */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Users size={16} style={{ color: ACCENT }} /> Agent-Tool Permissions Matrix
+          <Users size={16} style={{ color: ACCENT }} /> <ModeLabel simple="What The AI Is Allowed To Do" dev="Agent-Tool Permissions Matrix" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Principle of least privilege. Bind specific tools to specific agent archetypes.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Each AI role gets only the abilities it needs — nothing more." dev="Principle of least privilege. Bind specific tools to specific agent archetypes." /></p>
 
         <div className="bg-black/30 border border-white/5 rounded-lg overflow-hidden">
           <div className="grid grid-cols-[1fr_60px_60px_60px_60px] gap-0 text-[10px] font-mono">
@@ -603,19 +788,19 @@ function SetupView() {
             <div className="p-2 border-b border-white/5 text-center text-gray-500">exec</div>
             <div className="p-2 border-b border-white/5 text-center text-gray-500">git</div>
 
-            <div className="p-2 border-b border-white/5 text-white font-bold">code_execute</div>
+            <div className="p-2 border-b border-white/5 text-white font-bold"><ModeLabel simple="Can Run Commands" dev="code_execute" /></div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
             <div className="p-2 border-b border-white/5 text-center text-amber-400">⚠</div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
 
-            <div className="p-2 border-b border-white/5 text-white font-bold">research_only</div>
+            <div className="p-2 border-b border-white/5 text-white font-bold"><ModeLabel simple="Read-Only Researcher" dev="research_only" /></div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
             <div className="p-2 border-b border-white/5 text-center text-red-400">✗</div>
             <div className="p-2 border-b border-white/5 text-center text-red-400">✗</div>
             <div className="p-2 border-b border-white/5 text-center text-green-400">✓</div>
 
-            <div className="p-2 text-white font-bold">admin_operator</div>
+            <div className="p-2 text-white font-bold"><ModeLabel simple="Full Access" dev="admin_operator" /></div>
             <div className="p-2 text-center text-green-400">✓</div>
             <div className="p-2 text-center text-green-400">✓</div>
             <div className="p-2 text-center text-green-400">✓</div>
@@ -627,14 +812,14 @@ function SetupView() {
       {/* Control C: P0 Command Sandbox */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Lock size={16} className="text-red-400" /> P0 Command Sandbox Configuration
+          <Lock size={16} className="text-red-400" /> <ModeLabel simple="Safe Command Zone" dev="P0 Command Sandbox Configuration" /> <HelpTip text="Any command the AI runs is locked inside a protected area — it can't see your passwords, leave this project's folder, or touch the rest of your computer." />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Four-layer quarantine for the run_command shell tool. Critical safety boundary.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Four layers of protection around every command the AI runs. This is the most important safety boundary in the app." dev="Four-layer quarantine for the run_command shell tool. Critical safety boundary." /></p>
 
         <div className="space-y-3">
           {/* Allowlist */}
           <div className="bg-black/30 border border-white/5 rounded-lg p-3">
-            <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2">Layer 1: Command Allowlist ({allowlist.length} commands)</div>
+            <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mb-2"><ModeLabel simple={`Layer 1: Allowed Commands (only these ${allowlist.length} can run)`} dev={`Layer 1: Command Allowlist (${allowlist.length} commands)`} /></div>
             <div className="flex flex-wrap gap-1.5">
               {allowlist.map((cmd, i) => (
                 <span key={i} className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-green-500/10 text-green-400 border border-green-500/20">{cmd}</span>
@@ -644,15 +829,15 @@ function SetupView() {
 
           {/* Toggles */}
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Layer 2: Environment Stripping</span><span className="text-[10px] text-gray-500">Strip all API keys via buildSandboxEnv before execution</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Layer 2: Hide Your Secrets" dev="Layer 2: Environment Stripping" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Commands can never see your API keys or passwords" dev="Strip all API keys via buildSandboxEnv before execution" /></span></div>
             <input type="checkbox" checked={envStripping} onChange={e => setEnvStripping(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Layer 3: Directory Lock</span><span className="text-[10px] text-gray-500">Restrict execution to project root via resolveCwd</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Layer 3: Stay In The Project Folder" dev="Layer 3: Directory Lock" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Commands can only work inside this project's folder" dev="Restrict execution to project root via resolveCwd" /></span></div>
             <input type="checkbox" checked={directoryLock} onChange={e => setDirectoryLock(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Layer 4: File-Argument Validation</span><span className="text-[10px] text-gray-500">Block path traversal in arguments (../../etc/passwd)</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Layer 4: Block Sneaky File Paths" dev="Layer 4: File-Argument Validation" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Stops tricks that try to reach files outside the project" dev="Block path traversal in arguments (../../etc/passwd)" /></span></div>
             <input type="checkbox" checked={fileArgValidation} onChange={e => setFileArgValidation(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
         </div>
@@ -661,7 +846,7 @@ function SetupView() {
       {/* Control D: Accessibility & SmartTips */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Accessibility size={16} style={{ color: ACCENT }} /> Accessibility & SmartTips Governance
+          <Accessibility size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Accessibility & Helpful Tips" dev="Accessibility & SmartTips Governance" />
         </h2>
 
         <div className="space-y-3">

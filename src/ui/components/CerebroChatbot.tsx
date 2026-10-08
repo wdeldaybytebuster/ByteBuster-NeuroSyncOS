@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigation } from '../layouts/OSLayout';
 import { Bot, Send, Minus, X, Navigation } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -32,24 +32,44 @@ export function CerebroChatbot() {
     setMessages(prev => [...prev, { role: 'user', text: msg }]);
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
     try {
-      const res = await fetch(`${API}/api/cerebro/chat`, {
+      // Route through NeuroSync's backend Cerebro chat — never a raw LLM endpoint
+      // and never a hardcoded credential. The backend owns provider routing and the
+      // tri-modal context router.
+      const res = await authFetch(`${API}/api/cerebro/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg, history: messages.slice(-6), projectId: activeProjectId }),
+        body: JSON.stringify({
+          message: msg,
+          history: messages.slice(-6).map(m => ({ role: m.role, text: m.text })),
+          projectId: activeProjectId || null
+        }),
+        signal: controller.signal
       });
-      const data = await res.json();
-      if (data.success) {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          text: data.reply,
-          suggestedNav: data.suggestedNavigation,
-        }]);
-      } else {
-        setMessages(prev => [...prev, { role: 'assistant', text: data.error || 'Sorry, I encountered an error.' }]);
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        if (res.status === 429) throw new Error('Too Many Requests (429)');
+        if (res.status >= 500) throw new Error(`Server Error (${res.status})`);
+        throw new Error(`Network error: ${res.status} ${res.statusText}`);
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Network error. Please check that the backend server is running on port 3743.' }]);
+      
+      // The backend answers with a single JSON object (not an SSE stream).
+      const data = await res.json();
+      const reply = data.reply || 'Acknowledged.';
+      const suggestedNav = data.suggestedNavigation ?? null;
+      setMessages(prev => [...prev, { role: 'assistant', text: reply, suggestedNav }]);
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      const isTimeout = err.name === 'AbortError';
+      const simple = isTimeout 
+        ? "Request timed out. Please check your local LLM connection." 
+        : `Network error communicating with the local LLM endpoint. (${err.message})`;
+      setMessages(prev => [...prev, { role: 'assistant', text: simple }]);
     }
     setLoading(false);
   };

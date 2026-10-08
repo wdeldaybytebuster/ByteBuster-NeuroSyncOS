@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { db, initDB, dbPath } from '../basevault/db';
 import { executeRun, injectCoreExecGenerateFn, resumeInProgressRuns } from './engine';
 import { workerPool } from './worker-pool';
+import { systemConfig } from './settings';
 import fs from 'fs';
 import crypto from 'crypto';
 
@@ -128,8 +129,78 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     return { runId, taskId };
   }
 
+  it('passes only the completed direct Planner output into a fresh Generator request', async () => {
+    const plannerId = crypto.randomUUID();
+    const generatorId = crypto.randomUUID();
+    const runId = crypto.randomUUID();
+    const projectId = 'proj-harness';
+    db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(projectId, 'Harness Project', Date.now());
+    const plannerOutput = { plan: ['step one', 'step two'], internal: 'planner artifact' };
+    db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(
+      runId,
+      projectId,
+      JSON.stringify({ nodes: [
+        { id: plannerId, dependencies: [], prompt: 'Plan this workflow', harness_profile: 'planner' },
+        { id: generatorId, dependencies: [plannerId], prompt: 'Generate the planned result', harness_profile: 'generator' },
+      ] }),
+      'pending',
+      Date.now(),
+    );
+    const insertTask = db.prepare('INSERT INTO tasks (id, run_id, status, output_data) VALUES (?, ?, ?, ?)');
+    insertTask.run(plannerId, runId, 'unclaimed', null);
+    insertTask.run(generatorId, runId, 'unclaimed', null);
+
+    const mockFn = vi.fn(async (request: { prompt: string; harnessProfile: string; plannerOutputs?: Record<string, unknown> }) =>
+      request.harnessProfile === 'planner' ? JSON.stringify(plannerOutput) : 'generated result',
+    );
+    injectCoreExecGenerateFn(mockFn);
+    const ok = await executeRun(runId);
+
+    expect(ok).toBe(true);
+    expect(mockFn).toHaveBeenCalledTimes(2);
+    const [plannerRequest, generatorRequest] = mockFn.mock.calls.map(([request]) => request);
+    expect(plannerRequest?.harnessProfile).toBe('planner');
+    expect(plannerRequest?.prompt).toContain('fresh, single-turn planning request');
+    expect(generatorRequest?.harnessProfile).toBe('generator');
+    expect(generatorRequest?.plannerOutputs).toEqual({ [plannerId]: JSON.parse(
+      (db.prepare('SELECT output_data FROM tasks WHERE id = ?').get(plannerId) as { output_data: string }).output_data,
+    ) });
+    expect(generatorRequest?.prompt).toContain(JSON.stringify(generatorRequest?.plannerOutputs));
+    expect(generatorRequest?.prompt).toContain('fresh, single-turn generation request');
+  });
+
+  it('fails a malformed DAG layout without transitioning it into the running state', async () => {
+    const runId = crypto.randomUUID();
+    const projectId = 'proj-malformed-dag';
+    db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(projectId, 'Malformed Project', Date.now());
+    db.prepare('INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)').run(
+      runId, projectId, '{invalid-json', 'pending', Date.now(),
+    );
+
+    const ok = await executeRun(runId);
+
+    expect(ok).toBe(false);
+    expect((db.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(runId) as { status: string }).status).toBe('failed');
+  });
+
+  it('parks a Generator with no direct Planner dependency without invoking the generator', async () => {
+    const { runId, taskId } = seedSingleNodeRun('generate a result');
+    db.prepare('UPDATE workflow_runs SET dag_layout = ? WHERE id = ?').run(
+      JSON.stringify({ nodes: [{ id: taskId, dependencies: [], prompt: 'generate a result', harness_profile: 'generator' }] }),
+      runId,
+    );
+    const mockFn = vi.fn(async (_request: { prompt: string; harnessProfile: string }) => 'should not run');
+    injectCoreExecGenerateFn(mockFn);
+
+    const ok = await executeRun(runId);
+
+    expect(ok).toBe(false);
+    expect(mockFn).not.toHaveBeenCalled();
+    expect((db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as { status: string }).status).toBe('parked');
+  });
+
   it("routes a non-empty 'generic' prompt to the injected main-thread LLM and stores its real response", async () => {
-    const mockFn = vi.fn(async (_p: string) => 'REAL LLM SUMMARY OUTPUT');
+    const mockFn = vi.fn(async (_request: { prompt: string; harnessProfile: string }) => 'REAL LLM SUMMARY OUTPUT');
     injectCoreExecGenerateFn(mockFn);
 
     const { runId, taskId } = seedSingleNodeRun('summarize the findings into three bullet points');
@@ -137,7 +208,10 @@ describe('CoreExec Engine - Async DAG Runner', () => {
 
     expect(ok).toBe(true);
     expect(mockFn).toHaveBeenCalledTimes(1);
-    expect(mockFn).toHaveBeenCalledWith('summarize the findings into three bullet points');
+    expect(mockFn).toHaveBeenCalledWith({
+      prompt: 'summarize the findings into three bullet points',
+      harnessProfile: 'default',
+    });
 
     const task = db.prepare('SELECT status, output_data FROM tasks WHERE id = ?').get(taskId) as any;
     expect(task.status).toBe('completed');
@@ -147,6 +221,23 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     // The real LLM response is stored — NOT the old canned "metadata echo" string.
     expect(out.message).toBe('REAL LLM SUMMARY OUTPUT');
     expect(out.message).not.toMatch(/metadata echo/);
+  });
+
+  it('fails Evaluator tasks closed when the local MCP bridge is unavailable', async () => {
+    const { runId, taskId } = seedSingleNodeRun('inspect the rendered page');
+    db.prepare('UPDATE workflow_runs SET dag_layout = ? WHERE id = ?').run(
+      JSON.stringify({ nodes: [{ id: taskId, dependencies: [], prompt: 'inspect the rendered page', harness_profile: 'evaluator' }] }),
+      runId,
+    );
+    const execSpy = vi.spyOn(workerPool, 'execute');
+
+    const ok = await executeRun(runId);
+
+    expect(ok).toBe(false);
+    expect(execSpy).not.toHaveBeenCalled();
+    const task = db.prepare('SELECT status, output_data FROM tasks WHERE id = ?').get(taskId) as { status: string; output_data: string };
+    expect(task.status).toBe('parked');
+    expect(JSON.parse(task.output_data).error).toContain('no local MCP protocol client/tool bridge is configured');
   });
 
   it("still routes a 'shell'-classified prompt through the worker pool unchanged (regression)", async () => {
@@ -185,8 +276,8 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     expect(task.status).toBe('parked');
 
     const todo = db.prepare(
-      'SELECT severity, confidence, required_action_type, status FROM os_todos WHERE dag_node_id = ?'
-    ).get(taskId) as any;
+      'SELECT severity, confidence, required_action_type, status FROM os_todos WHERE context_payload LIKE ?'
+    ).get(`%"taskId":"${taskId}"%`) as any;
     expect(todo).toBeTruthy();
     expect(todo.confidence).toBe(0.0);
     expect(todo.severity).toBe('HIGH');
@@ -194,7 +285,7 @@ describe('CoreExec Engine - Async DAG Runner', () => {
   });
 
   it("parks a 'generic' task when the injected generateFn throws (providers exhausted / governor block)", async () => {
-    injectCoreExecGenerateFn(async () => { throw new Error('Governor blocked execution'); });
+    injectCoreExecGenerateFn(async (_request) => { throw new Error('Governor blocked execution'); });
 
     const { runId, taskId } = seedSingleNodeRun('draft a release note for v0.4');
     const ok = await executeRun(runId);
@@ -203,7 +294,7 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     const task = db.prepare('SELECT status FROM tasks WHERE id = ?').get(taskId) as any;
     expect(task.status).toBe('parked');
 
-    const todo = db.prepare('SELECT confidence FROM os_todos WHERE dag_node_id = ?').get(taskId) as any;
+    const todo = db.prepare('SELECT confidence FROM os_todos WHERE context_payload LIKE ?').get(`%"taskId":"${taskId}"%`) as any;
     expect(todo).toBeTruthy();
     expect(todo.confidence).toBe(0.0);
   });
@@ -270,5 +361,92 @@ describe('CoreExec Engine - Async DAG Runner', () => {
     seedRunWithStatus('completed', ['completed']);
     seedRunWithStatus('failed', ['failed']);
     expect(resumeInProgressRuns()).toBe(0);
+  });
+
+  // Proves UnifiedMasterDashboard's "Claim Batch Size" setting genuinely caps
+  // how many eligible tasks get dispatched per tick, independent of
+  // availableSlots (systemConfig.maxWorkers headroom) — previously there was
+  // no such cap at all; every eligible task within availableSlots dispatched
+  // in the same Promise.all batch. Nested inside the outer describe (rather
+  // than a second top-level describe) so it shares the outer's beforeAll
+  // (initDB) and runs BEFORE the outer afterAll closes the shared `:memory:`
+  // db connection.
+  describe('claim_batch_size setting caps per-tick dispatch concurrency', () => {
+    let originalMaxWorkers: number;
+
+    beforeEach(() => {
+      db.prepare("DELETE FROM system_settings WHERE key = 'claim_batch_size'").run();
+      // Give plenty of worker headroom so availableSlots is never the
+      // bottleneck — isolates claim_batch_size as the only limiting factor.
+      originalMaxWorkers = systemConfig.maxWorkers;
+      systemConfig.maxWorkers = 10;
+    });
+
+    afterEach(() => {
+      systemConfig.maxWorkers = originalMaxWorkers;
+      db.prepare("DELETE FROM system_settings WHERE key = 'claim_batch_size'").run();
+    });
+
+    function seedThreeIndependentGenericTasks(): { runId: string; taskIds: string[] } {
+    const projectId = 'proj-batch';
+    db.prepare('INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (?, ?, ?)').run(
+      projectId, 'Batch Project', Date.now(),
+    );
+    const runId = crypto.randomUUID();
+    const taskIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    const dagLayout = { nodes: taskIds.map((id) => ({ id, dependencies: [], prompt: `independent step ${id}` })) };
+    db.prepare(
+      `INSERT INTO workflow_runs (id, project_id, dag_layout, status, created_at) VALUES (?, ?, ?, ?, ?)`,
+    ).run(runId, projectId, JSON.stringify(dagLayout), 'pending', Date.now());
+    const insertTask = db.prepare(`INSERT INTO tasks (id, run_id, status) VALUES (?, ?, 'unclaimed')`);
+    for (const id of taskIds) insertTask.run(id, runId);
+    return { runId, taskIds };
+  }
+
+  it('dispatches all 3 independent eligible tasks concurrently when claim_batch_size is unset (default/unbounded)', async () => {
+    let concurrent = 0;
+    let maxConcurrentSeen = 0;
+    injectCoreExecGenerateFn(async (_request) => {
+      concurrent++;
+      maxConcurrentSeen = Math.max(maxConcurrentSeen, concurrent);
+      await new Promise((r) => setTimeout(r, 30));
+      concurrent--;
+      return 'ok';
+    });
+
+    const { runId } = seedThreeIndependentGenericTasks();
+    await executeRun(runId);
+
+    // All 3 had no dependencies and ample worker headroom — with no batch
+    // cap, they all landed in the same dispatch tick's Promise.all.
+    expect(maxConcurrentSeen).toBe(3);
+  });
+
+  it('caps concurrent dispatch at 1 when claim_batch_size=1, serializing otherwise-parallel tasks', async () => {
+    db.prepare(
+      "INSERT INTO system_settings (key, value) VALUES ('claim_batch_size', '1') ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    ).run();
+
+    let concurrent = 0;
+    let maxConcurrentSeen = 0;
+    injectCoreExecGenerateFn(async (_request) => {
+      concurrent++;
+      maxConcurrentSeen = Math.max(maxConcurrentSeen, concurrent);
+      await new Promise((r) => setTimeout(r, 30));
+      concurrent--;
+      return 'ok';
+    });
+
+    const { runId } = seedThreeIndependentGenericTasks();
+    const ok = await executeRun(runId);
+
+    expect(ok).toBe(true);
+    // Same 3 independent tasks, same worker headroom — but claim_batch_size=1
+    // means only 1 task is ever claimed+dispatched per tick.
+    expect(maxConcurrentSeen).toBe(1);
+
+    const tasks = db.prepare('SELECT status FROM tasks WHERE run_id = ?').all(runId) as any[];
+    expect(tasks.every((t) => t.status === 'completed')).toBe(true);
+  });
   });
 });

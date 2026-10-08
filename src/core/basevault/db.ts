@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { isMainThread } from 'worker_threads';
 
 import type { Database as BetterSqlite3Database } from 'better-sqlite3';
@@ -30,13 +30,83 @@ export const db: BetterSqlite3Database = new Database(dbPath, {
 });
 
 // Load Vector Search Extension
-sqliteVec.load(db);
+//
+// sqlite-vec resolves its native extension (`vec0.so` / `.dylib` / `.dll`) from
+// the `sqlite-vec-<os>-<arch>` package and hands the path to SQLite's C-level
+// load_extension, i.e. straight to the OS loader. Inside a pkg-packaged sidecar
+// that resolved path points into the virtual snapshot, which dlopen cannot open
+// (pkg only virtualizes Node's own `.node` loader), so the packaged runtime
+// loads the copy staged as a real Tauri resource instead — see
+// scripts/build-tauri-sidecar.js, which stages
+// `resources/bin/<platform>-<arch>/sqlite-vec-<os>-<arch>/vec0.<ext>`.
+//
+// Dev and test runs keep resolving through node_modules exactly as before.
+function resolveExternalVecExtension(): string | null {
+  const platform = process.platform;
+  const arch = process.arch;
+  const platformDir = `${platform === 'win32' ? 'win' : platform}-${arch}`;
+  const vecOs = platform === 'win32' ? 'windows' : platform;
+  const fileName =
+    platform === 'win32' ? 'vec0.dll'
+    : platform === 'darwin' ? 'vec0.dylib'
+    : 'vec0.so';
+  const relative = path.join('resources', 'bin', platformDir, `sqlite-vec-${vecOs}-${arch}`, fileName);
+
+  // Resource directory handed over by the Tauri host: lib.rs sets
+  // NEUROSYNC_RESOURCE_DIR on the sidecar spawn. This is the only candidate
+  // that is correct for every package format (deb/AppImage put resources in
+  // /usr/lib/<product> while the executable lives in /usr/bin).
+  const resourceDir = process.env.NEUROSYNC_RESOURCE_DIR;
+
+  const candidates = [
+    // Explicit override, useful for CI and for `tauri dev` layouts.
+    process.env.NEUROSYNC_SQLITE_VEC_PATH,
+    resourceDir && resourceDir.length > 0 ? path.join(resourceDir, relative) : undefined,
+    // Tauri places bundle resources next to the sidecar executable...
+    path.join(path.dirname(process.execPath), relative),
+    // ...except on macOS, where resources live under ../Resources.
+    path.join(path.dirname(process.execPath), '..', 'Resources', relative),
+    // Local repo layout, so a staged tree works without packaging at all.
+    path.join(process.cwd(), 'src-tauri', relative),
+  ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0);
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      // Unreadable candidate paths are simply skipped; the loop below still
+      // falls back to the bundled resolution path.
+    }
+  }
+  return null;
+}
+
+function loadVectorSearchExtension(): void {
+  const isPackaged = typeof (process as { pkg?: unknown }).pkg !== 'undefined';
+  if (isPackaged || process.env.NEUROSYNC_SQLITE_VEC_PATH) {
+    const external = resolveExternalVecExtension();
+    if (external) {
+      db.loadExtension(external);
+      console.log(`[BaseVault] Loaded sqlite-vec extension from ${external}`);
+      return;
+    }
+    console.warn(
+      '[BaseVault] Packaged runtime could not find a loadable sqlite-vec extension; ' +
+      'falling back to package resolution (vector search may be unavailable).'
+    );
+  }
+  sqliteVec.load(db);
+}
+
+loadVectorSearchExtension();
 
 // Enforce Write-Ahead Logging (WAL) for concurrent reads/writes and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
+
+db.function('sha256', (text: string) => createHash('sha256').update(text || '').digest('hex'));
 
 // Schema Initialization Function
 export function initDB() {
@@ -46,6 +116,7 @@ export function initDB() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       workspace_path TEXT,
+      project_root_path TEXT,
       created_at INTEGER NOT NULL
     );
 
@@ -64,6 +135,7 @@ export function initDB() {
       project_id TEXT NOT NULL,
       dag_layout TEXT NOT NULL,
       status TEXT NOT NULL,
+      track TEXT NOT NULL DEFAULT 'track2',
       created_at INTEGER NOT NULL,
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
     );
@@ -74,18 +146,24 @@ export function initDB() {
       status TEXT NOT NULL,
       claim_lease INTEGER,
       output_data TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      started_at INTEGER,
       FOREIGN KEY(run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
     );
     
     CREATE TABLE IF NOT EXISTS os_todos (
       id TEXT PRIMARY KEY,
-      dag_node_id TEXT NOT NULL,
+      dag_node_id TEXT,
+      project_id TEXT,
+      source_module TEXT NOT NULL DEFAULT 'CoreExec',
+      context_payload TEXT,
       severity TEXT NOT NULL,
       escalation_reason TEXT NOT NULL,
       required_action_type TEXT NOT NULL,
       status TEXT NOT NULL,
       created_at INTEGER NOT NULL,
-      FOREIGN KEY(dag_node_id) REFERENCES tasks(id) ON DELETE CASCADE
+      resolved_at INTEGER,
+      resolved_by TEXT
     );
 
     -- Optimize task querying by status and run_id
@@ -101,13 +179,120 @@ export function initDB() {
       project_id TEXT,
       last_accessed_at INTEGER NOT NULL,
       access_count INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      source_tool TEXT
     );
 
     CREATE VIRTUAL TABLE IF NOT EXISTS cerebro_memories_vec USING vec0(
       id TEXT PRIMARY KEY,
-      embedding float[1536]
+      embedding bit[1536]
     );
+
+    CREATE TABLE IF NOT EXISTS memory_quarantine (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      type TEXT NOT NULL,
+      project_id TEXT,
+      last_accessed_at INTEGER NOT NULL,
+      access_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      taint_flag INTEGER NOT NULL DEFAULT 1,
+      source_tool TEXT
+    );
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS memory_quarantine_vec USING vec0(
+      id TEXT PRIMARY KEY,
+      embedding bit[1536]
+    );
+
+    CREATE TABLE IF NOT EXISTS memory_audit_log (
+      id TEXT PRIMARY KEY,
+      memory_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      previous_content TEXT,
+      new_content TEXT,
+      changed_at INTEGER NOT NULL,
+      previous_hash TEXT
+    );
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_update 
+    AFTER UPDATE ON cerebro_memories_meta
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'UPDATE',
+        OLD.content,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_delete 
+    AFTER DELETE ON cerebro_memories_meta
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        OLD.id,
+        'DELETE',
+        OLD.content,
+        NULL,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    -- Audit triggers for quarantine table (tainted/unverified content).
+    -- Mirrors the cerebro_memories_meta audit chain so any mutation of
+    -- quarantine content is also hash-chained for provenance.
+    CREATE TRIGGER IF NOT EXISTS audit_memory_insert 
+    AFTER INSERT ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'INSERT',
+        NULL,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_update_quarantine 
+    AFTER UPDATE ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        NEW.id,
+        'UPDATE',
+        OLD.content,
+        NEW.content,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS audit_memory_delete_quarantine 
+    AFTER DELETE ON memory_quarantine
+    BEGIN
+      INSERT INTO memory_audit_log (id, memory_id, action, previous_content, new_content, changed_at, previous_hash)
+      VALUES (
+        lower(hex(randomblob(16))),
+        OLD.id,
+        'DELETE',
+        OLD.content,
+        NULL,
+        CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER),
+        (SELECT sha256(ifnull(previous_hash, '') || id || action || ifnull(previous_content, '') || ifnull(new_content, '') || changed_at) FROM memory_audit_log ORDER BY changed_at DESC LIMIT 1)
+      );
+    END;
+
 
     CREATE TABLE IF NOT EXISTS cerebro_learning_approvals (
       id TEXT PRIMARY KEY,
@@ -115,6 +300,34 @@ export function initDB() {
       confidence REAL NOT NULL,
       status TEXT NOT NULL,
       source_run_id TEXT,
+      created_at INTEGER NOT NULL,
+      source_tool TEXT
+    );
+
+    -- Cerebro prune history: one row per manual prune action. Powers the
+    -- "Pruned (30d)" counter (SUM(count) over the last 30 days). Pruning is
+    -- manual-trigger only (never a silent background auto-delete) since it
+    -- permanently removes user memory rows from cerebro_memories_meta/_vec.
+    CREATE TABLE IF NOT EXISTS cerebro_prune_log (
+      id TEXT PRIMARY KEY,
+      pruned_at INTEGER NOT NULL,
+      count INTEGER NOT NULL
+    );
+
+    -- Council Mode (RouteSwitch high-risk arbitration) computes a real
+    -- confidence/disagreement signal from parallel provider calls, but every
+    -- caller of RouteSwitchEngine.execute() previously discarded it — only
+    -- result.content was ever read. This table is what makes that signal
+    -- queryable/visible (persisted + logged + surfaced in the dashboard)
+    -- instead of vanishing silently after being computed at real cost.
+    CREATE TABLE IF NOT EXISTS council_decisions (
+      id TEXT PRIMARY KEY,
+      scope TEXT,
+      scope_id TEXT,
+      provider_count INTEGER NOT NULL,
+      confidence REAL NOT NULL,
+      disagreement_score REAL NOT NULL,
+      chosen_response_length INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     );
 
@@ -223,6 +436,51 @@ export function initDB() {
       FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS scout_symbols (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      file_path TEXT NOT NULL,
+      symbol_type TEXT NOT NULL,
+      symbol_name TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    -- ── Axiom 6: Genesis Hardware Profile (Immutable Ledger) ─────────────────
+    -- Written ONCE by ScoutDaemon's hardware-profiler at first-run setup.
+    -- 'tier' is the synthesized classification: constrained | standard | high-performance.
+    -- Never modified after initial write; re-profiling inserts a new row with a
+    -- new id — it never overwrites the historical record.
+    CREATE TABLE IF NOT EXISTS hardware_profiles (
+      id TEXT PRIMARY KEY,
+      profiled_at INTEGER NOT NULL,
+      cpu_cores INTEGER NOT NULL,
+      cpu_physical_cores INTEGER NOT NULL,
+      cpu_has_hyperthreading INTEGER NOT NULL DEFAULT 0,
+      cpu_brand TEXT,
+      ram_total_mb INTEGER NOT NULL,
+      storage_type TEXT NOT NULL DEFAULT 'unknown',
+      os_platform TEXT NOT NULL,
+      os_distro TEXT,
+      virtualization TEXT NOT NULL DEFAULT 'none',
+      gpu_type TEXT NOT NULL DEFAULT 'none',
+      gpu_vram_mb INTEGER NOT NULL DEFAULT 0,
+      tier TEXT NOT NULL CHECK(tier IN ('constrained', 'standard', 'high-performance'))
+    );
+
+    -- ── Axiom 6: Derived Environment Rules ───────────────────────────────────
+    -- Key/value pairs synthesized from hardware_profiles by the profiler.
+    -- CoreExec reads these at boot to inject taskset, thread caps, heap limits.
+    -- RouteSwitch reads 'local_llm_enabled' before attempting local SLM calls.
+    CREATE TABLE IF NOT EXISTS environment_rules (
+      id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL REFERENCES hardware_profiles(id) ON DELETE CASCADE,
+      rule_key TEXT NOT NULL,
+      rule_value TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_environment_rules_profile ON environment_rules(profile_id);
+
     -- Indexes for graph traversal performance
     CREATE INDEX IF NOT EXISTS idx_okf_nodes_tier ON okf_nodes(tier, project_id);
     CREATE INDEX IF NOT EXISTS idx_okf_nodes_type ON okf_nodes(type);
@@ -287,6 +545,31 @@ export function initDB() {
     // Free Mode Governor paid-provider lock: opt-in per-provider "this costs
     // real money" flag. DEFAULT 0 (free) for every row — including all existing
     // rows — is deliberate: nothing is silently reclassified by provider type.
+    db.exec(`ALTER TABLE llm_providers ADD COLUMN require_paid_tier INTEGER NOT NULL DEFAULT 0;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding require_paid_tier column to llm_providers:', e);
+    }
+  }
+
+  try {
+    // Add source_tool for cross-agent attribution
+    db.exec(`ALTER TABLE cerebro_memories_meta ADD COLUMN source_tool TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding source_tool column to cerebro_memories_meta:', e);
+    }
+  }
+
+  try {
+    // Add source_tool for cross-agent attribution
+    db.exec(`ALTER TABLE memory_quarantine ADD COLUMN source_tool TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding source_tool column to memory_quarantine:', e);
+    }
+  }
+  try {
     // The global lock (system_settings.free_mode_unlocked) only skips a provider
     // once a user explicitly marks it paid, so a currently-working free proxy
     // setup can never be blocked by shipping this migration.
@@ -306,6 +589,27 @@ export function initDB() {
   }
 
   try {
+    // Reflexion contradiction-detection: when a newly-extracted fact is highly
+    // similar (>0.85) to an existing memory but is classified as a genuine
+    // update/contradiction (not a reworded duplicate), it is queued here for
+    // human approval instead of being silently discarded or inserted alongside
+    // a possibly-conflicting memory. NULL for ordinary (non-conflicting) approvals.
+    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN conflict_with_id TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding conflict_with_id column to cerebro_learning_approvals:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN conflict_reasoning TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding conflict_reasoning column to cerebro_learning_approvals:', e);
+    }
+  }
+
+  try {
     // Explicit per-project repo mapping for the GitNexus code-structure modality —
     // lets resolveRepoForCall() disambiguate when more than one repo is indexed
     // on the machine, instead of giving up on the whole modality (gitnexus-client.ts).
@@ -316,7 +620,154 @@ export function initDB() {
     }
   }
 
+  // Per-project execution permission archetype (real enforcement, gated in
+  // core/coreexec/worker.ts). Nullable with NO default: NULL means "no
+  // archetype assigned — behave exactly as today, fully permissive". A
+  // non-NULL value (e.g. 'code_execute' | 'research_only' | 'admin_operator')
+  // opts the project into gating of the shell/scrape task actions.
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN permission_archetype TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding permission_archetype column to projects:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN project_root_path TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding project_root_path column to projects:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE workflow_runs ADD COLUMN track TEXT NOT NULL DEFAULT 'track2';`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding track column to workflow_runs:', e);
+    }
+  }
+
   migratePendingProposalBlob();
+
+  // ── FIX-4 (Axiom 1): Low-I/O Context Event Log ───────────────────────────
+  // Semantic events (routing decisions, UI interactions, workflow summaries)
+  // are coalesced and written here in batches (max 1 flush per 30s per project)
+  // rather than as a real-time event bus that would saturate eMMC 5.1 NAND.
+  // Cerebro reads recent events per project during interview phase to hydrate
+  // prior context without re-scanning the full OKF knowledge graph.
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS context_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT,
+        type TEXT NOT NULL,
+        summary_text TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_context_events_project ON context_events(project_id, created_at DESC);
+    `);
+  } catch (e: any) {
+    if (!e.message?.includes('already exists')) {
+      console.error('[FIX-4] Error creating context_events table:', e);
+    }
+  }
+
+  // ── FIX-3 (Axiom 4): Verify Node Type Tracking ───────────────────────────
+  // Adds node_type to tasks so 'verify' step nodes are distinguishable from
+  // 'action' nodes in the dispatch loop and in PortGrid approval UI.
+  // NULL = legacy action node (fully backwards-compatible).
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN node_type TEXT;`);
+  } catch (e: any) {
+    if (!e.message?.includes('duplicate column name')) {
+      console.error('[FIX-3] Error adding node_type column to tasks:', e);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE cerebro_learning_approvals ADD COLUMN source_tool TEXT;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding source_tool column to cerebro_learning_approvals:', e);
+    }
+  }
+
+  // Delta Sync Event Log
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_event_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        action TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        payload TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS sync_lock (is_syncing INTEGER);
+      INSERT OR IGNORE INTO sync_lock (rowid, is_syncing) VALUES (1, 0);
+
+      DROP TRIGGER IF EXISTS sync_projects_insert;
+      CREATE TRIGGER sync_projects_insert AFTER INSERT ON projects
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('projects', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'name', NEW.name, 'created_at', NEW.created_at));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_projects_update;
+      CREATE TRIGGER sync_projects_update AFTER UPDATE ON projects
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('projects', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'name', NEW.name, 'created_at', NEW.created_at));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_workflow_runs_insert;
+      CREATE TRIGGER sync_workflow_runs_insert AFTER INSERT ON workflow_runs
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('workflow_runs', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status, 'dag_layout', NEW.dag_layout, 'track', NEW.track, 'created_at', NEW.created_at, 'completed_at', NEW.completed_at));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_workflow_runs_update;
+      CREATE TRIGGER sync_workflow_runs_update AFTER UPDATE ON workflow_runs
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('workflow_runs', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'project_id', NEW.project_id, 'status', NEW.status, 'dag_layout', NEW.dag_layout, 'track', NEW.track, 'created_at', NEW.created_at, 'completed_at', NEW.completed_at));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_tasks_insert;
+      CREATE TRIGGER sync_tasks_insert AFTER INSERT ON tasks
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('tasks', 'INSERT', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'run_id', NEW.run_id, 'status', NEW.status));
+      END;
+
+      DROP TRIGGER IF EXISTS sync_tasks_update;
+      CREATE TRIGGER sync_tasks_update AFTER UPDATE ON tasks
+      WHEN (SELECT is_syncing FROM sync_lock WHERE rowid = 1) = 0
+      BEGIN
+        INSERT INTO sync_event_log (table_name, action, timestamp, payload)
+        VALUES ('tasks', 'UPDATE', CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER), json_object('id', NEW.id, 'run_id', NEW.run_id, 'status', NEW.status));
+      END;
+    `);
+  } catch (e: any) {
+    console.error('Error creating sync_event_log table:', e);
+  }
+
+  try {
+    db.exec(`ALTER TABLE tasks ADD COLUMN started_at INTEGER;`);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Error adding started_at column to tasks:', e);
+    }
+  }
 }
 
 /**

@@ -3,8 +3,11 @@ import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
 import { Brain, CheckCircle, XCircle, Search, Clock, Trash2, Pin, Sliders, Database, FileText, AlertTriangle } from 'lucide-react';
 import { OKFMindmap } from '../components/OKFMindmap';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
+import { useDeveloperMode } from '../components/DeveloperModeContext';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#2DD4BF';
 const ACCENT_GOLD = '#D4AF37';
 
@@ -12,7 +15,7 @@ const ACCENT_GOLD = '#D4AF37';
 const GLOW_BOX = `bg-white/[0.02] border border-white/5 rounded-xl p-5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(45,212,191,0.08)] hover:shadow-[0_0_30px_rgba(45,212,191,0.2)] hover:border-[rgba(45,212,191,0.25)]`;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-interface LearningApproval { id: string; fact: string; confidence: number; status: string; source_run_id: string | null; created_at: number; }
+interface LearningApproval { id: string; fact: string; confidence: number; status: string; source_run_id: string | null; created_at: number; conflictWithId?: string | null; conflictReasoning?: string | null; source_tool?: string | null; }
 interface MemoryNode { id: string; content: string; type: string; last_accessed_at: number; access_count: number; created_at: number; }
 
 // ─── Dashboard View ─────────────────────────────────────────────────────────
@@ -23,6 +26,10 @@ function DashboardView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [health, setHealth] = useState<{vectorCount:number; status:string; lastReflection:number|null}>({ vectorCount: 0, status: 'cold', lastReflection: null });
+  const [decayStats, setDecayStats] = useState<{nearingDecay: number}>({ nearingDecay: 0 });
+  const [pruned30d, setPruned30d] = useState(0);
+  const [pruneCandidates, setPruneCandidates] = useState<{ id: string; content: string; decayFactor: number; daysSinceAccess: number }[] | null>(null);
+  const [pruning, setPruning] = useState(false);
   const [okfNodeCount, setOkfNodeCount] = useState(0);
   const [okfSearch, setOkfSearch] = useState('');
   const [okfResults, setOkfResults] = useState<any[]>([]);
@@ -31,30 +38,80 @@ function DashboardView() {
 
   // Fetch approvals queue
   useEffect(() => {
-    fetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
-      if (d.success && d.queue) setApprovals(d.queue);
+    authFetch(`${API}/api/cerebro/learning-approvals`).then(r => r.json()).then(d => {
+      if (d.success && d.queue) {
+        // API/DB rows use snake_case (conflict_with_id / conflict_reasoning);
+        // normalize to the camelCase fields the LearningApproval interface expects.
+        setApprovals(d.queue.map((a: any) => ({
+          ...a,
+          conflictWithId: a.conflict_with_id ?? null,
+          conflictReasoning: a.conflict_reasoning ?? null,
+          source_tool: a.source_tool ?? null,
+        })));
+      }
     }).catch(() => {});
   }, [activeProjectId]);
 
   // Fetch health
   useEffect(() => {
-    fetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => {
       if (d.success) setHealth({ vectorCount: d.vectorCount, status: d.status, lastReflection: d.lastReflection });
     }).catch(() => {});
   }, []);
 
   // Fetch OKF node count
   useEffect(() => {
-    fetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/okf/nodes?limit=1`).then(r => r.json()).then(d => {
       if (d.success) setOkfNodeCount(d.count || 0);
     }).catch(() => {});
   }, [activeProjectId]);
+
+  // Fetch real "Nearing Decay" count (was hardcoded 0)
+  const refreshDecayStats = () => {
+    authFetch(`${API}/api/cerebro/decay-stats`).then(r => r.json()).then(d => {
+      if (d.success) setDecayStats({ nearingDecay: d.nearingDecay });
+    }).catch(() => {});
+  };
+  useEffect(() => { refreshDecayStats(); }, []);
+
+  // Fetch real "Pruned (30d)" rolling sum (was hardcoded 0)
+  const refreshPruneHistory = () => {
+    authFetch(`${API}/api/cerebro/prune-history`).then(r => r.json()).then(d => {
+      if (d.success) setPruned30d(d.pruned30d ?? 0);
+    }).catch(() => {});
+  };
+  useEffect(() => { refreshPruneHistory(); }, []);
+
+  // Prune flow (manual, confirmation-gated). Step 1: dry-run preview → show the
+  // candidate list. Step 2: user confirms → destructive delete → refresh counters.
+  const handlePrunePreview = async () => {
+    try {
+      const res = await authFetch(`${API}/api/cerebro/prune-preview`);
+      const d = await res.json();
+      if (d.success) setPruneCandidates(d.candidates || []);
+    } catch { setPruneCandidates([]); }
+  };
+  const handlePruneConfirm = async () => {
+    setPruning(true);
+    try {
+      await authFetch(`${API}/api/cerebro/prune-confirm`, { method: 'POST' });
+      setPruneCandidates(null);
+      refreshDecayStats();
+      refreshPruneHistory();
+      // Active-memory count lives in health — refresh it too.
+      authFetch(`${API}/api/cerebro/health`).then(r => r.json()).then(d => {
+        if (d.success) setHealth({ vectorCount: d.vectorCount, status: d.status, lastReflection: d.lastReflection });
+      }).catch(() => {});
+    } catch {}
+    setPruning(false);
+  };
 
   // Search memories
   const handleSearch = async () => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     try {
       const res = await fetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) });
+      const res = await authFetch(`${API}/api/cerebro/vector-search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: searchQuery, projectId: activeProjectId }) });
       const d = await res.json();
       if (d.success) setSearchResults(d.results || []);
     } catch { setSearchResults([]); }
@@ -63,7 +120,7 @@ function DashboardView() {
   // Approve/reject a learning
   const handleApproval = async (id: string, action: 'approve' | 'reject') => {
     try {
-      await fetch(`${API}/api/cerebro/learning-approvals/${id}/${action}`, { method: 'POST' });
+      await authFetch(`${API}/api/cerebro/learning-approvals/${id}/${action}`, { method: 'POST' });
       setApprovals(prev => prev.filter(a => a.id !== id));
     } catch {}
   };
@@ -76,7 +133,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Brain size={16} style={{ color: ACCENT }} /> Learning Approvals (Epistemic Gatekeeper)
+            <Brain size={16} style={{ color: ACCENT }} /> <ModeLabel simple="New Things The AI Learned" dev="Learning Approvals (Epistemic Gatekeeper)" /> <HelpTip text="The AI drafts new facts it thinks it learned. Nothing is remembered permanently until you approve it here." />
           </h2>
           <span className="text-[10px] font-mono text-gray-500">{approvals.length} pending</span>
         </div>
@@ -92,11 +149,22 @@ function DashboardView() {
               <div key={a.id} className="p-3 rounded-lg bg-black/30 border border-white/5 hover:border-blue-500/20 transition-all">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs text-white font-semibold leading-relaxed">{a.fact}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-white font-semibold leading-relaxed">{a.fact}</div>
+                      {a.source_tool && (
+                        <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded border shrink-0 ${a.source_tool === 'Deepseek Web' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : a.source_tool === 'Qwen Studio' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : a.source_tool === 'Hermes' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' : 'bg-gray-500/10 text-gray-400 border-gray-500/30'}`}>{a.source_tool}</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3 mt-2">
                       <span className="text-[9px] font-mono text-gray-500">Confidence: <span style={{ color: a.confidence > 0.9 ? '#00FF41' : a.confidence > 0.7 ? '#fbbf24' : '#ef4444' }}>{(a.confidence * 100).toFixed(0)}%</span></span>
                       {a.source_run_id && <span className="text-[9px] font-mono text-gray-600">Source: {a.source_run_id.substring(0, 8)}...</span>}
                     </div>
+                    {a.conflictReasoning && (
+                      <div className="flex items-center gap-1.5 mt-2 px-2 py-1 rounded bg-amber-500/5 border border-amber-500/20">
+                        <AlertTriangle size={10} className="text-amber-400 shrink-0" />
+                        <span className="text-[9px] text-amber-400/90 leading-relaxed">{a.conflictReasoning}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     <button onClick={() => handleApproval(a.id, 'approve')} className="px-2 py-1 rounded text-[9px] font-bold bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20 transition-all" title="Promote to Substantiated Graph">✓</button>
@@ -112,7 +180,7 @@ function DashboardView() {
       {/* Widget B: Memory Browser & Topology Matrix */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Search size={16} style={{ color: ACCENT }} /> Memory Browser & Topology
+          <Search size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Search The AI's Memory" dev="Memory Browser & Topology" />
         </h2>
 
         {/* Search */}
@@ -151,9 +219,9 @@ function DashboardView() {
       {/* Widget C: Habituation Decay & Pruning Monitor */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Clock size={16} style={{ color: ACCENT_GOLD }} /> Habituation Decay & Pruning Monitor
+          <Clock size={16} style={{ color: ACCENT_GOLD }} /> <ModeLabel simple="Memory Freshness" dev="Habituation Decay & Pruning Monitor" /> <HelpTip text="Memories the AI hasn't used in a while slowly fade so it stays focused on what matters now. Pin a memory to keep it fresh forever." />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Memories that haven't been accessed recently degrade over time. Pin critical memories to prevent decay.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Memories that haven't been used recently slowly fade. Pin important ones to keep them." dev="Memories that haven't been accessed recently degrade over time. Pin critical memories to prevent decay." /></p>
 
         <div className="grid grid-cols-3 gap-4 mb-4">
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
@@ -162,42 +230,84 @@ function DashboardView() {
           </div>
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Nearing Decay</div>
-            <div className="text-lg font-bold font-mono text-amber-400">0</div>
+            <div className="text-lg font-bold font-mono text-amber-400">{decayStats.nearingDecay}</div>
           </div>
           <div className="bg-black/30 border border-white/5 rounded-lg p-3 text-center">
             <div className="text-[9px] text-gray-500 uppercase font-mono mb-1">Pruned (30d)</div>
-            <div className="text-lg font-bold font-mono text-gray-500">0</div>
+            <div className="text-lg font-bold font-mono text-gray-500">{pruned30d}</div>
           </div>
         </div>
 
         <div className="flex gap-2">
-          <button onClick={() => { fetch(`${API}/api/cerebro/habituate`, { method: 'POST' }); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
-            <Trash2 size={12} /> Trigger Consolidation Sweep
+          <button onClick={() => { authFetch(`${API}/api/cerebro/habituate`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
+            <Trash2 size={12} /> <ModeLabel simple="Refresh Memory Scores" dev="Trigger Consolidation Sweep" />
           </button>
-          <button onClick={() => { fetch(`${API}/api/cerebro/pin-high-confidence`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
-            <Pin size={12} /> Pin All High-Confidence
+          <button onClick={() => { authFetch(`${API}/api/cerebro/pin-high-confidence`, { method: 'POST' }).catch(() => {}); }} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all flex items-center justify-center gap-1.5">
+            <Pin size={12} /> <ModeLabel simple="Keep All Trusted Memories" dev="Pin All High-Confidence" />
+          </button>
+          <button onClick={handlePrunePreview} disabled={pruning} className="flex-1 px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/5 text-[10px] font-bold text-red-300 hover:bg-red-500/10 hover:text-red-200 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
+            <Trash2 size={12} /> <ModeLabel simple="Clean Up Old Memories" dev="Prune Now" /> <HelpTip text="Memories your AI hasn't used in a while get permanently removed to keep things tidy. You'll always see exactly what will be removed and have to confirm first — nothing is ever deleted automatically." />
           </button>
         </div>
+
+        {/* Confirmation-gated prune panel — only shown after a dry-run preview.
+            Deletion happens ONLY when the user clicks "Confirm" here. */}
+        {pruneCandidates !== null && (
+          <div className="mt-4 p-4 rounded-lg bg-red-500/[0.04] border border-red-500/20">
+            {pruneCandidates.length === 0 ? (
+              <div className="flex items-center gap-2 text-xs text-gray-300">
+                <CheckCircle size={14} className="text-green-400" />
+                <ModeLabel simple="Nothing to clean up — no memories have gone stale yet." dev="No prune candidates below the decay threshold." />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 mb-2 text-xs font-bold text-red-300">
+                  <AlertTriangle size={14} />
+                  <ModeLabel
+                    simple={`${pruneCandidates.length} old ${pruneCandidates.length === 1 ? 'memory' : 'memories'} will be permanently removed`}
+                    dev={`${pruneCandidates.length} ${pruneCandidates.length === 1 ? 'memory' : 'memories'} below decay threshold will be deleted`}
+                  />
+                </div>
+                <div className="space-y-1 max-h-[160px] overflow-y-auto mb-3 pr-1">
+                  {pruneCandidates.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-black/30 border border-white/5">
+                      <span className="text-[10px] text-gray-300 flex-1 truncate">{m.content || m.id}</span>
+                      <span className="text-[9px] font-mono text-gray-600 shrink-0">{m.daysSinceAccess}d idle</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handlePruneConfirm} disabled={pruning} className="flex-1 px-3 py-2 rounded-lg border border-red-500/40 bg-red-500/15 text-[10px] font-bold text-red-200 hover:bg-red-500/25 transition-all disabled:opacity-50">
+                    {pruning ? '...' : <ModeLabel simple="Yes, remove them" dev="Confirm Prune" />}
+                  </button>
+                  <button onClick={() => setPruneCandidates(null)} disabled={pruning} className="flex-1 px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 transition-all disabled:opacity-50">
+                    <ModeLabel simple="Cancel" dev="Cancel" />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Widget D: OKF Knowledge Graph Browser */}
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Database size={16} style={{ color: ACCENT }} /> OKF Knowledge Graph
+            <Database size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Notes & Docs" dev="OKF Knowledge Graph" />
           </h2>
           <button onClick={() => setShowMindmap(true)} className="text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20 transition-all" style={{ color: ACCENT }}>
-            {okfNodeCount} nodes — Open Mindmap
+            {okfNodeCount} <ModeLabel simple="items — Open Map" dev="nodes — Open Mindmap" />
           </button>
         </div>
 
         {/* Search */}
         <div className="flex gap-2 mb-4">
           <input type="text" value={okfSearch} onChange={e => setOkfSearch(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { fetch(`${API}/api/okf/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: okfSearch, projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success) setOkfResults(d.chunks || []); }).catch(() => {}); } }}
+            onKeyDown={e => { if (e.key === 'Enter') { authFetch(`${API}/api/okf/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: okfSearch, projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success) setOkfResults(d.chunks || []); }).catch(() => {}); } }}
             placeholder="Search knowledge graph..."
             className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500/50" />
-          <button onClick={() => { setOkfIndexing(true); fetch(`${API}/api/okf/index`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success && d.result) setOkfNodeCount(prev => prev + d.result.indexed); }).catch(() => {}).finally(() => setOkfIndexing(false)); }}
+          <button onClick={() => { setOkfIndexing(true); authFetch(`${API}/api/okf/index`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: activeProjectId }) }).then(r => r.json()).then(d => { if (d.success && d.result) setOkfNodeCount(prev => prev + d.result.indexed); }).catch(() => {}).finally(() => setOkfIndexing(false)); }}
             disabled={okfIndexing}
             className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-[10px] font-bold text-gray-300 hover:bg-white/10 hover:text-white transition-all disabled:opacity-50">
             {okfIndexing ? 'Indexing...' : 'Re-index'}
@@ -234,6 +344,7 @@ function DashboardView() {
 
 // ─── Set-up View ────────────────────────────────────────────────────────────
 function SetupView() {
+  const { isDeveloperMode } = useDeveloperMode();
   const [minSimilarity, setMinSimilarity] = useState(0.3);
   const [keywordFallback, setKeywordFallback] = useState(true);
   const [keywordBaseScore, setKeywordBaseScore] = useState(0.7);
@@ -241,21 +352,35 @@ function SetupView() {
   const [decayMultiplier, setDecayMultiplier] = useState(0.3);
   const [accessBoost, setAccessBoost] = useState(1.5);
   const [saving, setSaving] = useState(false);
+  const [globalFiles, setGlobalFiles] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.cerebro_min_similarity) setMinSimilarity(Number(d.settings.cerebro_min_similarity));
         if (d.settings.cerebro_decay_multiplier) setDecayMultiplier(Number(d.settings.cerebro_decay_multiplier));
         if (d.settings.cerebro_access_boost) setAccessBoost(Number(d.settings.cerebro_access_boost));
+        // These two now actually drive _keywordFallbackSearch's scoring
+        // formula server-side — round-trip them on load like their siblings
+        // above so the sliders don't silently reset to their useState
+        // defaults on every page refresh.
+        if (d.settings.cerebro_keyword_base) setKeywordBaseScore(Number(d.settings.cerebro_keyword_base));
+        if (d.settings.cerebro_keyword_boost) setKeywordMatchBoost(Number(d.settings.cerebro_keyword_boost));
       }
+    }).catch(() => {});
+  }, []);
+
+  // Real Global Knowledge Base file listing (was a 3-name hardcoded array)
+  useEffect(() => {
+    authFetch(`${API}/api/okf/global-files`).then(r => r.json()).then(d => {
+      if (d.success) setGlobalFiles(d.files);
     }).catch(() => {});
   }, []);
 
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cerebro_min_similarity: minSimilarity, cerebro_keyword_fallback: keywordFallback, cerebro_keyword_base: keywordBaseScore, cerebro_keyword_boost: keywordMatchBoost, cerebro_decay_multiplier: decayMultiplier, cerebro_access_boost: accessBoost })
       });
@@ -268,9 +393,9 @@ function SetupView() {
       {/* Control A: Retrieval Engine & Fallback Configuration */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Search size={16} style={{ color: ACCENT }} /> Retrieval Engine & Fallback Configuration
+          <Search size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Memory Search Settings" dev="Retrieval Engine & Fallback Configuration" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Manage vector cosine similarity thresholds and offline keyword fallback scoring.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="How closely a memory must match your search to show up, and what to do when smart search isn't available." dev="Manage vector cosine similarity thresholds and offline keyword fallback scoring." /></p>
 
         <div className="space-y-4">
           <div>
@@ -290,11 +415,11 @@ function SetupView() {
           {keywordFallback && (
             <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-blue-500/20">
               <div>
-                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400">Base Score</span><span className="font-mono" style={{ color: ACCENT }}>{keywordBaseScore}</span></div>
+                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400 flex items-center gap-1">Base Score <HelpTip text="The starting similarity score any memory gets as soon as at least one word matches your search, when smart search isn't available." /></span><span className="font-mono" style={{ color: ACCENT }}>{keywordBaseScore}</span></div>
                 <input type="range" min={0.3} max={0.9} step={0.05} value={keywordBaseScore} onChange={e => setKeywordBaseScore(+e.target.value)} className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
               </div>
               <div>
-                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400">Match Boost</span><span className="font-mono" style={{ color: ACCENT }}>+{keywordMatchBoost}</span></div>
+                <div className="flex justify-between text-[10px] mb-1"><span className="text-gray-400 flex items-center gap-1">Match Boost <HelpTip text="How much extra score each additional matching word adds on top of the Base Score, when smart search isn't available." /></span><span className="font-mono" style={{ color: ACCENT }}>+{keywordMatchBoost}</span></div>
                 <input type="range" min={0.01} max={0.15} step={0.01} value={keywordMatchBoost} onChange={e => setKeywordMatchBoost(+e.target.value)} className="w-full h-1.5 bg-white/5 rounded-lg appearance-none cursor-pointer border border-white/10" style={{ accentColor: ACCENT }} />
               </div>
             </div>
@@ -305,11 +430,17 @@ function SetupView() {
       {/* Control B: Habituation Scoring Algorithms */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Sliders size={16} style={{ color: ACCENT_GOLD }} /> Habituation Scoring Algorithms
+          <Sliders size={16} style={{ color: ACCENT_GOLD }} /> <ModeLabel simple="Memory Freshness Tuning" dev="Habituation Scoring Algorithms" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">
-          Controls the decay formula: R<sub>final</sub> = R<sub>semantic</sub> · (f<sub>access</sub> · <span style={{ color: ACCENT_GOLD }}>{accessBoost}×</span>) · e<sup>-(Δt · <span style={{ color: ACCENT }}>{decayMultiplier}×</span>)</sup>
-        </p>
+        {isDeveloperMode ? (
+          <p className="text-xs text-gray-400 mb-4">
+            Controls the decay formula: R<sub>final</sub> = R<sub>semantic</sub> · (f<sub>access</sub> · <span style={{ color: ACCENT_GOLD }}>{accessBoost}×</span>) · e<sup>-(Δt · <span style={{ color: ACCENT }}>{decayMultiplier}×</span>)</sup>
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 mb-4">
+            How quickly unused memories fade, and how much a memory is strengthened each time it gets used.
+          </p>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -334,24 +465,30 @@ function SetupView() {
       {/* Control C: Global Knowledge Base */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Database size={16} style={{ color: ACCENT }} /> Global Knowledge Base (GLOBAL Scope)
+          <Database size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Shared Knowledge (All Projects)" dev="Global Knowledge Base (GLOBAL Scope)" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">System-wide rules and documentation applied across all projects. No client-specific secrets or PII permitted in this tier.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Notes and rules that apply to every project. Don't put client secrets or personal info here — everything in this section is shared." dev="System-wide rules and documentation applied across all projects. No client-specific secrets or PII permitted in this tier." /></p>
 
         <div className="bg-black/30 border border-white/5 rounded-lg p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-300 font-bold">Loaded Global Documents</span>
-            <span className="text-[10px] font-mono" style={{ color: ACCENT }}>3 files</span>
+            <span className="text-[10px] font-mono" style={{ color: ACCENT }}>{globalFiles.length} file{globalFiles.length === 1 ? '' : 's'}</span>
           </div>
-          <div className="space-y-1.5">
-            {['system-constraints.md', 'onboarding-guide.md', 'api-reference.md'].map((doc, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded bg-white/[0.03] border border-white/5">
-                <FileText size={12} style={{ color: ACCENT }} />
-                <span className="text-[10px] font-mono text-gray-300 flex-1">{doc}</span>
-                <span className="text-[9px] text-gray-600">GLOBAL</span>
-              </div>
-            ))}
-          </div>
+          {globalFiles.length === 0 ? (
+            <div className="text-[10px] text-gray-500 text-center py-3 border border-dashed border-white/10 rounded-lg">
+              No global documents yet. Add .md files to ~/.neurosync/global_okf/.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {globalFiles.map((doc, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded bg-white/[0.03] border border-white/5">
+                  <FileText size={12} style={{ color: ACCENT }} />
+                  <span className="text-[10px] font-mono text-gray-300 flex-1">{doc}</span>
+                  <span className="text-[9px] text-gray-600">GLOBAL</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">

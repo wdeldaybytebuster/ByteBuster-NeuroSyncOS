@@ -11,10 +11,34 @@ import {
   ProjectSchema,
   WorkflowRunSchema,
   TaskSchema,
+  DAGLayoutSchema,
+  HarnessProfileEnum,
   partitionBySchema,
 } from './schema';
 
 describe('BaseVault Zod Schemas — §3.3 workflow_run / task / project canonical shapes', () => {
+  describe('DAG layout harness profiles', () => {
+    it('defaults missing profiles and accepts all declared harness profile names', () => {
+      const profiles = ['planner', 'generator', 'evaluator', 'scout', 'default'] as const;
+      for (const harness_profile of profiles) {
+        expect(HarnessProfileEnum.parse(harness_profile)).toBe(harness_profile);
+      }
+
+      const layout = DAGLayoutSchema.parse({ nodes: [
+        { id: 'legacy-node', dependencies: [], prompt: 'legacy step' },
+        { id: 'generator-node', dependencies: ['legacy-node'], harness_profile: 'generator', plugin: 'example', params: { limit: 3 } },
+      ] });
+      expect(layout.nodes[0]?.harness_profile).toBe('default');
+      expect(layout.nodes[1]?.harness_profile).toBe('generator');
+      expect(layout.nodes[1]?.params).toEqual({ limit: 3 });
+    });
+
+    it('rejects unknown profiles and non-string optional prompts', () => {
+      expect(DAGLayoutSchema.safeParse({ nodes: [{ id: 'x', dependencies: [], harness_profile: 'auditor' }] }).success).toBe(false);
+      expect(DAGLayoutSchema.safeParse({ nodes: [{ id: 'x', dependencies: [], prompt: 3 }] }).success).toBe(false);
+    });
+  });
+
   describe('ProjectSchema', () => {
     it('accepts a project row with uuid id + name + epoch created_at', () => {
       const ok = ProjectSchema.safeParse({
@@ -46,6 +70,7 @@ describe('BaseVault Zod Schemas — §3.3 workflow_run / task / project canonica
           created_at:   1719292800000,
         });
         expect(ok.success).toBe(true);
+        if (ok.success) expect(typeof ok.data.dag_layout).toBe('object');
       }
     });
 

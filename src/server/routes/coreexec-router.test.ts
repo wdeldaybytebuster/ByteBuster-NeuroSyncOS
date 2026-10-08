@@ -56,16 +56,14 @@ describe('coreexecRouter /approve — §3.4 DB-bypass gate', () => {
       .prepare("SELECT COUNT(*) AS n FROM workflow_runs WHERE status = 'pending'")
       .get() as any).n;
     expect(afterReal).toBe(beforeReal);
-    // The gate DOES write exactly one sentinel 'blocked-by-validation' row to
-    // satisfy the FK chain (workflow_runs → tasks → os_todos). That is by design.
+    // The gate no longer writes any sentinel 'blocked-by-validation' rows
+    // because os_todos is now decoupled from the workflow_runs -> tasks FK chain.
     const afterBlocked = (db
       .prepare("SELECT COUNT(*) AS n FROM workflow_runs WHERE status = 'blocked-by-validation'")
       .get() as any).n;
-    expect(afterBlocked).toBe(beforeBlocked + 1);
-    // Cleanup the sentinel rows so they do not pollute subsequent tests.
-    db.prepare('DELETE FROM os_todos WHERE id IN (SELECT o.id FROM os_todos o JOIN tasks t ON t.id = o.dag_node_id WHERE t.status = ?)').run('blocked-by-validation');
-    db.prepare('DELETE FROM tasks WHERE status = ?').run('blocked-by-validation');
-    db.prepare('DELETE FROM workflow_runs WHERE status = ?').run('blocked-by-validation');
+    expect(afterBlocked).toBe(beforeBlocked);
+    // Cleanup the os_todos row
+    db.prepare('DELETE FROM os_todos WHERE escalation_reason LIKE ?').run('%SA-07%');
   });
 
   it('rejects a proposal with empty nodes (SA-06)', async () => {

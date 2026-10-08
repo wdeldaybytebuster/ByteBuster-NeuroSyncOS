@@ -21,6 +21,9 @@ import { ApprovalCockpit } from './components/ApprovalCockpit';
 import { NodeOutputInspector } from './components/NodeOutputInspector';
 import { isReservedDAGPrompt } from '../core/system-reserved';
 import { Statusline } from './components/Statusline';
+import { useHardwareTier } from '../core/scoutdaemon/hardware-context';
+import { WorkflowDAGLayoutSchema } from '../core/basevault/schema';
+import { authFetch, openEventSource } from './lib/api';
 
 // ── Custom Node ────────────────────────────────────────────────────────────────
 
@@ -65,6 +68,8 @@ const dagIcons = ['cpu', 'database', 'network'] as const;
 
 
 export default function App() {
+  const hardwareTier = useHardwareTier();
+  const isConstrained = hardwareTier === 'constrained';
   const [currentProposal, setCurrentProposal] = useState<DAGProposalPayload | null>(null);
   const [runStatus,       setRunStatus]        = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [activeRunId,     setActiveRunId]      = useState<string | null>(null);
@@ -89,7 +94,7 @@ export default function App() {
   useEffect(() => {
     if (!activeRunId) return;
 
-    const sse = new EventSource('http://localhost:3743/api/scout/events');
+    const sse = openEventSource('http://localhost:3743/api/scout/events');
 
     sse.addEventListener('scout-update', (event) => {
       try {
@@ -131,7 +136,7 @@ export default function App() {
   const handleProposal = useCallback((proposal: DAGProposalPayload) => {
     // §1.2 — Defense-in-depth: filter reserved system-service labels that the
     // validator should have already rejected. Belt-and-suspenders.
-    const filteredNodes = proposal.nodes.filter(n => !isReservedDAGPrompt(n.prompt));
+    const filteredNodes = proposal.nodes.filter(n => !isReservedDAGPrompt(n.prompt ?? ''));
     const cleanedProposal: DAGProposalPayload = { ...proposal, nodes: filteredNodes };
 
     setCurrentProposal(cleanedProposal);
@@ -163,9 +168,9 @@ export default function App() {
         id:   `dag-${pNode.id}`,
         type: 'custom',
         data: {
-          label:       pNode.prompt.length > 32 ? pNode.prompt.slice(0, 32) + '…' : pNode.prompt,
+          label:       (pNode.prompt ?? pNode.id).length > 32 ? (pNode.prompt ?? pNode.id).slice(0, 32) + '…' : (pNode.prompt ?? pNode.id),
           icon:        dagIcons[i % dagIcons.length],
-          description: pNode.prompt,
+          description: pNode.prompt ?? pNode.id,
           status:      'pending',
         },
         position: { x: xStart + layerIdx * xSpacing, y: yStart + depth * ySpacing },
@@ -204,16 +209,25 @@ export default function App() {
     let snapshotNodes: Node[] | null = null;
     let snapshotEdges: Edge[] | null = null;
     try {
-      const res  = await fetch(`http://localhost:3743/api/basevault/run/${runId}`, { signal: controller.signal });
+      const res  = await authFetch(`http://localhost:3743/api/basevault/run/${runId}`, { signal: controller.signal });
       const data = await res.json();
       if (!data.run) return;
       if (seq !== rehydrateSeqRef.current) return; // superseded
 
-      const layout = JSON.parse(data.run.dag_layout) as { nodes: { id: string; dependencies: string[]; prompt: string }[] };
+      const parsedLayout = WorkflowDAGLayoutSchema.parse(data.run.dag_layout);
+      const demoIds = new Set(initialNodes.map(n => n.id));
+      if (!('nodes' in parsedLayout)) {
+        setNodes(prev => prev.filter(n => demoIds.has(n.id) || !n.id.startsWith('dag-')));
+        setEdges(prev => prev.filter(e => demoIds.has(e.source) || demoIds.has(e.target) || (!e.source.startsWith('dag-') && !e.target.startsWith('dag-'))));
+        setCurrentProposal({ id: runId, status: data.run.status, nodes: [] });
+        setActiveRunId(runId);
+        setRunStatus('error');
+        return;
+      }
+      const layout = parsedLayout;
       const proposalPayload: DAGProposalPayload = { id: runId, status: data.run.status, nodes: layout.nodes };
 
       // Strip demo nodes and re-render only the archived DAG
-      const demoIds = new Set(initialNodes.map(n => n.id));
       snapshotNodes = nodes;
       snapshotEdges = edges;
       setNodes(prev => prev.filter(n => demoIds.has(n.id) || !n.id.startsWith('dag-')));
@@ -257,9 +271,9 @@ export default function App() {
           id:   `dag-${pNode.id}`,
           type: 'custom',
           data: {
-            label:       pNode.prompt.length > 32 ? pNode.prompt.slice(0, 32) + '…' : pNode.prompt,
+            label:       (pNode.prompt ?? pNode.id).length > 32 ? (pNode.prompt ?? pNode.id).slice(0, 32) + '…' : (pNode.prompt ?? pNode.id),
             icon:        dagIcons[i % dagIcons.length],
-            description: pNode.prompt,
+            description: pNode.prompt ?? pNode.id,
             status,
             __runId:     runId,
             __task:      task ?? null,
@@ -305,7 +319,7 @@ export default function App() {
     const controller = new AbortController();
     retryAbortRef.current = controller;
     try {
-      const res = await fetch(`http://localhost:3743/api/coreexec/retry/${runId}`, {
+      const res = await authFetch(`http://localhost:3743/api/coreexec/retry/${runId}`, {
         method: 'POST',
         signal: controller.signal,
       });
@@ -327,7 +341,7 @@ export default function App() {
     if (!currentProposal) return;
     setRunStatus('running');
     try {
-      const res  = await fetch('http://localhost:3743/api/coreexec/approve', {
+      const res  = await authFetch('http://localhost:3743/api/coreexec/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ proposal: currentProposal }),
@@ -350,7 +364,7 @@ export default function App() {
   // ── Session reset (Unit 19) ────────────────────────────────────────────────
 
   const handleReset = async () => {
-    await fetch('http://localhost:3743/api/scopelogic/reset', { method: 'POST' });
+    await authFetch('http://localhost:3743/api/scopelogic/reset', { method: 'POST' });
     setCurrentProposal(null);
     setRunStatus('idle');
     setActiveRunId(null);
@@ -361,13 +375,15 @@ export default function App() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const rootClasses = isConstrained ? 'hardware-constrained disable-animations' : '';
+
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className={rootClasses} style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
 
       {/* Top Navigation Bar */}
-      <div className="glass-panel" style={{
-        margin: '16px', padding: '16px 24px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10
+      <div className={isConstrained ? 'solid-panel' : 'glass-panel'} style={{
+        margin: '8px md:16px', padding: '16px 24px',
+        display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', zIndex: 10, gap: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <img src={portGridLogo} alt="PortGrid Logo" style={{ height: '40px', width: 'auto', borderRadius: '8px' }} />
@@ -377,21 +393,21 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Statusline />
-          {runStatus === 'done' && (
-            <button className="btn-secondary" onClick={handleReset}>
-              🔄 New Session
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <Statusline />
+            {runStatus === 'done' && (
+              <button className="btn-secondary whitespace-nowrap" onClick={handleReset}>
+                🔄 New Session
+              </button>
+            )}
+            <button className="btn-icon shrink-0" onClick={() => setIsSettingsOpen(true)} aria-label="Settings">
+              <Settings size={18} />
             </button>
-          )}
-          <button className="btn-icon" onClick={() => setIsSettingsOpen(true)} aria-label="Settings">
-            <Settings size={18} />
-          </button>
-          <button className="btn-icon" onClick={toggleTheme} aria-label="Toggle Theme">
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
-          
-          <div style={{ marginLeft: '16px', position: 'relative', zIndex: 100 }}>
+            <button className="btn-icon shrink-0" onClick={toggleTheme} aria-label="Toggle Theme">
+              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            </button>
+            
+            <div style={{ marginLeft: '16px', position: 'relative', zIndex: 100 }}>
             {currentProposal ? (
               <ApprovalCockpit 
                 proposal={currentProposal}
@@ -409,12 +425,12 @@ export default function App() {
       <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
 
         {/* Left Sidebar: Chat */}
-        <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="hidden md:flex" style={{ position: 'absolute', top: 16, left: 16, zIndex: 10, flexDirection: 'column', gap: '14px' }}>
           <ScopeLogicChat key={chatKey} onProposal={handleProposal} />
         </div>
 
         {/* Right Sidebar: Run History */}
-        <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
+        <div className="hidden md:block" style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
           <RunHistory onSelectRun={handleSelectRun} activeRunId={activeRunId} />
         </div>
 
@@ -464,7 +480,7 @@ export default function App() {
             if (!r) return;
             const ctrl = new AbortController();
             try {
-              const res  = await fetch(`http://localhost:3743/api/basevault/run/${r}`, { signal: ctrl.signal });
+              const res  = await authFetch(`http://localhost:3743/api/basevault/run/${r}`, { signal: ctrl.signal });
               const data = await res.json();
               const task = (data.tasks || []).find((t: any) => t.id === inspector.nodeId);
               setInspector(prev => prev ? { ...prev, status: task?.status || prev.status, outputData: task?.output_data ?? prev.outputData } : prev);

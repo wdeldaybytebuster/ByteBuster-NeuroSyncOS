@@ -1,9 +1,12 @@
 import React from 'react';
 import { X, CheckCircle, AlertTriangle, Clock, Layers } from 'lucide-react';
 import { useDeveloperMode } from './DeveloperModeContext';
+import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
 
 export function IntentPreview({ logs, onClose }: { logs: any[], onClose: () => void }) {
   const { isDeveloperMode } = useDeveloperMode();
+  const hardwareTier = useHardwareTier();
+  const isConstrained = hardwareTier === 'constrained';
   // Aggregate logs into a unique list of tasks to show the DAG history (Test-Fix-Retest steps).
   const tasks = new Map();
   logs.forEach(l => {
@@ -16,7 +19,7 @@ export function IntentPreview({ logs, onClose }: { logs: any[], onClose: () => v
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/80 backdrop-blur-md animate-fade-in">
-      <div className="glass-panel w-full max-w-3xl max-h-[85vh] flex flex-col p-6 rounded-xl border border-[var(--color-glass-border)] shadow-2xl relative overflow-hidden" style={{
+      <div className={`${isConstrained ? 'solid-panel' : 'glass-panel'} w-full max-w-3xl max-h-[85vh] flex flex-col p-6 rounded-xl border border-[var(--color-glass-border)] shadow-2xl relative overflow-hidden`} style={{
         background: 'var(--color-gunmetal)',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
       }}>

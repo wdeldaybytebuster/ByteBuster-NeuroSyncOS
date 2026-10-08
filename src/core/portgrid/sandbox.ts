@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { PathValidator } from '../coreexec/path-validator';
+import { getEnvRule } from '../scoutdaemon/hardware-profiler';
 
 /**
  * Export the allowlist so dispatch.ts (the §2.1 prompt classifier) can mirror
@@ -87,16 +88,61 @@ export class CommandSandbox {
       }
     }
 
-    // 2.5 Strict Path Containment Validation
-    for (const arg of parts.slice(1)) {
-      PathValidator.validateContainment(this.baseDir, arg);
+    // Read settings from DB
+    let envStripping = true;
+    let directoryLock = true;
+    let fileArgValidation = true;
+
+    try {
+      const { db } = require('../basevault/db');
+      
+      const envRow = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('env_stripping');
+      if (envRow) envStripping = (envRow.value === 'true' || envRow.value === '1');
+
+      const dirRow = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('directory_lock');
+      if (dirRow) directoryLock = (dirRow.value === 'true' || dirRow.value === '1');
+
+      const fileRow = db.prepare('SELECT value FROM system_settings WHERE key = ?').get('file_arg_validation');
+      if (fileRow) fileArgValidation = (fileRow.value === 'true' || fileRow.value === '1');
+    } catch {
+      // Fallback to true if DB is unavailable
     }
+
+    // 2.5 Strict Path Containment Validation
+    if (fileArgValidation) {
+      for (const arg of parts.slice(1)) {
+        PathValidator.validateContainment(this.baseDir, arg);
+      }
+    }
+
+    const execCwd = directoryLock ? this.baseDir : process.cwd();
+
+    // ── Axiom 6: Inject hardware-aware environment limits ─────────────────────
+    // Reads UV_THREADPOOL_SIZE and Node.js heap limit from environment_rules.
+    // Falls back to constrained-mode defaults if genesis profiling has not run yet
+    // (e.g., on a clean install before first-run setup completes).
+    const uvThreadpool = getEnvRule('UV_THREADPOOL_SIZE', '3');
+    const maxOldSpaceMb = getEnvRule('max_old_space_size_mb', '1024');
+
+    const baseExecEnv = envStripping ? {
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      USER: process.env.USER,
+      LANG: process.env.LANG,
+      LC_ALL: process.env.LC_ALL,
+    } : { ...process.env };
+
+    const execEnv = {
+      ...baseExecEnv,
+      UV_THREADPOOL_SIZE: uvThreadpool,
+      NODE_OPTIONS: `--max-old-space-size=${maxOldSpaceMb}`,
+    };
 
     // 3. Execute with strict network isolation using bubblewrap (since unshare --net fails locally)
     return new Promise((resolve, reject) => {
       const child = spawn('bwrap', ['--unshare-net', '--dev-bind', '/', '/', rootCommand, ...parts.slice(1)], {
-        cwd: this.baseDir,
-        env: { ...process.env },
+        cwd: execCwd,
+        env: execEnv,
         shell: false
       }) as any;
 

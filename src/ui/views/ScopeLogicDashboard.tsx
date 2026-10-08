@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AppShell } from '../components/AppShell';
 import { useNavigation } from '../layouts/OSLayout';
 import { useDeveloperMode } from '../components/DeveloperModeContext';
+import { ModeLabel } from '../components/ModeLabel';
+import { HelpTip } from '../components/HelpTip';
 import { MessageSquare, Container, AlertTriangle, Binary, FileText, Users, Shield, CheckCircle, XCircle, Send } from 'lucide-react';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 const ACCENT = '#00E5FF';
 
 // Shared glow box (cyan glow — ScopeLogic uses the same stealth-cyan as CoreExec)
@@ -27,7 +29,7 @@ function DashboardView() {
   // server-side, so pass the active project (nullable → the shared Global scope).
   useEffect(() => {
     const projectQuery = activeProjectId ? `?projectId=${encodeURIComponent(activeProjectId)}` : '';
-    fetch(`${API}/api/scopelogic/history${projectQuery}`)
+    authFetch(`${API}/api/scopelogic/history${projectQuery}`)
       .then(r => r.json())
       .then(data => {
         if (data.history && data.history.length > 0) {
@@ -36,7 +38,7 @@ function DashboardView() {
           if (data.isComplete) {
             setIsComplete(true);
             // Check if there's a persisted proposal
-            fetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
+            authFetch(`${API}/api/system/proposals/pending`).then(r => r.json()).then(d => {
               if (d.success && d.proposal) setProposal(d.proposal);
             }).catch(() => {});
           }
@@ -54,7 +56,7 @@ function DashboardView() {
     setMessages(prev => [...prev, { role: 'user', text: msg }]);
     setInput('');
     try {
-      const res = await fetch(`${API}/api/scopelogic/prompt`, {
+      const res = await authFetch(`${API}/api/scopelogic/prompt`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg, projectId: activeProjectId || null })
       });
@@ -69,7 +71,7 @@ function DashboardView() {
           setProposal(prop);
           // Persist to backend so it survives navigation. Scope it to the
           // active project (nullable — "Global"/no active project is valid).
-          await fetch(`${API}/api/system/proposals/stage`, {
+          await authFetch(`${API}/api/system/proposals/stage`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             // Forward the LLM's self-reported confidence when present; the server
             // defaults to 0.5 when it's absent (e.g. the template fallback path).
@@ -86,11 +88,11 @@ function DashboardView() {
 
   // Reset interview
   const handleReset = async () => {
-    await fetch(`${API}/api/scopelogic/reset`, {
+    await authFetch(`${API}/api/scopelogic/reset`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectId: activeProjectId || null })
     }).catch(() => {});
-    await fetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
+    await authFetch(`${API}/api/system/proposals/pending`, { method: 'DELETE' }).catch(() => {});
     setMessages([{ role: 'assistant', text: 'Interview reset. What is the primary objective of the workflow DAG we are building?' }]);
     setRound(1);
     setIsComplete(false);
@@ -103,7 +105,7 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <MessageSquare size={16} style={{ color: ACCENT }} /> Bounded Interview Pipeline
+            <MessageSquare size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Guided Project Interview" dev="Bounded Interview Pipeline" />
           </h2>
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-white/10 bg-white/5" style={{ color: ACCENT }}>Round {round} / 8</span>
@@ -149,9 +151,9 @@ function DashboardView() {
       <section className={GLOW_BOX}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Container size={16} style={{ color: ACCENT }} /> Draft Proposal Status
+            <Container size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Your Draft Plan" dev="Draft Proposal Status" />
           </h2>
-          <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-400">Zero-Trust Staging</span>
+          <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-400"><ModeLabel simple="Draft Only — You Approve" dev="Zero-Trust Staging" /></span>
         </div>
 
         {proposal ? (
@@ -190,7 +192,7 @@ function DashboardView() {
       {/* Widget C: Draft Validation Status */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <AlertTriangle size={16} className="text-amber-400" /> Draft Validation Status
+          <AlertTriangle size={16} className="text-amber-400" /> <ModeLabel simple="Risk Check" dev="Draft Validation Status" />
         </h2>
 
         <div className="space-y-3">
@@ -206,7 +208,7 @@ function DashboardView() {
           {proposal ? (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
               <CheckCircle size={14} className="text-green-400" />
-              <span className="text-[10px] text-green-400 font-bold">Draft passed safety validation. No behavioral assertion violations detected.</span>
+              <span className="text-[10px] text-green-400 font-bold"><ModeLabel simple="Passed the safety check. No problems found." dev="Draft passed safety validation. No behavioral assertion violations detected." /></span>
             </div>
           ) : (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-white/[0.03] border border-white/5">
@@ -234,31 +236,60 @@ function SetupView() {
   // string constant in interview.ts), so this is the one honest fact
   // available in place of the fabricated "v3.2.1" / "PASSING (398 tests)".
   useEffect(() => {
-    fetch(`${API}/api/scopelogic/prompt-info`)
+    authFetch(`${API}/api/scopelogic/prompt-info`)
       .then(r => r.json())
       .then(data => { if (typeof data.lastModifiedMs === 'number') setPromptLastModifiedMs(data.lastModifiedMs); })
       .catch(() => {});
   }, []);
 
-  // Safety assertions (locked vs toggleable)
+  // Safety assertions (locked vs toggleable). The locked SA-* rows are
+  // mandatory Category A boundaries hardcoded permanently-on in
+  // ValidatorLogic.validate() — they are never persisted as settings, the
+  // checkbox is disabled, and this local `enabled: true` is purely cosmetic.
+  // The SI-*/QR-01 rows ARE real settings: each maps to a
+  // `scopelogic_assertion_<code>_enabled` key that ValidatorLogic.validate()
+  // reads live on every call (validator.ts). Default `false` here matches the
+  // validator's own permissive default for a key that's never been saved —
+  // an unvisited Set-up screen must not silently claim a check is "on" when
+  // nothing has actually persisted that yet.
   const [assertions, setAssertions] = useState({
     'SA-01': { label: 'Explanations SQL Block', locked: true, enabled: true },
     'SA-02': { label: 'Executive Code Quarantine', locked: true, enabled: true },
     'SA-04': { label: 'Node Category Sanity (no shell/exec)', locked: true, enabled: true },
     'SA-06': { label: 'No Self-Modification', locked: true, enabled: true },
-    'SI-01': { label: 'Output shape validity (JSON)', locked: false, enabled: true },
-    'SI-03': { label: 'Explanation non-empty', locked: false, enabled: true },
-    'SI-05': { label: 'Confidence above minimum', locked: false, enabled: true },
-    'QR-01': { label: 'Reasoning key present', locked: false, enabled: true },
+    'SI-01': { label: 'Output shape validity (JSON)', locked: false, enabled: false },
+    'SI-03': { label: 'Explanation non-empty', locked: false, enabled: false },
+    'SI-05': { label: 'Confidence above minimum', locked: false, enabled: false },
+    'QR-01': { label: 'Reasoning key present', locked: false, enabled: false },
   });
+
+  // Maps a toggleable assertion's dashboard code to its system_settings key
+  // (must match validator.ts's SI_01_KEY/SI_03_KEY/SI_05_KEY/QR_01_KEY).
+  const ASSERTION_SETTING_KEY: Record<string, string> = {
+    'SI-01': 'scopelogic_assertion_si01_enabled',
+    'SI-03': 'scopelogic_assertion_si03_enabled',
+    'SI-05': 'scopelogic_assertion_si05_enabled',
+    'QR-01': 'scopelogic_assertion_qr01_enabled',
+  };
 
   // Load settings
   useEffect(() => {
-    fetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
+    authFetch(`${API}/api/system/settings`).then(r => r.json()).then(d => {
       if (d.success && d.settings) {
         if (d.settings.grammar_constrained !== undefined) setGrammarEnabled(d.settings.grammar_constrained === 'true' || d.settings.grammar_constrained === true);
         if (d.settings.max_disagreement) setMaxDisagreement(Number(d.settings.max_disagreement));
         if (d.settings.high_stakes_threshold) setHighStakesThreshold(Number(d.settings.high_stakes_threshold));
+        setAssertions(prev => {
+          const next = { ...prev };
+          for (const code of Object.keys(ASSERTION_SETTING_KEY)) {
+            const key = ASSERTION_SETTING_KEY[code]!;
+            const raw = d.settings[key];
+            if (raw !== undefined) {
+              next[code as keyof typeof next] = { ...next[code as keyof typeof next], enabled: raw === 'true' || raw === true };
+            }
+          }
+          return next;
+        });
       }
     }).catch(() => {});
   }, []);
@@ -266,9 +297,13 @@ function SetupView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await fetch(`${API}/api/system/settings`, {
+      const assertionPayload: Record<string, boolean> = {};
+      for (const code of Object.keys(ASSERTION_SETTING_KEY)) {
+        assertionPayload[ASSERTION_SETTING_KEY[code]!] = assertions[code as keyof typeof assertions].enabled;
+      }
+      await authFetch(`${API}/api/system/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grammar_constrained: grammarEnabled, rationale_first: rationaleFirst, thinking_tokens: thinkingTokens, max_disagreement: maxDisagreement, high_stakes_threshold: highStakesThreshold })
+        body: JSON.stringify({ grammar_constrained: grammarEnabled, rationale_first: rationaleFirst, thinking_tokens: thinkingTokens, max_disagreement: maxDisagreement, high_stakes_threshold: highStakesThreshold, ...assertionPayload })
       });
     } catch {}
     setSaving(false);
@@ -279,17 +314,17 @@ function SetupView() {
       {/* Control A: Grammar-Constrained Decoding */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Binary size={16} style={{ color: ACCENT }} /> Grammar-Constrained Decoding
+          <Binary size={16} style={{ color: ACCENT }} /> <ModeLabel simple="AI Answer Format Rules" dev="Grammar-Constrained Decoding" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Enforce strict syntactic output shapes. Rationale-First injection forces the model to reason before syntax clamps down.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Rules that keep the AI's answers in a structure the app can reliably read." dev="Enforce strict syntactic output shapes. Rationale-First injection forces the model to reason before syntax clamps down." /></p>
 
         <div className="space-y-3">
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">GBNF Grammar Enforcement</span><span className="text-[10px] text-gray-500">Force valid JSON output via logit masking</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Force AI to answer in a strict format" dev="GBNF Grammar Enforcement" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="Keeps AI answers in a predictable structure so the app can always read them" dev="Force valid JSON output via logit masking" /></span></div>
             <input type="checkbox" checked={grammarEnabled} onChange={e => setGrammarEnabled(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
-            <div><span className="text-xs font-bold text-white block">Rationale-First Schema Injection</span><span className="text-[10px] text-gray-500">Force "reasoning" as first JSON key before strict syntax</span></div>
+            <div><span className="text-xs font-bold text-white block"><ModeLabel simple="Make the AI explain its thinking first" dev="Rationale-First Schema Injection" /></span><span className="text-[10px] text-gray-500"><ModeLabel simple="The AI writes its reasoning before its answer, which improves quality" dev='Force "reasoning" as first JSON key before strict syntax' /></span></div>
             <input type="checkbox" checked={rationaleFirst} onChange={e => setRationaleFirst(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ACCENT }} />
           </label>
           <label className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/5 cursor-pointer hover:border-white/10 transition-all">
@@ -302,9 +337,9 @@ function SetupView() {
       {/* Control B: System Prompt Governance */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <FileText size={16} style={{ color: ACCENT }} /> System Prompt
+          <FileText size={16} style={{ color: ACCENT }} /> <ModeLabel simple="AI Instructions Version" dev="System Prompt Governance & Versioning" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">The ScopeLogic interview's system prompt. There is no version-numbering or CI test gate on it yet — this shows when the file itself last changed.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Tracks the version of the core instructions the AI follows." dev="There is no version-numbering or CI test gate on the system prompt yet — this shows when the file itself last changed." /></p>
 
         <div className="bg-black/30 border border-white/5 rounded-lg p-4">
           <div className="flex items-center justify-between">
@@ -319,9 +354,9 @@ function SetupView() {
       {/* Control C: Multi-Model Consensus Tuning */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Users size={16} style={{ color: ACCENT }} /> Multi-Model Consensus (Council Mode)
+          <Users size={16} style={{ color: ACCENT }} /> <ModeLabel simple="Multi-AI Double-Check" dev="Multi-Model Consensus (Council Mode)" /> <HelpTip text="For important decisions, the app can ask several AI models the same question and compare their answers. If they disagree too much, it stops and asks you." />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Configure when ScopeLogic dispatches to parallel expert models for verification.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="When a decision matters, ask multiple AI models and compare their answers before trusting the result." dev="Configure when ScopeLogic dispatches to parallel expert models for verification." /></p>
 
         <div className="space-y-4">
           <div>
@@ -347,9 +382,9 @@ function SetupView() {
       {/* Control D: Behavioral Assertion Framework */}
       <section className={GLOW_BOX}>
         <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 mb-4">
-          <Shield size={16} className="text-amber-400" /> Behavioral Assertion Framework
+          <Shield size={16} className="text-amber-400" /> <ModeLabel simple="Safety Rules" dev="Behavioral Assertion Framework" />
         </h2>
-        <p className="text-xs text-gray-400 mb-4">Toggle validation rules. Critical safety assertions (SA-*) are locked mandatory. Quality regressions (SI-*, QR-*) are toggleable.</p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="Rules every AI plan is checked against. The critical ones are always on and can't be turned off; the quality ones are up to you." dev="Toggle validation rules. Critical safety assertions (SA-*) are locked mandatory. Quality regressions (SI-*, QR-*) are toggleable." /></p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {Object.entries(assertions).map(([code, rule]) => (

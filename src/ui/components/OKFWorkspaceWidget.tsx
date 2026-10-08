@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Database, RefreshCw, CheckCircle, AlertTriangle, XCircle, FileText, Folder } from 'lucide-react';
+import { ModeLabel } from './ModeLabel';
+import { API, authFetch } from '../lib/api';
 
-const API = 'http://localhost:3743';
 
 interface IndexedFile {
   id: string;
@@ -45,7 +46,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/api/okf/status?projectId=${encodeURIComponent(projectId)}`);
+      const res = await authFetch(`${API}/api/okf/status?projectId=${encodeURIComponent(projectId)}`);
       const data = await res.json();
       if (data.success) {
         setStatus(data);
@@ -68,7 +69,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setScanning(true);
     try {
-      const res = await fetch(`${API}/api/okf/scan-project`, {
+      const res = await authFetch(`${API}/api/okf/scan-project`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId }),
@@ -89,7 +90,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setConverting(filePath);
     try {
-      const res = await fetch(`${API}/api/okf/convert-document`, {
+      const res = await authFetch(`${API}/api/okf/convert-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId, filePath }),
@@ -113,7 +114,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
     if (!projectId) return;
     setSyncing(true);
     try {
-      const res = await fetch(`${API}/api/okf/sync`, {
+      const res = await authFetch(`${API}/api/okf/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId }),
@@ -136,7 +137,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
       <section className={GLOW_BOX}>
         <div className="flex items-center gap-2 mb-3">
           <Database size={16} style={{ color: accentColor }} />
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider">OKF Workspace</h2>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider"><ModeLabel simple="Notes & Docs" dev="OKF Workspace" /></h2>
         </div>
         <div className="text-xs text-gray-500 text-center py-6 border border-dashed border-white/10 rounded-lg">
           Select a project from the Right Bar to view its OKF workspace health.
@@ -151,7 +152,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
       <section className={GLOW_BOX}>
         <div className="flex items-center gap-2 mb-3">
           <Database size={16} style={{ color: accentColor }} />
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider">OKF Workspace</h2>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider"><ModeLabel simple="Notes & Docs" dev="OKF Workspace" /></h2>
         </div>
         <div className="text-xs text-gray-500 text-center py-6 font-mono">Loading workspace status...</div>
       </section>
@@ -165,7 +166,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Database size={16} style={{ color: accentColor }} />
-            <h2 className="text-sm font-bold text-white uppercase tracking-wider">OKF Workspace</h2>
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider"><ModeLabel simple="Notes & Docs" dev="OKF Workspace" /></h2>
           </div>
           <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-400">No OKF Folder</span>
         </div>
@@ -201,7 +202,7 @@ export function OKFWorkspaceWidget({ projectId, accentColor = '#00FFCC' }: OKFWo
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Database size={16} style={{ color: accentColor }} />
-          <h2 className="text-sm font-bold text-white uppercase tracking-wider">OKF Workspace</h2>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider"><ModeLabel simple="Notes & Docs" dev="OKF Workspace" /></h2>
         </div>
         <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${statusBadge.bg} ${statusBadge.border} ${statusBadge.color}`}>
           {statusBadge.label}

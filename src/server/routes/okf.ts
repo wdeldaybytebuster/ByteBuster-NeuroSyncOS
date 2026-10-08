@@ -312,12 +312,29 @@ okfRouter.post('/convert-document', async (c) => {
 });
 
 // 11. POST /api/okf/sync — Manual trigger for OKF indexing
+import { flushIndexingQueue } from '../../core/scoutdaemon/idle';
+
 okfRouter.post('/sync', async (c) => {
   try {
-    const body = await c.req.json();
-    const parsed = ProjectIdSchema.safeParse(body?.projectId);
+    // Attempt to parse body, but don't fail if empty (for lightweight ping)
+    let body: any = {};
+    try {
+      body = await c.req.json();
+    } catch (e) {
+      // Empty body is fine, we just flush the queue
+    }
+
+    const rawProjectId = body?.projectId;
+    
+    // If no projectId is provided, just flush the active queue and return
+    if (!rawProjectId) {
+      flushIndexingQueue();
+      return c.json({ success: true, message: 'Queue flushed.' });
+    }
+
+    const parsed = ProjectIdSchema.safeParse(rawProjectId);
     if (!parsed.success) {
-      return c.json({ success: false, error: 'Invalid or missing projectId in request body.' }, 400);
+      return c.json({ success: false, error: 'Invalid projectId in request body.' }, 400);
     }
     const projectId = parsed.data;
 
@@ -409,6 +426,23 @@ okfRouter.get('/file-content', (c) => {
 
     const content = fs.readFileSync(node.file_path, 'utf-8');
     return c.json({ success: true, nodeId, title: node.title, type: node.type, tier: node.tier, confidence: node.confidence, content });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// Global Knowledge Base — real file listing for the Cerebro "Global Knowledge
+// Base" widget, replacing its old 3-name hardcoded array. Uses the same
+// resolver + .md filter the OKF indexer itself uses (OKFIndexer.indexDirectory
+// calls OKFDirectoryManager.listMarkdownFiles), so this reflects exactly what
+// would actually be indexed.
+okfRouter.get('/global-files', (c) => {
+  try {
+    const dir = OKFDirectoryManager.resolveGlobalDir();
+    const files = OKFDirectoryManager.listMarkdownFiles(dir)
+      .map(f => path.relative(dir, f))
+      .sort();
+    return c.json({ success: true, files, count: files.length });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }

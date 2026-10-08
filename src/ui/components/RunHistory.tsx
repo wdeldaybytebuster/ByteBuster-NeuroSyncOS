@@ -11,6 +11,9 @@ interface RunHistoryProps {
   activeRunId?: string | null;
 }
 
+import { useHardwareTier } from '../../core/scoutdaemon/hardware-context';
+import { authFetch } from '../lib/api';
+
 const STATUS_COLORS: Record<string, string> = {
   pending:   'var(--text-muted)',
   running:   'var(--accent)',
@@ -38,13 +41,15 @@ function formatTime(epochMs: number): string {
 }
 
 export function RunHistory({ onSelectRun, activeRunId }: RunHistoryProps) {
+  const hardwareTier = useHardwareTier();
+  const isConstrained = hardwareTier === 'constrained';
   const [runs, setRuns] = useState<Run[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchRuns = async () => {
       try {
-        const res = await fetch('http://localhost:3743/api/basevault/runs');
+        const res = await authFetch('http://localhost:3743/api/basevault/runs');
         const data = await res.json();
         if (data.runs) setRuns(data.runs);
         setError(null);
@@ -59,7 +64,7 @@ export function RunHistory({ onSelectRun, activeRunId }: RunHistoryProps) {
   }, []);
 
   return (
-    <div className="glass-panel animate-fade-in" style={{
+    <div className={`${isConstrained ? 'solid-panel' : 'glass-panel'} animate-fade-in`} style={{
       padding: '16px',
       display: 'flex',
       flexDirection: 'column',
