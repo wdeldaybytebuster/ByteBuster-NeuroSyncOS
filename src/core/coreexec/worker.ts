@@ -32,6 +32,23 @@ export interface WorkerInput {
   params?: any;
 }
 
+/**
+ * P3-S6 — acquisition bounds for the okf_indexer files batch (interim
+ * single-writer-topology discipline: workers still hold write-capable
+ * handles, so each worker task must bound its own write burst — see
+ * docs/security/WORKER-WRITE-TOPOLOGY.md).
+ * - Count cap: one pathological flush (e.g. a branch checkout touching 10k
+ *   files) must not issue 10k vector INSERTs + 10k os_todos INSERTs from a
+ *   single worker thread. Over-cap files are NOT processed by this task;
+ *   the count is surfaced (the next idle flush / watcher event re-queues
+ *   fresh change sets; flush snapshots are best-effort background
+ *   indexing — same class as the AST-indexing skip on unreadable files).
+ * - Size cap: one giant file must not blow the in-worker embedding read.
+ * Skips of either kind are counted and surfaced — never silent.
+ */
+export const MAX_OKF_FILES_PER_TASK = 100;
+export const MAX_OKF_FILE_BYTES = 1_000_000;
+
 export async function executePlugin(
   input: WorkerInput, 
   projectId: string | null,
@@ -87,8 +104,23 @@ export async function executePlugin(
     let processedCount = 0;
 
     if (files && Array.isArray(files)) {
-      for (const file of files) {
+      // P3-S6 — bounded acquisition: at most MAX_OKF_FILES_PER_TASK files and
+      // MAX_OKF_FILE_BYTES bytes per file per worker task (see constants above).
+      const capped = files.slice(0, MAX_OKF_FILES_PER_TASK);
+      const cappedOutCount = files.length - capped.length;
+      let skippedCount = 0;
+      for (const file of capped) {
         try {
+          let size = -1;
+          try {
+            size = fs.statSync(file).size;
+          } catch {
+            /* unreadable — the read below fails and is counted as skipped */
+          }
+          if (size > MAX_OKF_FILE_BYTES) {
+            skippedCount++;
+            continue;
+          }
           const fileContent = fs.readFileSync(file, 'utf8');
           
           let inferredSourceTool = defaultSourceTool;
@@ -115,13 +147,25 @@ export async function executePlugin(
           `).run(todoId, projectId, JSON.stringify({ action: 'REVIEW_QUARANTINE', file, memoryId }), Date.now());
           processedCount++;
         } catch (e) {
-          // ignore read errors
+          // ignore read errors — but count them (P3-S6: never silent)
+          skippedCount++;
         }
       }
+      const unprocessedCount = skippedCount + cappedOutCount;
+      if (unprocessedCount > 0) {
+        console.warn(
+          `[CoreExec] okf_indexer files batch bounded: indexed ${processedCount}, ` +
+          `skipped ${skippedCount} (unreadable/oversize), ` +
+          `deferred ${cappedOutCount} (over ${MAX_OKF_FILES_PER_TASK}/task cap).`
+        );
+      }
+      const summary =
+        `Indexed ${processedCount} files.` +
+        (unprocessedCount > 0 ? ` Skipped ${skippedCount}, deferred ${cappedOutCount}.` : '');
       return {
          status: 'success', action: 'generic',
-         taskId, stdout: `Indexed ${processedCount} files.`, stderr: undefined,
-         markdown: undefined, pageMetadata: undefined, message: `Indexed ${processedCount} files.`,
+         taskId, stdout: summary, stderr: undefined,
+         markdown: undefined, pageMetadata: undefined, message: summary,
          prompt: undefined, data: undefined, error: undefined, reason: 'plugin execution'
       };
     }
