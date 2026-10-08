@@ -47,6 +47,13 @@ const REASONING_RETRY_CAP = 8000;
  * private-address block, or the auth-stripping redirect rules — those are
  * the governed-egress door for agent fetch/scrape, not for provider calls).
  * Chat (completions) gets 30 s; embeddings get 15 s.
+ *
+ * P3-S4 (D12) — this is the PERMANENT provider contract, not a deferral: KEEP
+ * raw-with-timeout. Per-attempt `errorText` diagnostics (chat + embeddings
+ * error paths below), per-attempt budgets with AgentStop-vs-TimeoutError
+ * semantics, and public-gateway compat outweigh uniformity — no `egressFetch`
+ * provider lane is planned. The check-7 allowlist entry for `adapters/` is
+ * retained as permanent for the same reason.
  */
 export const OPENAI_COMPAT_TIMEOUT_MS =
   Number(process.env.OPENAI_COMPAT_TIMEOUT_MS) || 30_000;

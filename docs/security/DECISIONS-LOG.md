@@ -121,3 +121,19 @@ Convention: each entry = context, options, decision, rationale, evidence, revers
 - Rationale: keeps the orphan-UI deletion atomic in the reset track.
 - Evidence: `docs/security/ARCHITECT-canonical-reset.md:103,212` (D-14 scope).
 - Reversibility: per-file revert.
+
+## D12 — §5-14: KEEP raw-with-timeout as the permanent provider contract
+
+- Context: roll-in B3 asked keep-raw vs build an `egressFetch` provider lane
+  (`docs/security/FOLLOWUPS-P2-ROLLIN.md:43-47`).
+- Decision: KEEP raw-with-timeout permanent (P3-S4). NO lane build (not in
+  Phase 5 either — uniformity explicitly rejected).
+- Rationale: per-attempt `errorText` diagnostics (`openai-compatible.ts`
+  chat + embeddings error paths), per-attempt 30 s/15 s budgets with
+  AgentStop-vs-TimeoutError semantics, and public-gateway compat (kill-switch
+  / private-address block / auth-stripping redirect rules are the agent-egress
+  door, not the provider door) outweigh uniformity.
+- Evidence: `src/core/routeswitch/adapters/openai-compatible.ts:44-50`
+  (permanent-contract comment); `scripts/audit-ground-rules.ts:455-457`
+  (allowlist entry retained as permanent, not deferred-next).
+- Reversibility: decision reversal = lane design (gated future phase).

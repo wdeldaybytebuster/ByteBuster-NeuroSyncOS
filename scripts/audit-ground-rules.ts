@@ -452,8 +452,8 @@ export function checkNoUntrustedSqlInterpolation(repoRoot: string = REPO_ROOT): 
 export const RAW_EGRESS_ALLOWLIST: readonly string[] = [
   // The governed door itself — the one place raw fetch is allowed (§2.3 C8-a).
   'src/core/routeswitch/egress.ts',
-  // Provider adapters — the NEXT thing to route through egressFetch,
-  // recorded as deferred §5-14 (plan §4.4 check 7). Prefix entry.
+  // Provider adapters — raw-with-timeout is the PERMANENT provider contract
+  // (P3-S4 D12: keep, never a lane build), NOT a deferred migration. Prefix entry.
   'src/core/routeswitch/adapters/',
   // Plan §4.4 lists this file; C9 converted all three eval-server sites to
   // egressFetch — entry retained per the plan (matches nothing today, and
