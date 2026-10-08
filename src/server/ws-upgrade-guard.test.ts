@@ -11,7 +11,7 @@
  * perimeter.test.ts). Instead it works on two tracks:
  *
  *   TRACK 1 (behavioral): scratch Hono apps whose wiring MIRRORS the two
- *   `upgradeWebSocket` routes in server-main.ts (:178 terminal, :236 sync).
+ *   `upgradeWebSocket` routes in server-main.ts (:231 terminal, :297 sync).
  *   The guard middleware is looked up from ./perimeter — the port-free
  *   extraction module §2.1-C5 established for exactly this kind of perimeter
  *   logic. While the export is missing, the scratch apps are wired exactly as
@@ -43,7 +43,7 @@
  *      and auth-middleware.test.ts is unaffected.
  *
  * P1-3 (peer label entropy):
- *   Replace `Math.random().toString(36).substring(7)` at server-main.ts:237
+ *   Replace `Math.random().toString(36).substring(7)` at server-main.ts:299
  *   with `crypto.randomUUID()` (Node ≥ 19 global, no import needed — see
  *   src/core/memory/cerebro/vector.ts:82 for established in-repo usage).
  *
@@ -100,34 +100,36 @@ const WS_UPGRADE_HEADERS = {
 const LOOPBACK_ENV = { incoming: { socket: { remoteAddress: '127.0.0.1' } } };
 
 /**
- * Faithful mirror of server-main.ts:234-254 MINUS the port binding and the
- * NodeTransport singletons. The peerId line is kept verbatim from :237 so
+ * Faithful mirror of server-main.ts:295-298 MINUS the port binding and the
+ * NodeTransport singletons. The peerId line is kept verbatim from :299 so
  * the mirror cannot drift ahead of the source it shadows; label entropy
  * itself is pinned by the P1-3 source-contract tests below.
  */
 function buildSyncMirror(): Hono {
   const app = new Hono();
   const { upgradeWebSocket } = createNodeWebSocket({ app });
-  const gate: MiddlewareHandler[] = wsUpgradeGuard ? [wsUpgradeGuard] : [];
-  app.get(
-    '/api/sync',
-    ...gate,
-    upgradeWebSocket(() => {
-      // verbatim from server-main.ts:237 — asserted by the source contracts
-      const peerId = `incoming-${Math.random().toString(36).substring(7)}`;
-      return {
-        onOpen() { void peerId; },
-        onMessage() { /* transport.handleIncomingMessage lives in server-main */ },
-        onClose() {},
-        onError() {},
-      };
-    })
-  );
+  // Wired exactly as server-main.ts:295-298: the guard sits ahead of the
+  // upgrade handler when exported, otherwise the bare handler (today's
+  // unguarded shape — the RED proof). Direct calls (no spread) because
+  // Hono 4.12.27's fixed-tuple HandlerInterface overloads do not resolve
+  // a spread gate; see T3 deviation note.
+  const syncHandler = upgradeWebSocket(() => {
+    // verbatim from server-main.ts:299 — asserted by the source contracts
+    const peerId = `incoming-${Math.random().toString(36).substring(7)}`;
+    return {
+      onOpen() { void peerId; },
+      onMessage() { /* transport.handleIncomingMessage lives in server-main */ },
+      onClose() {},
+      onError() {},
+    };
+  });
+  if (wsUpgradeGuard) app.get('/api/sync', wsUpgradeGuard, syncHandler);
+  else app.get('/api/sync', syncHandler);
   return app;
 }
 
 /**
- * Faithful mirror of server-main.ts:176-232 MINUS the port binding and the
+ * Faithful mirror of server-main.ts:229-232 MINUS the port binding and the
  * bwrap terminal session. createTerminalSession is deliberately NOT imported:
  * the gate decision precedes any session spawn, and pulling the pty/bwrap
  * machinery into a unit test would violate hermeticity (and Axiom 6).
@@ -135,20 +137,19 @@ function buildSyncMirror(): Hono {
 function buildTerminalMirror(): Hono {
   const app = new Hono();
   const { upgradeWebSocket } = createNodeWebSocket({ app });
-  const gate: MiddlewareHandler[] = wsUpgradeGuard ? [wsUpgradeGuard] : [];
-  app.get(
-    '/api/portgrid/terminal/:projectId',
-    ...gate,
-    upgradeWebSocket((c) => {
-      const projectId = c.req.param('projectId'); // server-main.ts:179
-      return {
-        onOpen() { void projectId; },
-        onMessage() {},
-        onClose() {},
-        onError() {},
-      };
-    })
-  );
+  // Same wiring discipline as buildSyncMirror: direct calls mirroring
+  // server-main.ts:229-232 (see T3 deviation note — no spread gate).
+  const terminalHandler = upgradeWebSocket((c) => {
+    const projectId = c.req.param('projectId'); // server-main.ts:233
+    return {
+      onOpen() { void projectId; },
+      onMessage() {},
+      onClose() {},
+      onError() {},
+    };
+  });
+  if (wsUpgradeGuard) app.get('/api/portgrid/terminal/:projectId', wsUpgradeGuard, terminalHandler);
+  else app.get('/api/portgrid/terminal/:projectId', terminalHandler);
   return app;
 }
 
@@ -209,7 +210,7 @@ describe('P1-1 source contract — server-main.ts wires the fail-closed gate', (
     ).toBeTypeOf('function');
   });
 
-  it('RED: server-main.ts references wsUpgradeGuard (wired at :178 terminal and :236 sync)', () => {
+  it('RED: server-main.ts references wsUpgradeGuard (wired at :231 terminal and :297 sync)', () => {
     expect(
       src,
       'server-main.ts does not wire wsUpgradeGuard — both upgradeWebSocket routes are still ungated.',
@@ -217,7 +218,7 @@ describe('P1-1 source contract — server-main.ts wires the fail-closed gate', (
   });
 });
 
-describe('P1-3 source contract — crypto-strong incoming-peer labels (server-main.ts:237)', () => {
+describe('P1-3 source contract — crypto-strong incoming-peer labels (server-main.ts:299)', () => {
   const src = fs.readFileSync(path.join(__dirname, 'server-main.ts'), 'utf8');
 
   it('RED: /api/sync peerId is minted with crypto.randomUUID() (RFC 4122 UUID, 122 bits of entropy)', () => {
@@ -230,7 +231,7 @@ describe('P1-3 source contract — crypto-strong incoming-peer labels (server-ma
   it('RED: the Math.random().toString(36) label mint is gone (7 base-36 chars ≈ 36 bits, brute-forceable over a long-lived socket)', () => {
     expect(
       src,
-      'server-main.ts:237 still mints peerId from Math.random().toString(36).substring(7).',
+      'server-main.ts:299 still mints peerId from Math.random().toString(36).substring(7).',
     ).not.toMatch(/Math\.random\(\)\.toString\(36\)/);
   });
 
