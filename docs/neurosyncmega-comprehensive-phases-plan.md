@@ -1,6 +1,6 @@
 # NEUROSYNCMEGA — Comprehensive Phases Plan
 
-> **Status:** PHASE A COMPLETE + PHASE B COMPLETE (committed 7b20afb 2026-10-09) — PHASE C PLANNED, NOT AUTHORIZED FOR EXECUTION
+> **Status:** PHASE A COMPLETE + PHASE B COMPLETE (committed 7b20afb 2026-10-09) — PHASE C PLANNED, NOT AUTHORIZED FOR EXECUTION — PHASE E CLOSED 2026-10-09 (operator YES)
 > **Saved:** 2026-10-08
 > **Target environment:** Intel Core i3-N305 (8 E-cores), 6.3 GiB RAM, eMMC 5.1 (Zero-Swap), Crostini Container.
 > **Execution framework:** Four-stage adversarial subagent loop — Explorer → Architect → Engineer → Auditor. The model that writes code never verifies it.
@@ -8,6 +8,7 @@
 > **Amended 2026-10-08 (Architect Run 1):** Axiom-gap findings placed per G-2 — see "G-2 Triage Log — Architect Run 1". Phase A scope unchanged.
 > **Amended 2026-10-08 (Architect Run 2):** operator rulings recorded — SA-01 runtime-only; F-CB-IMPL remains in Phase B; GGUF retained for high-performance tier and gitignored. This approval is for plan review only; no phase execution is authorized.
 > **Amended 2026-10-09 (Closer — operator authorized):** Phase A + Phase B marked COMPLETE. Phase B committed as 7b20afb (9 files +927/-11, 2026-10-09). Acceptance: tsc --noEmit 0; routeswitch suite 201/201 (20 files); audit:ground-rules 8/8; schema-drift-breaker 17/17; embeddings-url 13/13. Notes: D-1 Node20 vs Node24 ABI — better-sqlite3 rebuilt for Node 24 (NODE_MODULE_VERSION 115→137); use Node20 for canonical verification. D-2 cosmetic: openai-compatible.ts:633 blank line (non-gating). Phase C planned only — NO execution authorized.
+> **Amended 2026-10-09 (Phase E close-out — operator YES):** PHASE E marked CLOSED. The operator confirmed the oss-readiness branch deletion was performed under approved sign-off, so both prerequisites of the Phase E task were already satisfied (branch deleted locally and remotely, observed complete; no commit/log entry recording authorization/execution). Recorded as CLOSED in this plan document per the "If yes" branch of the Phase E Task. Deliberately NOT taken: re-delete, any force-push, and any code/schema/runtime change — this is a docs-only close-out. Records a completed close-out only; it authorizes no further phase and moves nothing forward (G-5).
 
 ---
 
@@ -375,6 +376,8 @@ First Architect triage under G-2: the three Axiom-gap findings (found while abso
 
 ## PHASE E: oss-readiness DELETION RECORD CLOSE-OUT
 
+**Status:** CLOSED (2026-10-09 — operator YES). The operator confirmed the deletion was performed under approved sign-off, so the "If yes" branch of the Task below applies and the record is closed here. Re-delete was NOT performed and no force-push was issued; this close-out is docs-only and touches no code, schema, or runtime path.
+
 ### Prerequisites
 
 - Branch already deleted locally and remotely (observed complete)
@@ -469,3 +472,4 @@ Separate authorization gate: explicit operator go-order obtained before Phase F 
 14. **D5 incident — plan-doc revert by unknown actor (2026-10-09 ~02:39):** working tree `docs/neurosyncmega-comprehensive-phases-plan.md` reverted in 4 hunks (Status→REVIEW, amended-2026-10-09 line deleted, G-6 deleted, Phase B→Open). Restored from `97fe98b` (`git show 97fe98b:docs/… > file`, sha256 `c7abe3…`), COMPLETE markings + G-6 verified present, this execution log appended.
 15. **C.4c genesis first-run (2026-10-09, this session):** single explicit invocation `force=false` via the sanctioned first-run bootstrapper (`npx tsx src/server/index.ts --profile` → ScoutDaemon `runGenesisProfiler(false)`); `hardware_profiles` 0→1 row, 10 `environment_rules` written in one transaction, `getEnvRule` reads verified live. No swapoff / host-affinity changes (Open Item 7 boundary respected; `swap_enabled=true` is a stored rule value only, not an action).
 16. **C.4c profile tier: `high-performance`.** Probe: 8 cores (8 physical, no HT), 6472 MB RAM, `hdd` storage (rotational flag; eMMC not enumerated in this container), `crostini` virt, `gpu` with 4096 MB VRAM → high-performance arm of `classifyTier` (GPU-present rule). Rules: `UV_THREADPOOL_SIZE=8`, `max_workers=8`, `local_llm_enabled=true`, `taskset_cores=0-7`, `swap_enabled=true`, `max_old_space_size_mb=4096`, `parallel_dag_enabled=true`. Genesis wrote NO provider row (`llm_providers` still 0) and left `operator_credential` null. NOTE: tier differs from the plan's i3-N305/constrained expectation — that is the deterministic output of the probe on this host, recorded as-is; any re-tiering is operator-directed via PortGrid Re-Profile (`force=true`), never automatic.
+17. **Resolved — Phase E CLOSED (2026-10-09, operator YES):** oss-readiness deletion-record close-out. Operator confirmed the branch deletion was performed under approved sign-off; both prerequisites stood (branch already deleted locally and remotely, observed complete; no commit/log entry recording authorization/execution). Recorded as CLOSED per the "If yes" branch. No re-delete, no force-push, no code/schema/runtime change — docs-only. Phase D (scrub + coordinated force-push) remains the only history-level action and stays unauthorized per G-4/G-5.
