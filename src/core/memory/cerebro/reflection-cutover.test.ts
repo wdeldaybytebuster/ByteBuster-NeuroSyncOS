@@ -151,7 +151,7 @@ describe('F-6 — source contracts pinning the single-writer topology (§5 preco
 
 describe('F-6 — WAL contention logging is live', () => {
   it('stats counters exist and a slow-apply/SQLITE_BUSY event would be counted', async () => {
-    const { stats } = await import('../../basevault/write-queue');
+    const { stats } = await import('../../basevault/write-queue.js');
     expect(stats).toMatchObject({
       enqueued: expect.any(Number),
       applied: expect.any(Number),
