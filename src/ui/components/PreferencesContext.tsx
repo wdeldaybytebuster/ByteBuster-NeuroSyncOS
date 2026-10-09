@@ -51,7 +51,10 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
         }
       })
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount-only fallback: resolves a previously-persisted server-side value
+    // once, only when localStorage has no entry. Re-running on dep change
+    // would re-fetch settings on every render pass of an empty-preference
+    // browser (the two localStorage reads below are globals, not deps).
   }, []);
 
   // The actual real-world effect: force every animation/transition duration

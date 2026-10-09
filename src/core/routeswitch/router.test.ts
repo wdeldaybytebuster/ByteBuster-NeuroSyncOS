@@ -18,7 +18,7 @@ describe('Fallback Router Integration Testing', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    // @ts-ignore
+    // @ts-expect-error — `states` is private; cleared to reset exhaustion timers per test
     ProviderHealthState.states.clear();
     fetchMock = vi.spyOn(global, 'fetch');
     // §2.3 C9 hermetic DNS: egress's address gate resolves openrouter.ai to a
