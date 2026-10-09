@@ -28,6 +28,10 @@ export function GovernorUI() {
     return () => {
       eventSource.close();
     };
+    // Mount-only SSE subscription: opened ONCE. `targetWorkers` is read
+    // through the closure so the handler always sees the latest value
+    // without re-subscribing (re-subscribing would reconnect the metrics
+    // stream on every telemetry frame).
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {

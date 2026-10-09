@@ -42,7 +42,10 @@ export function DeveloperModeProvider({ children }: { children: React.ReactNode 
       }
     };
     syncDefault();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Mount-only by construction: this effect is the first-launch default
+    // sync. It must run exactly once (it WRITES the localStorage key it
+    // guards on), so it deliberately declares no dependencies — re-running
+    // on any dep change would re-POST the default to the server.
   }, []);
 
   useEffect(() => {
