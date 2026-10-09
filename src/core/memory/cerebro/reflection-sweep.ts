@@ -8,12 +8,19 @@ import crypto from 'crypto';
 // ops post to the main-thread sink in FIFO order; test mode runs the
 // sweep inline on the main thread, where the sink applies locally.
 import { openReadonlyHandle, postWriteOpOrThrow } from '../../basevault/write-queue';
+import type { MessagePort } from 'worker_threads';
 
 export interface CerebroWorkerInput {
   historyToProcess?: string[];
   extractedFacts?: string[];
   classifications?: { fact: string, existingContent: string, classification: 'duplicate' | 'update' | 'unrelated' }[];
   source_tool?: string;
+  /**
+   * F-6 — the worker→main write channel's worker end, created per task by
+   * reflection.ts and transferred with this task. All sweep writes post
+   * through it (postWriteOp); without it the sink applies locally.
+   */
+  writePort?: MessagePort;
 }
 
 export async function runReflectionSweep(input: CerebroWorkerInput) {
