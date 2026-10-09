@@ -84,7 +84,7 @@ PRAGMA integrity_check              # expect: ok
 
 ## Phase F — frontend optimizations + worker single-writer cutover (F-1–F-6)
 
-Landed 2026-10-09 (27 commits, no push). Operator-facing notes only — the
+Landed 2026-10-09 (28 commits, no push). Operator-facing notes only — the
 full engineering record is in `docs/implementation-plan-and-progress-tracker.md`
 (2026-10-09 Phase F entry) and `docs/security/WORKER-WRITE-TOPOLOGY.md` §5.
 
