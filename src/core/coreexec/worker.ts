@@ -14,6 +14,10 @@ import { RouteSwitchEngine } from '../routeswitch/engine';
 // child_process in the orchestrator. Static import so test doubles via
 // vi.mock() reliably intercept it.
 import { runGitNexusQuery } from '../memory/gitnexus-client';
+// §5 / Phase F-6 — the single-writer queue: worker-side client (ops route
+// to the main-thread sink) + the read-only handle factory for the SELECTs.
+import { configureWriteClient, releaseWriteClient, openReadonlyHandle, postWriteOpOrThrow } from '../basevault/write-queue';
+import type { MessagePort } from 'worker_threads';
 /**
  * Single-shape worker input. Backward-compat is preserved by `kind: 'legacy'`
  * whose `data` field carries the legacy stub payload. `kind: 'dag' | undefined`
@@ -30,6 +34,13 @@ export interface WorkerInput {
   data?: unknown;
   plugin?: string;
   params?: any;
+  /**
+   * F-6 — the worker→main write channel's worker end, created per task by
+   * engine.ts and transferred with this task. Every DB write this task
+   * attempts is routed through it (postWriteOp); without it the worker
+   * falls back to local apply (pre-cutover behavior, test-only path).
+   */
+  writePort?: MessagePort;
 }
 
 /**
@@ -50,14 +61,18 @@ export const MAX_OKF_FILES_PER_TASK = 100;
 export const MAX_OKF_FILE_BYTES = 1_000_000;
 
 export async function executePlugin(
-  input: WorkerInput, 
+  input: WorkerInput,
   projectId: string | null,
-  workerDb: any,
   CerebroVectorStore: any
 ): Promise<WorkerOutput | null> {
   const taskId = input.taskId ?? 'unknown';
   const pluginName = input.plugin;
   if (!pluginName) return null;
+
+  // §5 / Phase F-6 — read-only handle for this thread's SELECTs: a separate
+  // `readonly: true` connection in production, the per-thread ':memory:'
+  // handle under VITEST. No write-capable handle is ever acquired here.
+  const readDb = openReadonlyHandle();
 
   if (pluginName === 'gitnexus_mapper') {
     // SA-01: Never invoke child_process directly here. The GitNexus CLI is
@@ -67,7 +82,7 @@ export async function executePlugin(
     
     let cwd = process.cwd();
     if (projectId) {
-      const projRes = workerDb.prepare(`SELECT workspace_path, project_root_path FROM projects WHERE id = ?`).get(projectId) as { workspace_path: string | null, project_root_path: string | null } | undefined;
+      const projRes = readDb.prepare(`SELECT workspace_path, project_root_path FROM projects WHERE id = ?`).get(projectId) as { workspace_path: string | null, project_root_path: string | null } | undefined;
       if (projRes) {
         cwd = projRes.workspace_path ?? projRes.project_root_path ?? cwd;
       }
@@ -137,14 +152,19 @@ export async function executePlugin(
           }
 
           const memoryId = CerebroVectorStore.insert(fileContent, 'external_document', undefined, projectId, true, inferredSourceTool);
-          
+
+          // §5 / Phase F-6 — os_todos write routed through the single-writer
+          // queue (was: workerDb.prepare(INSERT INTO os_todos...).run()).
           const todoId = crypto.randomUUID();
-          workerDb.prepare(`
-             INSERT INTO os_todos (
-                id, project_id, source_module, context_payload, 
-                severity, escalation_reason, required_action_type, status, created_at
-             ) VALUES (?, ?, 'CoreExec', ?, 'medium', 'Quarantined OKF Ingestion (File)', 'REVIEW', 'pending', ?)
-          `).run(todoId, projectId, JSON.stringify({ action: 'REVIEW_QUARANTINE', file, memoryId }), Date.now());
+          postWriteOpOrThrow({
+            kind: 'todo_insert',
+            id: todoId,
+            projectId: projectId ?? null,
+            severity: 'medium',
+            escalationReason: 'Quarantined OKF Ingestion (File)',
+            requiredActionType: 'REVIEW',
+            contextPayload: JSON.stringify({ action: 'REVIEW_QUARANTINE', file, memoryId }),
+          });
           processedCount++;
         } catch (e) {
           // ignore read errors — but count them (P3-S6: never silent)
@@ -199,13 +219,17 @@ export async function executePlugin(
     const memoryId = CerebroVectorStore.insert(content, 'external_document', undefined, projectId, true, defaultSourceTool);
 
     // ToDo Escalation: fetching external data creates an os_todos ticket for user review
+    // §5 / Phase F-6 — routed through the single-writer queue (was: workerDb INSERT).
     const todoId = crypto.randomUUID();
-    workerDb.prepare(`
-       INSERT INTO os_todos (
-          id, project_id, source_module, context_payload, 
-          severity, escalation_reason, required_action_type, status, created_at
-       ) VALUES (?, ?, 'CoreExec', ?, 'medium', 'Quarantined OKF Ingestion', 'REVIEW', 'pending', ?)
-    `).run(todoId, projectId, JSON.stringify({ action: 'REVIEW_QUARANTINE', url, memoryId }), Date.now());
+    postWriteOpOrThrow({
+      kind: 'todo_insert',
+      id: todoId,
+      projectId: projectId ?? null,
+      severity: 'medium',
+      escalationReason: 'Quarantined OKF Ingestion',
+      requiredActionType: 'REVIEW',
+      contextPayload: JSON.stringify({ action: 'REVIEW_QUARANTINE', url, memoryId }),
+    });
 
     return {
        status: 'success', action: 'generic',
@@ -226,7 +250,7 @@ export async function executePlugin(
 
     let cwd = process.cwd();
     if (projectId) {
-      const projRes = workerDb.prepare(`SELECT workspace_path, project_root_path FROM projects WHERE id = ?`).get(projectId) as { workspace_path: string | null, project_root_path: string | null } | undefined;
+      const projRes = readDb.prepare(`SELECT workspace_path, project_root_path FROM projects WHERE id = ?`).get(projectId) as { workspace_path: string | null, project_root_path: string | null } | undefined;
       if (projRes) {
         cwd = projRes.workspace_path ?? projRes.project_root_path ?? cwd;
       }
@@ -248,13 +272,17 @@ export async function executePlugin(
     fs.writeFileSync(patchFile, draftPatch, 'utf-8');
 
     // Queue os_todos ticket for user review
+    // §5 / Phase F-6 — routed through the single-writer queue (was: workerDb INSERT).
     const todoId = crypto.randomUUID();
-    workerDb.prepare(`
-       INSERT INTO os_todos (
-          id, project_id, source_module, context_payload, 
-          severity, escalation_reason, required_action_type, status, created_at
-       ) VALUES (?, ?, 'CoreExec', ?, 'high', 'Schema Drift Circuit Breaker Tripped', 'REVIEW', 'pending', ?)
-    `).run(todoId, projectId, JSON.stringify({ action: 'REVIEW_SCHEMA_PATCH', errorTrace, draftPatch, patchFile }), Date.now());
+    postWriteOpOrThrow({
+      kind: 'todo_insert',
+      id: todoId,
+      projectId: projectId ?? null,
+      severity: 'high',
+      escalationReason: 'Schema Drift Circuit Breaker Tripped',
+      requiredActionType: 'REVIEW',
+      contextPayload: JSON.stringify({ action: 'REVIEW_SCHEMA_PATCH', errorTrace, draftPatch, patchFile }),
+    });
 
     return {
        status: 'success', action: 'generic',
@@ -295,6 +323,12 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
       // can't explicitly annotate `Promise<WorkerOutput>` because that breaks
       // assignability to TaskFunction<Data|undefined, Data|Reply>. Let TS infer.
       execute: async (input) => {
+        // §5 / Phase F-6 — this task's writes route to the main-thread sink
+        // through the write port engine.ts transferred with the payload.
+        // The client is released in the finally below; releasing closes the
+        // far end of the channel, which settles the main-side drain.
+        const hasWritePort = !!input?.writePort;
+        if (input?.writePort) configureWriteClient(input.writePort);
         try {
           // Phase-7 legacy stub path (kind === 'legacy' set explicitly).
           if (input?.kind === 'legacy') {
@@ -320,14 +354,15 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
 
           let projectId: string | undefined;
           try {
-            const { db, initDB } = require('../basevault/db');
+            // §5 / Phase F-6 — read-only handle (precondition 3): the worker
+            // never holds a write-capable connection for SELECTs anymore.
+            const readDb = openReadonlyHandle();
             // Under the test runner, each worker thread gets its own private
             // ':memory:' database (see basevault/db.ts) that doesn't share
             // the main thread's schema the way a real file-backed db does in
             // production — initDB() no-ops outside test mode via its own
             // isMainThread guard, so this is safe/cheap to call unconditionally.
-            initDB();
-            const res = db.prepare(`
+            const res = readDb.prepare(`
               SELECT r.project_id
               FROM tasks t
               JOIN workflow_runs r ON t.run_id = r.id
@@ -362,8 +397,7 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
           const gated = await gateAndDispatch(input, directive, projectId, async () => {
             if (input.plugin) {
               const { CerebroVectorStore } = require('../memory/cerebro/vector');
-              const { db: workerDb } = require('../basevault/db');
-              const result = await executePlugin(input, projectId ?? null, workerDb, CerebroVectorStore);
+              const result = await executePlugin(input, projectId ?? null, CerebroVectorStore);
               if (result) return result;
             }
             return undefined;
@@ -387,10 +421,12 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
               // parks this node as 'blocked-by-validation' for human review.
               let priorOutput: Record<string, unknown> = {};
               try {
-                const { db: workerDb, initDB: workerInitDB } = require('../basevault/db');
-                workerInitDB();
+                // §5 / Phase F-6 — read-only handle for the prior-output read
+                // (this site is READ-only by nature; the write paths above are
+                // the ones that moved to the write queue).
+                const readDb = openReadonlyHandle();
                 // Find the most recently completed sibling task in this run.
-                const priorTask = workerDb.prepare(`
+                const priorTask = readDb.prepare(`
                   SELECT t.output_data FROM tasks t
                   JOIN workflow_runs r ON t.run_id = r.id
                   JOIN tasks self_t ON self_t.run_id = r.id AND self_t.id = ?
@@ -474,6 +510,8 @@ class CoreExecWorker extends ThreadWorker<WorkerInput, WorkerOutput> {
         } catch (err: any) {
           const taskId = input?.kind === 'legacy' ? undefined : input?.taskId;
           return errEnvelope(err?.message ?? String(err), taskId);
+        } finally {
+          if (hasWritePort) releaseWriteClient();
         }
       }
     });
