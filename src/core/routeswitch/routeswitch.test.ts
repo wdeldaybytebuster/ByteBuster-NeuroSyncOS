@@ -88,9 +88,33 @@ describe('RouteSwitch & Governor', () => {
 
 import { LlamaCppProvider } from './adapters/llama-cpp';
 import { OpenAICompatibleProvider } from './adapters/openai-compatible';
+import { db, initDB } from '../basevault/db';
+import { randomUUID } from 'crypto';
+
+/** C.4b — open the local-SLM gate by seeding the profile + rule it reads. */
+function enableLocalLlmForTest(): void {
+  initDB();
+  db.prepare('DELETE FROM environment_rules').run();
+  db.prepare('DELETE FROM hardware_profiles').run();
+  const profileId = 'prof-routeswitch-enoent';
+  db.prepare(`
+    INSERT INTO hardware_profiles
+      (id, profiled_at, cpu_cores, cpu_physical_cores, ram_total_mb, os_platform, tier)
+    VALUES (?, ?, 16, 16, 32000, 'linux', 'high-performance')
+  `).run(profileId, Date.now());
+  db.prepare(
+    "INSERT INTO environment_rules (id, profile_id, rule_key, rule_value, created_at) VALUES (?, ?, 'local_llm_enabled', 'true', ?)"
+  ).run(randomUUID(), profileId, Date.now());
+}
 
 describe('RouteSwitch Providers', () => {
   it('LlamaCppProvider should set id and surface a real error for a missing model file', async () => {
+    // C.4b — the local-SLM gate is fail-closed and fires before any model load,
+    // which is correct but would mask this test's actual subject. Open the gate
+    // so the ORIGINAL assertion below still holds: a missing GGUF must produce
+    // a real error (not a fabricated "success").
+    enableLocalLlmForTest();
+
     const provider = new LlamaCppProvider({ modelPath: '/models/llama-3.gguf' });
     expect(provider.id).toBe('llama-cpp');
     // Real node-llama-cpp inference backs this provider now (no more fake

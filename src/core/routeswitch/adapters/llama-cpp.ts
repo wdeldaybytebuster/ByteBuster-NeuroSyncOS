@@ -11,6 +11,8 @@ import { GenerationStreamHooks, LLMProvider, ProviderCapabilities } from '../pro
 import { OKF_CONCEPT_EXTRACTION_GBNF } from '../../okf/generator';
 import { ScopeLogicGBNF } from '../../scopelogic/gbnf-grammar';
 import { consumeConfidenceStream } from '../confidence';
+import { getEnvRule } from '../../scoutdaemon/hardware-profiler';
+import { log } from '../../observability/logger';
 
 export interface LlamaCppConfig {
   /** Path to the .gguf model file. Default discovery directory: ./local_models/ */
@@ -45,6 +47,43 @@ export interface LlamaCppConfig {
  * API cannot do this: its `onToken`/`onTextChunk` callbacks expose token IDs
  * only, no confidence.
  */
+/**
+ * C.4b — fail-closed local-SLM gate.
+ *
+ * Hardware-profile rule boundary (AXIOM 6 / P8-5): RouteSwitch reads the
+ * `local_llm_enabled` rule from the active hardware profile before attempting
+ * local SLM inference. On a `constrained` tier, all local model execution is
+ * banned — loading a multi-GB GGUF into a 6.3 GiB zero-swap eMMC node would
+ * take the host down, and it must never happen implicitly.
+ *
+ * The rule is defaulted CLOSED: when `environment_rules` carries no
+ * `local_llm_enabled` row for the active profile — genesis never ran, the row
+ * was dropped, or a profile was re-created without the rule — the default
+ * `'false'` refuses. Only the literal string `'true'` (case-insensitive,
+ * trimmed) opens it.
+ *
+ * Scope: `generate()` is the ONLY public method on this adapter (every other
+ * member is private), so gating it covers both the streaming and the
+ * chat-session paths and therefore 100% of local inference. The provider's
+ * constructor only stores config, so construction stays cheap and safe.
+ */
+function assertLocalLlmEnabled(): void {
+  const raw = getEnvRule('local_llm_enabled', 'false');
+  const enabled = raw.trim().toLowerCase() === 'true';
+  if (!enabled) {
+    log.warn(
+      `[LlamaCppProvider] local SLM inference refused — environment_rules 'local_llm_enabled' is ${JSON.stringify(raw)}, not 'true'.`
+    );
+    throw new Error(
+      `[LlamaCppProvider] Local SLM inference is disabled by the active hardware profile ` +
+      `(environment_rules 'local_llm_enabled' = ${JSON.stringify(raw)}). ` +
+      `Genesis writes this rule from the detected hardware tier: 'constrained' and 'standard' tiers set 'false', ` +
+      `'high-performance' sets 'true'. A missing rule — genesis never ran, or the row was dropped — also ` +
+      `resolves to the closed default 'false'. Enable local inference from PortGrid before retrying.`
+    );
+  }
+}
+
 export class LlamaCppProvider implements LLMProvider {
   id: string;
 
@@ -109,6 +148,10 @@ export class LlamaCppProvider implements LLMProvider {
     schema?: any,
     streamHooks?: GenerationStreamHooks,
   ): Promise<string> {
+    // C.4b — fail closed before either inference path is chosen, so neither
+    // the streaming path nor the chat-session path can load a GGUF model.
+    assertLocalLlmEnabled();
+
     // Preemptive path: real per-token confidence + genuine mid-stream abort.
     // RouteSwitchEngine always passes streamHooks, and Council Mode passes a
     // per-leg signal (council.ts), so this is the normal path — including for
