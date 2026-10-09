@@ -72,7 +72,9 @@ function resolveWorkerFile(): string {
     return snapshotBundle;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // Bundled at runtime by esbuild — a CommonJS require on purpose: the pool
+  // module is itself CJS-loaded from the .generated.cjs bundle context, and
+  // esbuild's buildSync API is only consumed here.
   const esbuild = require('esbuild') as typeof import('esbuild');
   const outfile = path.join(__dirname, 'worker.generated.cjs');
 
