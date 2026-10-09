@@ -4,6 +4,7 @@ import { stagePendingRun } from './stage-run';
 import crypto from 'crypto';
 import * as si from 'systeminformation';
 import { ScoutResearch } from './research';
+import { getActiveHardwareProfile } from './hardware-profiler';
 import { log } from '../observability/logger';
 
 export class IdleDetector extends EventEmitter {
@@ -29,19 +30,42 @@ export class IdleDetector extends EventEmitter {
         const temp = await si.cpuTemperature();
         if (temp.main > 85) {
           log.warn('[ScoutDaemon] Thermal spike detected. Yielding foreground via maxWorkers=0.');
-          // Save original config if not already yielding
-          if (this.originalMaxWorkers === undefined) {
-            try {
-              const row = db.prepare("SELECT rule_value FROM environment_rules WHERE rule_key = 'max_workers' ORDER BY created_at DESC LIMIT 1").get() as { rule_value: string } | undefined;
-              this.originalMaxWorkers = row && row.rule_value ? parseInt(row.rule_value, 10) : 3;
-            } catch (err) {
-              this.originalMaxWorkers = 3;
+          // C.4a — environment_rules.profile_id is NOT NULL and REFERENCES
+          // hardware_profiles(id) (src/core/basevault/db.ts:718), so a rule row
+          // CANNOT be written without attributing it to the active genesis
+          // profile. Fetching the profile here also lets the read below be
+          // scoped to it, instead of returning whatever historical row for the
+          // key happens to be newest regardless of which profile wrote it.
+          const activeProfile = getActiveHardwareProfile();
+          if (!activeProfile) {
+            // Genesis has not run yet — there is no profile to attach a rule
+            // to and the NOT NULL/FK makes the write impossible. Refuse here
+            // rather than letting it throw into the swallow-all catch below,
+            // which is exactly how this path silently did nothing before.
+            log.warn('[ScoutDaemon] No active hardware profile in BaseVault — cannot yield workers (environment_rules requires profile_id). Skipping thermal yield.');
+          } else {
+            // Save original config if not already yielding
+            if (this.originalMaxWorkers === undefined) {
+              try {
+                const row = db.prepare("SELECT rule_value FROM environment_rules WHERE profile_id = ? AND rule_key = 'max_workers' ORDER BY created_at DESC LIMIT 1").get(activeProfile.id) as { rule_value: string } | undefined;
+                this.originalMaxWorkers = row && row.rule_value ? parseInt(row.rule_value, 10) : 3;
+              } catch (err) {
+                this.originalMaxWorkers = 3;
+              }
             }
+            db.prepare("INSERT INTO environment_rules (id, profile_id, rule_key, rule_value, created_at) VALUES (?, ?, ?, ?, ?)").run(crypto.randomUUID(), activeProfile.id, 'max_workers', '0', Date.now());
           }
-          db.prepare("INSERT INTO environment_rules (id, rule_key, rule_value, created_at) VALUES (?, ?, ?, ?)").run(crypto.randomUUID(), 'max_workers', '0', Date.now());
         } else if (this.originalMaxWorkers !== undefined && temp.main < 75) {
           log.info('[ScoutDaemon] Thermals recovered. Restoring worker config.');
-          db.prepare("INSERT INTO environment_rules (id, rule_key, rule_value, created_at) VALUES (?, ?, ?, ?)").run(crypto.randomUUID(), 'max_workers', this.originalMaxWorkers.toString(), Date.now());
+          // C.4a — the restore write needs the same profile attribution, or it
+          // hits the identical NOT NULL/FK failure as the yield write did.
+          const activeProfile = getActiveHardwareProfile();
+          if (activeProfile) {
+            db.prepare("INSERT INTO environment_rules (id, profile_id, rule_key, rule_value, created_at) VALUES (?, ?, ?, ?, ?)").run(crypto.randomUUID(), activeProfile.id, 'max_workers', this.originalMaxWorkers.toString(), Date.now());
+          }
+          // C.4a — cleared unconditionally. Before the fix the restore INSERT
+          // always threw, the outer catch swallowed it, and this delete never
+          // ran, leaving originalMaxWorkers latched on forever.
           delete this.originalMaxWorkers;
         }
       } catch (err) {
