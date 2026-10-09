@@ -7,6 +7,20 @@ import { openWebSocket } from '../lib/api';
 /**
  * P2-3 — terminal WS base: the page's own host in the browser (tracks a
  * custom NEUROSYNC_PORT automatically), compiled default under node/tests.
+ *
+ * F-4 — the URL's security posture is layered (do not weaken any layer):
+ *   1. `openWebSocket` (src/ui/lib/api.ts) appends a 30 s, path-scoped
+ *      `?ticket=` minted from the live session — a browser WebSocket cannot
+ *      set an Authorization header, and the ticket is valid only on
+ *      TICKET_PATHS (which includes '/api/portgrid/terminal/').
+ *   2. The route itself sits under /api/ behind the app's auth middleware.
+ *   3. `wsUpgradeGuard` (src/server/perimeter.ts, wired at server-main.ts
+ *      :231) refuses a socketless upgrade attempt with a deliberate 401
+ *      before any TerminalSession can spawn — the shell is real, so the
+ *      gate decision must precede any bwrap spawn.
+ * A same-host WS_BASE is what makes layers 1–2 apply at all: a hardcoded
+ * foreign origin would bypass both the ticket path check and the loopback
+ * perimeter classification.
  */
 function resolveWsBase(): string {
   try {

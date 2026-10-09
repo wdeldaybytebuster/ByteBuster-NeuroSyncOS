@@ -184,7 +184,8 @@ export const rateLimitMiddleware: MiddlewareHandler = async (c, next) => {
 
 /**
  * §2.3-P1-1 — fail-closed WebSocket upgrade gate. Mounts ONLY ahead of the
- * two upgradeWebSocket routes in server-main.ts (terminal :178, sync :236).
+ * two upgradeWebSocket routes in server-main.ts (terminal :229, sync :295 —
+ * guard wired at :231 / :297, handlers at :232 / :298).
  *
  * If the request is a WS upgrade attempt
  * (`upgrade: websocket`) AND there is no live socket backing the context
