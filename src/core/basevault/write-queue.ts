@@ -275,8 +275,19 @@ export function configureWriteClient(port: MessagePort | null): void {
   }
 }
 
-/** The worker call site for every one of the 12 routed write statements. */
-export function postWriteOp(op: WriteOp): WriteResult {
+/**
+ * Release this thread's write client (worker side, task end): closes the
+ * far-end port — which is what triggers the main-side drain to settle —
+ * and clears the slot.
+ */
+export function releaseWriteClient(): void {
+  if (writeClient) {
+    try { writeClient.port.close(); } catch { /* already closed */ }
+  }
+  configureWriteClient(null);
+}
+
+/** The worker call site for every one of the 12 routed write statements. */export function postWriteOp(op: WriteOp): WriteResult {
   const invalid = validateWriteOp(op);
   if (invalid) return { status: 400, error: invalid, applied: 'dropped' };
 
