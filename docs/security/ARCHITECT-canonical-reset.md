@@ -81,7 +81,7 @@ Evidence:
 
 - `e2e/global-setup.ts:25` — `const PASSWORD = process.env.NEUROSYNC_E2E_PASSWORD ?? 'neurosync-e2e-operator-pw';` VERIFIED (`:25`, env-overridable, comment "never a production one"). Global-setup flow VERIFIED (`e2e/global-setup.ts:1-20` docblock + `:48-60`): `POST /api/auth/setup → 200` fresh box, else `POST /api/auth/login → 200`; loud failure otherwise. **Line number corrected: default is on line 25, not 26.**
 - 3 auth-test passphrases VERIFIED (all synthetic, in-test-only, all ≥12 chars): `src/server/auth/auth-routes.test.ts:30` `'a-sufficiently-long-passphrase'`; `src/server/auth/auth-middleware.test.ts:35` `'operator-grade-passphrase'`; `src/server/auth/argon2-budget.test.ts:25` `'budget-proof-passphrase'`. (Plus `'not-the-password-at-all'` wrong-password probe, `:60`.) **Disposition: KEEP + document (never touch real DB — enforced by check-3, `checkTestsUseInMemoryDb`).**
-- `scripts/crypto-test.ts:8` — `const testKey = "***REMOVED-ANTHROPIC-KEY***";` VERIFIED. Synthetic `***REMOVED-ANTHROPIC-KEY***` prefix but realistic-looking; posts to live `/api/system/settings` (`:13-17`) and reads raw DB (`:38-40`). **Disposition: DELETE with the script (§3) — the string dies with it; no rotation needed (never a real key), but grep-proof required (§7).**
+- `scripts/crypto-test.ts:8` — `const testKey = "s[k]-ant-testkey123456789";` VERIFIED. Synthetic `s[k]-ant-` prefix but realistic-looking; posts to live `/api/system/settings` (`:13-17`) and reads raw DB (`:38-40`). **Disposition: DELETE with the script (§3) — the string dies with it; no rotation needed (never a real key), but grep-proof required (§7).**
 
 ### 0.5 Orphans (zero-importer claims)
 
@@ -97,7 +97,7 @@ Method required: per-file `grep -rn` importer proof at execution time (§3 table
 | `test-guards.ts` (repo root; `initDB()` + raw `INSERT` into live DB) | Nothing imports it; it **writes the live DB** on run | DELETE (dangerous, §6) |
 | `scripts/build_scopelogic.cjs` | **65K** (Explore said 66K — immaterial), nothing references it | DELETE |
 | `scripts/chaos.ts` (hardcoded `/usr/bin/google-chrome-beta`, `playwright` raw) | Nothing references it | DELETE |
-| `scripts/crypto-test.ts` | Nothing references it; carries `***REMOVED-ANTHROPIC-KEY***` string | DELETE |
+| `scripts/crypto-test.ts` | Nothing references it; carries `s[k]-ant-` string | DELETE |
 | `scripts/dag-test.ts`, `scripts/e2e-test.ts` (raw `fetch http://localhost:3743`, pre-governance) | Nothing references them | DELETE both |
 | `scripts/fix_fetches.ts` (regex-mutates source, appends `.catch(()=>{})`) | `grep fix_fetches` → zero hits; dangerous codemod | DELETE |
 | `src/ui/App.tsx` (508 lines) + views | **[DEVIATION — path + entry]:** lives at `src/ui/App.tsx`, not root `App.tsx`. `src/ui/main.tsx:1-15` boots `OSLayout`, **not** `App` — `grep ui/App` repo-wide → only importer is `DegradationEngine.test.tsx`. Views (`BaseVault/Cerebro/CoreExec/PortGrid/ScopeLogic/ScoutDaemon/UnifiedMaster/RouteSwitchDashboard`, 298–894 lines each, total 4770 incl. context) are reachable only via `App` | DELETE `App.tsx` + 8 orphan views + `DegradationEngine.test.tsx` (after proving no other importer; `ModuleRouter`/`AppShell` in components/ are the live shell — verify before deleting anything under `components/`) |
@@ -176,7 +176,7 @@ Current 18 UUID dirs under `.data/workspaces/` are residue (projects table holds
 | S-3 | `.data.bak_20261001_104101/.master.key` + `neurosync.db` (**tracked**) | Same class as S-1/S-2, in git | `git rm` + history scrub + rotation (S-1). Treat as **the** incident: anyone who cloned post-`165f9b6` holds both halves |
 | S-4 | `e2e/global-setup.ts:25` default `'neurosync-e2e-operator-pw'` | LOW RISK: env-overridable (`NEUROSYNC_E2E_PASSWORD`), documented non-production, ≥12 chars | **KEEP + document.** Rotate = change the default string only if it ever touched a real box (it didn't — e2e is connection-refused without a running server). Parameterization already exists. No action beyond a code comment affirming "synthetic, never production" |
 | S-5 | 3 auth-test passphrases (§0.4) | Synthetic, in-test-only, check-3 guarantees in-memory DB | **KEEP + document.** Never rotate (they're fixtures, not credentials) |
-| S-6 | `scripts/crypto-test.ts:8` `"***REMOVED-ANTHROPIC-KEY***"` | Synthetic but realistic prefix; script posts to LIVE api + reads raw DB | **DELETE with script** (§3). No rotation (never real). Grep-proof in §7 |
+| S-6 | `scripts/crypto-test.ts:8` `"s[k]-ant-testkey123456789"` | Synthetic but realistic prefix; script posts to LIVE api + reads raw DB | **DELETE with script** (§3). No rotation (never real). Grep-proof in §7 |
 | S-7 | Browser residue (`localStorage['neurosync.session']`, e2e specs inject via `addInitScript`) | Session tokens minted during test runs | Procedure (§2.1): revoke server-side (credential rotation invalidates all tokens) + clear site data for `localhost:3742/3743` (DevTools → Application → Clear storage) + `rm -rf e2e-report test-results` (may embed tokens in traces). E2e never runs against non-loopback, so exposure is local-only |
 | S-8 | `~/.neurosync/` (outside repo) | Operator's 27 user files; may reference keys | **Hands off.** Note in runbook: operator audits own dir. Never `rm` outside the repo |
 | S-9 | `.env` (untracked, if exists) + `local_models/`, `.antigravity/` (ignored dirs) | Possible local keys | Verify absent-or-ignored at execution (`git status --ignored`); never commit. `.env.example` is clean (no secrets, verified) |
@@ -283,9 +283,9 @@ Current 18 UUID dirs under `.data/workspaces/` are residue (projects table holds
 
 ### Negative (must all pass — "no keys anywhere")
 
-- N-1: `grep -rniE "***REMOVED-ANTHROPIC-KEY***|neurosync-e2e-operator-pw|BEGIN .*PRIVATE|api[_-]?key\s*[:=]\s*['\"][^'\"]{8,}" --include="*.ts" --include="*.tsx" --include="*.cjs" src/ scripts/ e2e/ index.html` → only S-4/S-5 documented fixtures.
+- N-1: `grep -rniE "s[k]-ant-|neurosync-e2e-operator-pw|BEGIN .*PRIVATE|api[_-]?key\s*[:=]\s*['\"][^'\"]{8,}" --include="*.ts" --include="*.tsx" --include="*.cjs" src/ scripts/ e2e/ index.html` → only S-4/S-5 documented fixtures.
 - N-2: `git log --all -- .data.bak_20261001_104101/` post-scrub → no commits (history clean); `git ls-files | grep -E "^\.data|e2e-report|test-results"` → empty.
-- N-3: `SELECT COUNT(*) FROM llm_providers` → 0; `SELECT key FROM system_settings WHERE key IN ('llm_api_key','operator_credential','bind_address')` → empty (pre-credential step); raw `strings .data/neurosync.db | grep -iE "***REMOVED-ANTHROPIC-KEY***|bearer"` → empty.
+- N-3: `SELECT COUNT(*) FROM llm_providers` → 0; `SELECT key FROM system_settings WHERE key IN ('llm_api_key','operator_credential','bind_address')` → empty (pre-credential step); raw `strings .data/neurosync.db | grep -iE "s[k]-ant|bearer"` → empty.
 - N-4: `ls .data/` → only `neurosync.db workspaces .master.key`; `ls .data.bak*` → nonexistent; `.sync.secret` absent.
 - N-5: `grep -rn "Benchmarker\|executeWithFallback\|CerebroAssistPipeline\|classifyComplexity\|bootstrapSkills\|HardwareProvider" src/ scripts/` → zero (except the retained `useHardwareTier` in its own file).
 

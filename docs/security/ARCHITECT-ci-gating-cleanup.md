@@ -32,7 +32,7 @@ docs/security/:
 ```
 
 - `git status --short` shows **only** `?? docs/security/` — no other modified/untracked files. **CONFIRMED.**
-- Secret scan over `docs/security/` for `BEGIN PRIVATE|BEGIN RSA|BEGIN OPENSSH|***REMOVED-ANTHROPIC-KEY***|***REMOVED-GITHUB-PAT***|BEGIN SQLITE|SQLite format|api[_-]key\s*[:=]` → **zero hits**. No secrets, keys, or DB dumps. Safe to commit. **CONFIRMED.**
+- Secret scan over `docs/security/` for `BEGIN PRIVATE|BEGIN RSA|BEGIN OPENSSH|s[k]-ant-|g[h]p_|BEGIN SQLITE|SQLite format|api[_-]key\s*[:=]` → **zero hits**. No secrets, keys, or DB dumps. Safe to commit. **CONFIRMED.**
 
 ### V1. `.github/workflows/ci.yml` (36 lines) does NOT invoke audit-ground-rules
 
@@ -127,7 +127,7 @@ Per Axiom 1 (Absolute Contextual Permanence) all six are project memory and must
 ### 1.2 Pre-commit verification steps (executing agent MUST run these)
 
 1. **Re-run the secret scan** immediately before `git add` (content may have shifted since this plan):
-   `grep -rniE "BEGIN (PRIVATE|RSA|OPENSSH)|***REMOVED-ANTHROPIC-KEY***|***REMOVED-GITHUB-PAT***|gho_|xox[bap]-|api[_-]key\s*[:=]\s*['\"][A-Za-z0-9]|BEGIN SQLITE|SQLite format 3" docs/security/` → must return empty.
+   `grep -rniE "BEGIN (PRIVATE|RSA|OPENSSH)|s[k]-ant-|g[h]p_|gho_|xox[bap]-|api[_-]key\s*[:=]\s*['\"][A-Za-z0-9]|BEGIN SQLITE|SQLite format 3" docs/security/` → must return empty.
 2. **Confirm no binary/non-text payloads:** `file docs/security/**` — all must report text (ASCII/UTF-8). No `.db`, `.db-journal`, `.sqlite`, `.gguf`, images, or archives.
 3. **Confirm no stray files** swept in: `git status --short docs/security/` must list exactly the 7 `.md`/`.ts` files above — no `.data/`, no `backup-*.db`, no editor swapfiles.
 

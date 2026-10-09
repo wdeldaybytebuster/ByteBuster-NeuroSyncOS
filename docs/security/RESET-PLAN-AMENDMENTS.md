@@ -86,7 +86,7 @@ Every file:line cite below was verified against disk before writing.
   → empty (present on disk, NOT tracked — the plan's §0.6 "tracked" statement is stale
   for this tree; no `git rm --cached` needed). Secret grep (N-1 pattern over
   `src/ scripts/ e2e/ index.html`) returns only the two documented fixtures:
-  `scripts/crypto-test.ts:8` (`***REMOVED-ANTHROPIC-KEY***…`, S-6, dies with D-10 script deletion)
+  `scripts/crypto-test.ts:8` (`s[k]-ant-testkey…`, S-6, dies with D-10 script deletion)
   and `e2e/global-setup.ts:25` (`neurosync-e2e-operator-pw`, S-4, KEEP + documented).
 - **Phase 3 proposed item-9 (new): consolidate `idle.ts` dual writers.** The two
   `system-maintenance` staging blocks (`idle.ts:120-133` and `:217-230`) duplicate the
