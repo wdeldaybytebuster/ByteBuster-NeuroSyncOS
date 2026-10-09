@@ -1,7 +1,12 @@
 # Worker Write Topology — WAL Contract, Interim Bounds, RPC-Cutover Preconditions
 
 Status: P3-S6 — DOC + BOUND only. No RPC cutover (gated: Phase 5).
-Related: roll-in B6 (`docs/security/FOLLOWUPS-P2-ROLLIN.md:60-63`).
+
+> **F-6 UPDATE (2026-10-09): RPC cutover LANDED.** §5 below records the
+> landed design, its precondition-by-precondition evidence, and the known
+> remaining transitive-handle surface. The §1-§4 as-built/interim-bound
+> history is kept verbatim — it documents the topology the cutover
+> replaced. Related: roll-in B6 (`docs/security/FOLLOWUPS-P2-ROLLIN.md:60-63`).
 
 ## 1. Current topology (as-built)
 
@@ -105,20 +110,59 @@ Rationale: the files array arrives unbounded from idle flushes; without a
 cap one pathological flush = 10k vector INSERTs + 10k `os_todos` INSERTs
 from a single worker thread on an edge node.
 
-## 5. RPC-cutover preconditions (Phase 5 gate — NOT started)
+## 5. RPC-cutover (Phase F — LANDED 2026-10-09)
 
-The single-writer topology (workers read-only / RPC writes to main thread)
-may begin only when ALL of these hold:
+**Status: LANDED.** The single-writer topology (workers read-only / routed
+writes to the main thread) is implemented and tested. Precondition-by-
+precondition evidence:
 
-1. A main-thread write-RPC endpoint exists with backpressure (bounded queue
-   + caller-visible drop/overflow semantics — the current pools have none).
-2. Every §2a/§2b write site is routed through it (mechanical checklist:
-   `worker.ts:87,139,143-147,199,204,253`;
-   `reflection-sweep.ts:31-34,39,55-57,65-77`).
-3. `executePlugin`'s `workerDb` parameter is removed (not merely unused) and
-   `worker.ts:323-337,365-367,390-394` acquires read-only handles.
-4. The prune-vs-insert race (§3) has a regression test that fails on the
-   current topology and passes after cutover.
-5. Full DB shard + both pool suites green with WAL contention logging
-   enabled for one release (to catch ordering assumptions the cutover
-   would otherwise mask).
+1. **Main-thread write endpoint with backpressure** — `src/core/basevault/write-queue.ts`.
+   `postWriteOp(op)` is synchronous and returns **200** (accepted: queued
+   on the per-task MessageChannel, or applied locally on the main thread /
+   in tests), **400** (invalid op, rejected pre-enqueue — every field
+   validated by `validateWriteOp`), **429** (`MAX_PENDING_WRITES = 256`
+   in flight — caller-visible overflow, never a silent drop). The sink
+   (`attachWriteChannel`) drains FIFO through a sequential apply chain,
+   acks every applied op so the bound tracks real backpressure, and logs
+   per-apply durations with a 250 ms slow-apply warn + SQLITE_BUSY
+   counters (`stats`) — the WAL-contention logging stayed on for this
+   release.
+2. **Every §2a/§2b write site routed** — the 12-site checklist maps to
+   ops as follows. `worker.ts`: :87 `gitnexus_mapper` + :139 okf files +
+   :199 okf quarantine vector inserts route via `CerebroVectorStore.insert`
+   (now a `memory_insert` op); :143-147/:204/:253 `os_todos` INSERTs are
+   `todo_insert` ops. `reflection-sweep.ts`: :31-34 is
+   `learning_approval_insert`, :39 a `memory_insert` op, :55-56 the two
+   prune DELETEs consolidated into ONE `memory_delete` op (the sink
+   deletes meta then vec), :65-69 `prune_stale` (minAccess 5 preserved),
+   :73-77 `vec_cleanup_orphans`. Regression-pinned by source contracts in
+   `reflection-cutover.test.ts` (comments stripped — the "was:" quotes
+   must not trip them): no raw DELETE/INSERT may reappear in the sweep or
+   worker, and `workerDb` may never return to `executePlugin`.
+3. **`workerDb` removed; read-only handles** — `executePlugin(input,
+   projectId, CerebroVectorStore)` takes no DB handle at all. The three
+   SELECT sites (`:323-337` project-id resolution, `:390-394` verify-node
+   prior-output read, plus the two cwd SELECTs inside the plugins) use
+   `openReadonlyHandle()` — a separate `readonly: true` connection in
+   production (SQLITE_READONLY enforced in C++), the per-thread `:memory:`
+   handle under VITEST. Known remaining surface (tracked, not hidden):
+   modules the worker bundle pulls in transitively (RouteSwitchEngine,
+   gate-order) still import a write-capable `db` handle at module scope —
+   the write PATHS no longer use one, but the handle object still exists
+   in-thread. Removing it is its own ticket.
+4. **Prune-vs-insert regression** — `reflection-cutover.test.ts` posts
+   `prune_stale` before a concurrent `memory_insert` on a real channel and
+   proves the insert survives (FIFO single-writer; pre-cutover the
+   worker-side DELETE could still take that row). The source-contract
+   half fails on the pre-cutover tree by construction.
+5. **Suite green + WAL logging** — full suite run at the cutover commit
+   with the write-channel logging live (drain summaries, slow-apply warns,
+   SQLITE_BUSY counts).
+
+Transport note: worker→main uses a per-task `MessageChannel` whose worker
+end rides in the task payload via poolifier's `transferList`
+(`engine.ts` for CoreExec plugin tasks, `reflection.ts` for the Cerebro
+sweep). The engine awaits the drain in a `finally` before the task result
+is written back, so a trailing escalation is applied before completion.
+Proven end-to-end by `worker-write-integration.test.ts` against the real
+pool + bundled worker.
