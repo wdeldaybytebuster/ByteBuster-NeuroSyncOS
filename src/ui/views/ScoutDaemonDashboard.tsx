@@ -318,7 +318,7 @@ function SetupView() {
             )
           )}
         </h2>
-        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="A safety cutoff for background AI work — if the AI starts rambling or making things up, the task is stopped early." dev="Algorithmic circuit breaker. Monitors token-level entropy during background inference. If hallucination detected, executes kill-before-compute abort." /></p>
+        <p className="text-xs text-gray-400 mb-4"><ModeLabel simple="A safety cutoff for background AI work — if the AI starts rambling or making things up, the task is stopped early." dev="Circuit breaker for background inference. Kill-before-compute is preemptive ONLY on the local llama-cpp provider (real per-token confidence). On every HTTP provider AgentStop runs a post-hoc word-count heuristic after generation has already completed — it does not cut generation short, so treat the value as a confidence score, not a stopwatch." /></p>
 
         <div className="space-y-4">
           <div>
