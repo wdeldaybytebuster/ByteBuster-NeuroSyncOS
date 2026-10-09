@@ -123,6 +123,16 @@ describe('logger level gate', () => {
 });
 
 describe('logger boot-log file sink', () => {
+  // writeBootLog short-circuits to `false` under Vitest (mirroring the
+  // db.ts:19 data-dir guard), so every test below that exercises the real file
+  // sink must opt back in by unsetting VITEST. Empty string is falsy, so
+  // `!!process.env.VITEST` is false and the mkdir/append path runs normally;
+  // the fully-stubbed DB stays in-memory either way (db.ts read VITEST once at
+  // module load), and afterAll's vi.unstubAllEnvs() restores the real value.
+  beforeEach(() => {
+    vi.stubEnv('VITEST', '');
+  });
+
   it('writes a boot-YYYY-MM-DD.log line in ISO [level] format', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     log.info('boot line one');
@@ -209,5 +219,45 @@ describe('logger boot-log file sink', () => {
     const line = readBootLog().trimEnd();
     expect(LINE_RE.test(line)).toBe(true);
     expect(line).toContain('count 42 { a: 1 }');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VITEST guard on the file sink (mirrors db.ts:19)
+// ---------------------------------------------------------------------------
+// Under Vitest the boot-log sink is bypassed before any fs call, exactly like
+// the data-dir guard in basevault/db.ts. Each test pins the VITEST state it
+// needs explicitly, so the block does not depend on execution order, and the
+// outer beforeEach has already aimed NEUROSYNC_LOG_DIR at a fresh tmpdir.
+describe('writeBootLog VITEST guard', () => {
+  it('returns false and creates no file when VITEST is set', () => {
+    vi.stubEnv('VITEST', '1');
+
+    expect(writeBootLog('info', ['never hits disk'])).toBe(false);
+    expect(bootFiles()).toHaveLength(0);
+    // The guard runs before mkdirSync, so even the tmpdir stays empty.
+    expect(fs.readdirSync(tmpDir)).toHaveLength(0);
+  });
+
+  it('returns true and writes the file when VITEST is unset (prod path)', () => {
+    vi.stubEnv('VITEST', '');
+
+    expect(writeBootLog('info', ['prod path'])).toBe(true);
+    const line = readBootLog().trimEnd();
+    expect(LINE_RE.test(line)).toBe(true);
+    expect(line.endsWith('prod path')).toBe(true);
+  });
+
+  it('still prints to the console when VITEST suppresses the file sink', () => {
+    vi.stubEnv('VITEST', '1');
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    log.info('console only');
+
+    // stdout is the primary sink and must be unaffected by the file guard.
+    expect(logSpy).toHaveBeenCalledWith('console only');
+    expect(bootFiles()).toHaveLength(0);
+
+    logSpy.mockRestore();
   });
 });

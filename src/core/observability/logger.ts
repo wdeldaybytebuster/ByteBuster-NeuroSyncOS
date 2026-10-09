@@ -64,6 +64,10 @@ function shouldLog(messageLevel: Exclude<LogLevel, 'silent'>): boolean {
 // Deliberate constraints (Phase G):
 //   - `appendFileSync` only. Never a rotating stream: no rotation, no
 //     truncation, so the boot log is a complete append-only record.
+//   - Under Vitest the sink is bypassed outright -- writeBootLog returns false
+//     before any fs call, the same `!!process.env.VITEST` guard basevault/db.ts
+//     uses for the data dir (db.ts:19). Tests that genuinely exercise the file
+//     sink opt back in by unsetting VITEST themselves (see logger.test.ts).
 //   - Any I/O failure (read-only .data, ENOSPC, a path hijacked by a test via
 //     NEUROSYNC_LOG_DIR) is swallowed. A log sink must never be the reason a
 //     boot fails, so `writeBootLog` is total: it cannot throw.
@@ -86,8 +90,16 @@ function bootLogPath(): string {
 /**
  * Append one line to today's boot log. Returns true if the line was written.
  * Total function: catches every error and returns false instead of throwing.
+ *
+ * The filesystem is skipped entirely when VITEST is set (the same guard
+ * basevault/db.ts applies to the data dir at db.ts:19): an automated test run
+ * must never write to the operator's real .data/logs. Returning false here is
+ * consistent with the total-function contract -- the console sink above stays
+ * the primary output and still runs. Tests that deliberately exercise the
+ * file sink unset VITEST themselves (see logger.test.ts).
  */
 export function writeBootLog(level: string, args: unknown[]): boolean {
+  if (!!process.env.VITEST) return false;
   try {
     const dir = bootLogDir();
     fs.mkdirSync(dir, { recursive: true });
