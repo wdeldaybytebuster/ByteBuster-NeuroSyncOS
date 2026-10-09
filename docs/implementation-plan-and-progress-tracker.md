@@ -979,7 +979,7 @@ Nine commits, sequential and one-at-a-time on the ruled blueprint order. Per-com
 
 ### 2026-10-09 — Phase F (frontend optimizations + worker single-writer cutover) F-1–F-6 landed
 
-Twenty-four commits, sequential in the mandated order F-1 → F-5 → F-2 → F-3 → F-4 → F-6, max two files per commit (eMMC-safe), commit-per-step under the Phase F full authorization. No push. Per-step gates: `tsc --noEmit` 0 errors, `eslint .` 0 errors, `audit:ground-rules` 8/8, scoped `vitest run --fileParallelism=false` green, `node .gitnexus/run.cjs detect-changes --scope all` run before every commit, and GitNexus impact analysis before every edit to an existing symbol.
+Twenty-seven commits, sequential in the mandated order F-1 → F-5 → F-2 → F-3 → F-4 → F-6, max two files per commit (eMMC-safe), commit-per-step under the Phase F full authorization. No push. Per-step gates: `tsc --noEmit` 0 errors, `eslint .` 0 errors, `audit:ground-rules` 8/8, scoped `vitest run --fileParallelism=false` green, `node .gitnexus/run.cjs detect-changes --scope all` run before every commit, and GitNexus impact analysis before every edit to an existing symbol.
 
 **Baseline before F began:** `tsc` 0, audit 8/8, vitest 874/874 (100 files). **Final:** `tsc` 0, eslint 0 errors / 66 documented warnings, audit 8/8, vitest **906/906 (104 files)**, `vite build` clean.
 
