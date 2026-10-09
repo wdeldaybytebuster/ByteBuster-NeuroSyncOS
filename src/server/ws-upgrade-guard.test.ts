@@ -70,6 +70,17 @@
  *
  * P1-2 (30 s WS heartbeat ping/terminate sweep) is Engineer's scope and is
  * intentionally not covered here.
+ *
+ * ─── F-4 STATUS: LANDED (this file is now the regression suite) ─────────────
+ *
+ * P1-1 and P1-3 both landed (engineer fixes under §2.3): `wsUpgradeGuard` is
+ * exported from ./perimeter and wired ahead of BOTH upgradeWebSocket handlers
+ * in server-main.ts (terminal :231, sync :297); the /api/sync peerId is
+ * minted with `crypto.randomUUID()`. The `(a)/(b)` RED labels and the
+ * "Engineer must implement" messages below document the auditor baseline and
+ * are intentionally left verbatim — the assertions now pass, which is the
+ * regression proof. The F-4 acceptance block at the bottom pins guard ORDER,
+ * guard SCOPE, non-upgrade passthrough, and the terminal ticket path.
  */
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
@@ -243,5 +254,67 @@ describe('P1-3 source contract — crypto-strong incoming-peer labels (server-ma
     );
     // and the current mint can NEVER satisfy it
     expect(/^incoming-[0-9a-f]{8}-[0-9a-f]{4}-/.test(`incoming-${Math.random().toString(36).substring(7)}`)).toBe(false);
+  });
+});
+
+// ─── F-4 acceptance: guard ORDER + scope (the "guard-order" contract) ────────
+
+describe('F-4 acceptance — guard ORDER and SCOPE in server-main.ts', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'server-main.ts'), 'utf8');
+
+  /** The wiring text of one route = from its path literal to the next app.get */
+  function routeBlock(path: string): string {
+    const start = src.indexOf(path);
+    expect(start, `route ${path} not found in server-main.ts`).toBeGreaterThan(-1);
+    const next = src.indexOf('app.get(', start + path.length);
+    return src.slice(start, next === -1 ? src.length : next);
+  }
+
+  it('terminal route: wsUpgradeGuard is wired BEFORE upgradeWebSocket — a guard placed after the handler would never run', () => {
+    const block = routeBlock("'/api/portgrid/terminal/:projectId'");
+    const guardAt = block.indexOf('wsUpgradeGuard');
+    const handlerAt = block.indexOf('upgradeWebSocket');
+    expect(guardAt, 'wsUpgradeGuard missing from the terminal route wiring').toBeGreaterThan(-1);
+    expect(handlerAt, 'upgradeWebSocket missing from the terminal route wiring').toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(handlerAt);
+  });
+
+  it('sync route: wsUpgradeGuard is wired BEFORE upgradeWebSocket', () => {
+    const block = routeBlock("'/api/sync'");
+    const guardAt = block.indexOf('wsUpgradeGuard');
+    const handlerAt = block.indexOf('upgradeWebSocket');
+    expect(guardAt, 'wsUpgradeGuard missing from the /api/sync wiring').toBeGreaterThan(-1);
+    expect(handlerAt, 'upgradeWebSocket missing from the /api/sync wiring').toBeGreaterThan(-1);
+    expect(guardAt).toBeLessThan(handlerAt);
+  });
+
+  it('scope: the guard is NEVER mounted globally (no app.use(wsUpgradeGuard)) — only the two WS routes', () => {
+    expect(src).not.toMatch(/app\.use\(\s*wsUpgradeGuard/);
+    // exactly two route-level wirings (each `wsUpgradeGuard,` on its own line
+    // as a middleware argument), nothing wider and nothing narrower
+    expect(src.match(/^\s*wsUpgradeGuard,\s*$/gm) ?? []).toHaveLength(2);
+  });
+});
+
+// ─── F-4 acceptance: runtime behaviors of the guard ──────────────────────────
+
+describe('F-4 acceptance — the guard never swallows normal traffic', () => {
+  it('a plain GET (no upgrade header) to a guarded route falls through to 404 — today\'s passthrough behavior preserved', async () => {
+    const app = buildTerminalMirror();
+    const res = await app.request('/api/portgrid/terminal/proj-123');
+    expect(res.status).toBe(404);
+  });
+
+  it('an upgrade attempt with a mixed-case "WebSocket" header is still an upgrade attempt — socketless ⇒ 401', async () => {
+    const app = buildSyncMirror();
+    const res = await app.request('/api/sync', {
+      headers: { ...WS_UPGRADE_HEADERS, upgrade: 'WebSocket' },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('the terminal WS URL is authenticated: /api/portgrid/terminal/ stays a TICKET_PATHS entry (browser WS cannot set headers)', async () => {
+    const { TICKET_PATHS } = await import('./auth/sessions.js');
+    expect(TICKET_PATHS).toContain('/api/portgrid/terminal/');
   });
 });

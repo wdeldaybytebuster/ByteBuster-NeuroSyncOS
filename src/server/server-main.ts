@@ -165,9 +165,21 @@ app.route('/api/okf', okfRouter);
 // directory with network removed via hardened bwrap (see
 // core/portgrid/terminal-session.ts for the recipe + why it can't reuse
 // CommandSandbox's `--dev-bind / /` invocation). Human-only: opened solely by an
-// explicit UI action, never auto-launched by any agent code path. Inherits the
-// app's existing auth posture (this route is under /api/, so the auth middleware
-// above applies exactly as it does to every other API route).
+// explicit UI action, never auto-launched by any agent code path.
+//
+// Auth posture (F-4, layered — the route is a REAL shell, so all three layers
+// matter and are pinned by tests):
+//   1. this route is under /api/, so the app's session auth middleware
+//      applies exactly as it does to every other API route;
+//   2. the browser side connects through openWebSocket() with a short-lived
+//      session-minted `?ticket=` (TICKET_PATHS includes this path — browser
+//      WebSockets cannot set request headers);
+//   3. wsUpgradeGuard is wired AHEAD of the upgradeWebSocket handler below
+//      (server-main.ts :229-232) so a socketless upgrade attempt — no
+//      c.env.incoming — is refused with a deliberate 401 BEFORE any
+//      createTerminalSession / bwrap spawn can happen.
+// The 30 s RFC 6455 heartbeat sweep (below) additionally terminates peers
+// that stop answering pings, so a half-open socket cannot hold a shell.
 import { createNodeWebSocket } from '@hono/node-ws';
 import {
   createTerminalSession,
