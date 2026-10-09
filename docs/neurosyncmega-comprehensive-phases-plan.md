@@ -450,3 +450,22 @@ Separate authorization gate: explicit operator go-order obtained before Phase F 
 8. **Plan review is not execution approval.** All phases remain NOT AUTHORIZED until the user gives a phase-specific go-order. Commits, pushes, deployments, live provider calls, and destructive changes need separate explicit authorization.
 9. **Phase D method is unresolved:** `fetch origin/main && reset --hard origin/main` performs a destructive local reset and does not itself force-push. Before Phase D, Explorer/Architect must validate the intended history-scrub procedure, recovery point, coordination window, and remote operation; no reset, force-push, or deletion occurs until separately authorized.
 10. **Pre-existing changes are protected:** current `AGENTS.md` and `CLAUDE.md` modifications and `.freebuff/project-id` are not owned by this plan. Phase G must inspect and preserve them; no staging, commit, revert, overwrite, or deletion without explicit, scoped operator instruction.
+
+---
+
+## PHASE C EXECUTION LOG — 2026-10-09 (operator-authorized; appended by Restorer)
+
+11. **Phase C executed C.1–C.5 + C.7 docs (8 commits, 2026-10-09):**
+    - C.1 `240771a` chore(gitignore): ignore `*.pid` + `coverage/` — 4 added lines, `.gitignore` only.
+    - C.2 part A `138a813` chore(scripts): drop `build_scopelogic.cjs` + `chaos.ts` (D-8/D-9).
+    - C.2 part B `c156017` chore(scripts): drop `crypto-test.ts` + `dag-test.ts` (D-10/D-11).
+    - C.2 part C `9e03062` chore(scripts): drop `e2e-test.ts` + `fix_fetches.ts` (D-12/D-13).
+    - C.4a `7d8af42` fix(scoutdaemon): attribute thermal-yield `environment_rules` to the active hardware profile.
+    - C.4b `1324aa5` fix(routeswitch): fail-closed `local_llm_enabled` gate before local SLM inference.
+    - C.5 `b84d565` fix(ui): ScoutDaemonDashboard :321 dev label now states the honest limitation.
+    - C.7 `bd2a1b3` docs: Phase C runbook + tracker entries for C.1–C.7 (docs-only; no code/schema/runtime change).
+12. **D-2 follow-ups fixed (2026-10-09):** D2 `d39ffba` fix(env-rules): newest-wins `ORDER BY` + active-profile scoping; D1 `c70676d` fix(workspaces): redirect sandbox to temp under VITEST. Vitest 100/100 files, 864/864 tests green at `c70676d`. GitNexus reindexed to `c70676d`.
+13. **C.6 widened, NOT purged (2026-10-09):** DB credential nulled, providers table 0 rows; snapshot kept at `/tmp/opencode/neurosync-c6-snap-20261009_035209.db` (sha256 `0da179…`). No purge/key-rotation without separate Phase D authorization (G-4).
+14. **D5 incident — plan-doc revert by unknown actor (2026-10-09 ~02:39):** working tree `docs/neurosyncmega-comprehensive-phases-plan.md` reverted in 4 hunks (Status→REVIEW, amended-2026-10-09 line deleted, G-6 deleted, Phase B→Open). Restored from `97fe98b` (`git show 97fe98b:docs/… > file`, sha256 `c7abe3…`), COMPLETE markings + G-6 verified present, this execution log appended.
+15. **C.4c genesis first-run (2026-10-09, this session):** single explicit invocation `force=false` via the sanctioned first-run bootstrapper (`npx tsx src/server/index.ts --profile` → ScoutDaemon `runGenesisProfiler(false)`); `hardware_profiles` 0→1 row, 10 `environment_rules` written in one transaction, `getEnvRule` reads verified live. No swapoff / host-affinity changes (Open Item 7 boundary respected; `swap_enabled=true` is a stored rule value only, not an action).
+16. **C.4c profile tier: `high-performance`.** Probe: 8 cores (8 physical, no HT), 6472 MB RAM, `hdd` storage (rotational flag; eMMC not enumerated in this container), `crostini` virt, `gpu` with 4096 MB VRAM → high-performance arm of `classifyTier` (GPU-present rule). Rules: `UV_THREADPOOL_SIZE=8`, `max_workers=8`, `local_llm_enabled=true`, `taskset_cores=0-7`, `swap_enabled=true`, `max_old_space_size_mb=4096`, `parallel_dag_enabled=true`. Genesis wrote NO provider row (`llm_providers` still 0) and left `operator_credential` null. NOTE: tier differs from the plan's i3-N305/constrained expectation — that is the deterministic output of the probe on this host, recorded as-is; any re-tiering is operator-directed via PortGrid Re-Profile (`force=true`), never automatic.
