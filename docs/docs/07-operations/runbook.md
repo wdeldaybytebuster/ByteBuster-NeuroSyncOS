@@ -81,3 +81,40 @@ PRAGMA integrity_check              # expect: ok
 4. `PRAGMA integrity_check` run against the **snapshot** returns `ok`.
 5. **Rollback:** stop server → `cp -a "$SNAP"/neurosync.db .data/` → boot → re-run the C.3 verification SELECT.
 6. Abort on the first failure; park `os_todos`; never leave a partial delete behind.
+
+## Phase F — frontend optimizations + worker single-writer cutover (F-1–F-6)
+
+Landed 2026-10-09 (24 commits, no push). Operator-facing notes only — the
+full engineering record is in `docs/implementation-plan-and-progress-tracker.md`
+(2026-10-09 Phase F entry) and `docs/security/WORKER-WRITE-TOPOLOGY.md` §5.
+
+### What changed for operators
+
+- **`npm run lint` / `npm run lint:fix`** now exist (eslint 9 flat config).
+  The gate is 0 errors; 66 warnings are the documented debt register
+  (dead lucide imports / unused test args) and do not fail the run.
+- **First-run UI is chunked + lazy.** The eight dashboards load on demand
+  behind a `Loading module…` fallback; xterm/xyflow/vendor chunks cache
+  independently. A dashboard may now flash the fallback for a few hundred
+  ms on a cold eMMC boot — expected, not a hang.
+- **All worker-thread DB writes now route to the main thread** (the F-6
+  cutover). Operational consequence: a plugin's escalation ticket
+  (os_todos) appears in PortGrid before the task is marked completed, and
+  a saturated write path surfaces as a **429** to the worker (the task
+  parks with the overflow reason) instead of silently dropping the write.
+  Watch for `[BaseVault]` log lines — `write channel drained`, `slow write
+  apply`, and `WAL contention: SQLITE_BUSY` — for one release; they are the
+  contention logging §5(5) requires.
+
+### Never do (F-6)
+
+- Never reintroduce a direct `db.prepare(...).run()` write in
+  `src/core/coreexec/worker.ts` or
+  `src/core/memory/cerebro/reflection-sweep.ts`. Both files are pinned by
+  source contracts in `reflection-cutover.test.ts` (raw DELETE/INSERT and
+  the `workerDb` parameter must not reappear).
+- Never wire `wsUpgradeGuard` globally (`app.use`) or after an
+  `upgradeWebSocket` handler — the F-4 acceptance tests pin exactly two
+  route-level wirings, guard-first.
+- Never edit `src/**/worker.generated.cjs` — it is a build artifact
+  regenerated from `worker.ts` at worker-pool import.
