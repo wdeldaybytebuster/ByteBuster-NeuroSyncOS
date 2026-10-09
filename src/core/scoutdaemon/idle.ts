@@ -169,7 +169,7 @@ idleDetector.on('idle', async () => {
     const parser = new GitNexusParser();
     const dbSync = new DBSync(db);
     
-    let allSymbols: any[] = [];
+    const allSymbols: any[] = [];
     for (const file of files) {
       try {
         const content = readFileSync(file, 'utf8');

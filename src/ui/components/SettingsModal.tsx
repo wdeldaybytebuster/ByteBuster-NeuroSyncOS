@@ -54,7 +54,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleConnect = async () => {
     setStatusMsg('Connecting...');
     try {
-      let payload = { type: provider, config: {} as any };
+      const payload = { type: provider, config: {} as any };
       
       if (provider === 'openai-compatible') {
         payload.config = { baseUrl, apiKey, modelId };
