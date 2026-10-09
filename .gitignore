@@ -71,3 +71,7 @@ ts-errors.txt
 # Tauri Binaries and generated bundle resources
 src-tauri/binaries/
 src-tauri/resources/
+
+# Process artifacts and test coverage — regenerable, never committed
+*.pid
+coverage/
