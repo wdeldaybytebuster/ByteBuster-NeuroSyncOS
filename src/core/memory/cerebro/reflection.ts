@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 import { db } from '../../basevault/db';
-import { CerebroVectorStore } from './vector';
 import { OKFGenerator } from '../../okf/generator';
 import { log } from '../../observability/logger';
 import { runReflectionSweep } from './reflection-sweep';
+// §5 / Phase F-6 — the main end of the sweep's write channel (ops from the
+// cerebro worker drain into the single-writer sink here).
+import { attachWriteChannel, createWriteChannelPair } from '../../basevault/write-queue';
 
 /** Injected by server/index.ts at startup. Avoids circular import. */
 let _generateFn: ((prompt: string) => Promise<string>) | null = null;
@@ -73,10 +75,20 @@ export class ReflectionExecutor {
         log.info(`Cerebro: Inline sweep completed (test mode).`);
       } else {
         const { cerebroWorkerPool } = require('./worker-pool');
-        await cerebroWorkerPool.execute({
-          historyToProcess,
-          extractedFacts
-        });
+        // §5 / Phase F-6 — the sweep's writes (approvals, prunes) route to
+        // the main-thread sink over this task's channel; drain before the
+        // cycle is considered complete.
+        const { port1, port2 } = createWriteChannelPair();
+        const writeChannel = attachWriteChannel(port1);
+        try {
+          await cerebroWorkerPool.execute({
+            historyToProcess,
+            extractedFacts,
+            writePort: port2,
+          }, undefined, undefined, [port2]);
+        } finally {
+          await writeChannel.finishAndDrain();
+        }
         log.info(`Cerebro: Worker pool completed consolidation and sweep.`);
       }
     } catch (err) {

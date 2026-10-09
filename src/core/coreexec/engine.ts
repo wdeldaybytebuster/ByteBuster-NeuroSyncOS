@@ -10,6 +10,9 @@ import { WorktreeIsolation } from './worktree';
 import { classifyDirective } from './dispatch';
 import { log } from '../observability/logger';
 import type { WorkerOutput } from './worker';
+// §5 / Phase F-6 — the single-writer write channel pair, handed to every
+// worker task (transferList) and drained on the main thread.
+import { attachWriteChannel, createWriteChannelPair } from '../basevault/write-queue';
 
 /**
  * Main-thread LLM generator injected from server/index.ts (closure over the live
@@ -347,14 +350,27 @@ async function dispatchLoop() {
               reason: directive.reason,
             };
           } else {
-            result = await workerPool.execute({
-              taskId: node.id,
-              prompt,
-              directive,
-              harnessProfile,
-              plugin: node.plugin,
-              params: node.params
-            }) as WorkerOutput;
+            // §5 / Phase F-6 — every DB write this task attempts is routed
+            // to the main-thread single-writer sink: the worker end of the
+            // channel travels with the payload (transferList), the main end
+            // drains here. The drain is awaited BEFORE the task result is
+            // written back, so a final escalation (os_todos INSERT) is
+            // applied before the task is marked completed.
+            const { port1, port2 } = createWriteChannelPair();
+            const writeChannel = attachWriteChannel(port1);
+            try {
+              result = await workerPool.execute({
+                taskId: node.id,
+                prompt,
+                directive,
+                harnessProfile,
+                plugin: node.plugin,
+                params: node.params,
+                writePort: port2,
+              }, undefined, undefined, [port2]) as WorkerOutput;
+            } finally {
+              await writeChannel.finishAndDrain();
+            }
 
             if (result && typeof result === 'object' && result.status === 'error') {
               const reason = result.error ?? result.reason ?? 'Worker returned an error envelope';
