@@ -57,7 +57,7 @@ const pendingPeers = new Map<string, DiscoveredNode>();
 mdnsDiscovery.on('peer-discovered', (node: DiscoveredNode) => {
   const nodeId = `${node.ip}:${node.port}`;
   pendingPeers.set(nodeId, node);
-  console.log(`[Sync] Peer discovered — staged as PENDING (consent required): ${nodeId}`);
+  log.info(`[Sync] Peer discovered — staged as PENDING (consent required): ${nodeId}`);
   scoutEmitter.emit('update', { type: 'PEER_DISCOVERED', node, timestamp: Date.now() });
 });
 
@@ -311,12 +311,12 @@ app.get(
       onClose() {
         untrackWsHeartbeat(rawWs);
         rawWs = null;
-        console.log(`[Transport] Incoming peer ${peerId} disconnected`);
+        log.info(`[Transport] Incoming peer ${peerId} disconnected`);
       },
       onError() {
         untrackWsHeartbeat(rawWs);
         rawWs = null;
-        console.log(`[Transport] Incoming peer ${peerId} error`);
+        log.info(`[Transport] Incoming peer ${peerId} error`);
       }
     };
   })

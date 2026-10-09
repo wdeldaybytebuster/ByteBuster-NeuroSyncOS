@@ -13,7 +13,7 @@ All further work on this project MUST follow the "Agent Design" workflow. You mu
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ByteBuster-NeuroSyncOS** (5828 symbols, 12981 relationships, 487 execution flows).
+This project is indexed by GitNexus as **ByteBuster-NeuroSyncOS** (6248 symbols, 14236 relationships, 524 execution flows).
 
 > Index stale? Run `node .gitnexus/run.cjs analyze --index-only` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? Bootstrap with `npx`, `bunx`, or `pnpm dlx` — e.g. `bunx gitnexus@latest analyze` (npm 11 npx crash; #1939).
 

@@ -1,9 +1,26 @@
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { db, initDB } from '../basevault/db';
-import { log, currentLogLevel, _resetLogLevelCache } from './logger';
+import { log, currentLogLevel, writeBootLog, _resetLogLevelCache } from './logger';
+
+// Every file-sink test redirects NEUROSYNC_LOG_DIR at a fresh tmpdir so the
+// suite never touches the real .data/logs directory.
+let tmpDir: string;
 
 beforeAll(() => {
   initDB();
+});
+
+beforeEach(() => {
+  setLevel('info');
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'neurosync-bootlog-'));
+  vi.stubEnv('NEUROSYNC_LOG_DIR', tmpDir);
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 function setLevel(level: string) {
@@ -11,11 +28,23 @@ function setLevel(level: string) {
   _resetLogLevelCache();
 }
 
-beforeEach(() => {
-  setLevel('info');
-});
+/** The single boot log file created inside the injected tmpdir. */
+function bootFiles(): string[] {
+  return fs.readdirSync(tmpDir).filter((f) => /^boot-\d{4}-\d{2}-\d{2}\.log$/.test(f));
+}
 
-describe('logger', () => {
+function readBootLog(): string {
+  const files = bootFiles();
+  expect(files).toHaveLength(1);
+  const file = files[0];
+  if (file === undefined) throw new Error('expected exactly one boot log file');
+  return fs.readFileSync(path.join(tmpDir, file), 'utf8');
+}
+
+/** Matches the required shape: ISO-8601 timestamp, space, "[level]" tag. */
+const LINE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[(debug|info|warn|error)\] /;
+
+describe('logger level gate', () => {
   it('reads the configured level from system_settings', () => {
     setLevel('warn');
     expect(currentLogLevel()).toBe('warn');
@@ -90,5 +119,95 @@ describe('logger', () => {
     expect(logSpy).toHaveBeenCalledWith('b');
 
     logSpy.mockRestore();
+  });
+});
+
+describe('logger boot-log file sink', () => {
+  it('writes a boot-YYYY-MM-DD.log line in ISO [level] format', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    log.info('boot line one');
+
+    const content = readBootLog();
+    const line = content.trimEnd();
+    expect(LINE_RE.test(line)).toBe(true);
+    expect(line.endsWith('boot line one')).toBe(true);
+    // No ANSI colour codes anywhere in the file.
+    expect(content).not.toMatch(/\u001b\[/);
+  });
+
+  it('appends rather than truncating, one line per call', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    log.info('first');
+    log.warn('second');
+
+    const lines = readBootLog().trimEnd().split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/\[info\] first$/);
+    expect(lines[1]).toMatch(/\[warn\] second$/);
+    expect(bootFiles()).toHaveLength(1);
+  });
+
+  it('respects the level gate: suppressed calls write no file line', () => {
+    setLevel('warn');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    log.debug('should not be written');
+    log.info('also not written');
+    log.warn('written');
+
+    const lines = readBootLog().trimEnd().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/\[warn\] written$/);
+  });
+
+  it('writes nothing at all when the level is silent', () => {
+    setLevel('silent');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    log.debug('x');
+    log.info('x');
+    log.warn('x');
+    log.error('x');
+
+    expect(bootFiles()).toHaveLength(0);
+  });
+
+  it('creates the log directory recursively when it does not exist', () => {
+    const nested = path.join(tmpDir, 'deep', 'nested', 'logs');
+    vi.stubEnv('NEUROSYNC_LOG_DIR', nested);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    expect(fs.existsSync(nested)).toBe(false);
+    log.info('nested write');
+
+    expect(fs.existsSync(nested)).toBe(true);
+    expect(fs.readdirSync(nested)).toHaveLength(1);
+  });
+
+  it('never throws when the target path is unwritable', () => {
+    // Point the sink at a path that cannot be a directory (a regular file), so
+    // mkdirSync fails. The sink must swallow the error, not propagate it.
+    const blocker = path.join(tmpDir, 'blocker');
+    fs.writeFileSync(blocker, 'not a directory');
+    vi.stubEnv('NEUROSYNC_LOG_DIR', blocker);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    expect(() => log.info('boom')).not.toThrow();
+    // The console sink still ran -- the file failure did not suppress stdout.
+    expect(logSpy).toHaveBeenCalledWith('boom');
+  });
+
+  it('formats multiple args and objects the way console does', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    writeBootLog('info', ['count', 42, { a: 1 }]);
+
+    const line = readBootLog().trimEnd();
+    expect(LINE_RE.test(line)).toBe(true);
+    expect(line).toContain('count 42 { a: 1 }');
   });
 });
