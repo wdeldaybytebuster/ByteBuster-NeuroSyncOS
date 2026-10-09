@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { initDB } from '../../core/basevault/db';
-import { projectsRouter } from './projects';
+import { projectsRouter, resolveWorkspacePath } from './projects';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -66,5 +66,28 @@ describe('projectsRouter archive/restore', () => {
     expect(archiveRes.status).toBe(404);
     const restoreRes = await post('/does-not-exist/restore');
     expect(restoreRes.status).toBe(404);
+  });
+});
+
+describe('D1 — workspace sandbox is redirected to temp under test', () => {
+  it('resolveWorkspacePath uses the OS temp dir in test env, .data in prod', () => {
+    expect(resolveWorkspacePath('uuid-1', true)).toBe(
+      path.join(os.tmpdir(), 'ns-test-workspaces', 'uuid-1'),
+    );
+    expect(resolveWorkspacePath('uuid-1', false)).toBe(
+      path.join(process.cwd(), '.data/workspaces', 'uuid-1'),
+    );
+  });
+
+  it('POST / creates the sandbox under temp, never under .data/workspaces', async () => {
+    // Sanity: this file runs under Vitest, so the live default must be temp.
+    expect(process.env.VITEST).toBeTruthy();
+    const res = await post('/', { name: 'D1 Temp Sandbox', projectRootPath: scratchDir });
+    expect(res.status).toBe(200);
+    const ws = res.data.project.workspace_path as string;
+    expect(ws.startsWith(path.join(os.tmpdir(), 'ns-test-workspaces'))).toBe(true);
+    expect(ws.startsWith(path.join(process.cwd(), '.data'))).toBe(false);
+    expect(fs.existsSync(ws)).toBe(true);
+    fs.rmSync(ws, { recursive: true, force: true });
   });
 });

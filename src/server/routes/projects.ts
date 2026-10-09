@@ -2,10 +2,24 @@ import { Hono } from 'hono';
 import { db } from '../../core/basevault/db';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { writeProjectConfigYaml, readProjectConfigYaml } from '../../core/basevault/project-config-file';
 
 export const projectsRouter = new Hono();
+
+/**
+ * D1 — resolve the physical workspace sandbox directory for a project.
+ *
+ * Tests must NEVER touch the real `.data/workspaces` tree — mirroring the
+ * db.ts:25 VITEST :memory: pattern, a test run (Vitest sets
+ * `process.env.VITEST` automatically) redirects into the OS temp dir instead.
+ * The `testEnv` parameter is a seam so both branches are unit-testable.
+ */
+export function resolveWorkspacePath(id: string, testEnv = !!process.env.VITEST): string {
+  if (testEnv) return path.join(os.tmpdir(), 'ns-test-workspaces', id);
+  return path.join(process.cwd(), '.data/workspaces', id);
+}
 
 /**
  * Validates a user-supplied project_root_path:
@@ -68,7 +82,7 @@ projectsRouter.post('/', async (c) => {
   try {
     const body = await c.req.json();
     const id = randomUUID();
-    const workspacePath = path.join(process.cwd(), '.data/workspaces', id);
+    const workspacePath = resolveWorkspacePath(id);
 
     // Validate project_root_path if provided
     let projectRootPath: string | null = null;
