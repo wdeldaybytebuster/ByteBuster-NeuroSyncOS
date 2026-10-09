@@ -65,7 +65,7 @@ describe('Skill A: GitNexus Mapper Fix (TDD)', () => {
       taskId,
       plugin: 'gitnexus_mapper',
       params: { query: 'test query' }
-    }, projectId, db, CerebroVectorStore);
+    }, projectId, CerebroVectorStore);
 
     expect(result!.status).toBe('success');
 
