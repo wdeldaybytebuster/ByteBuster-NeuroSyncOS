@@ -69,6 +69,14 @@ export interface FreeLLMProviderConfig {
    * per-call `extraBody` and subject to the same denylist.
    */
   extraBody?: ExtraBody;
+  /**
+   * B (F7) — embedding model for `generateEmbedding` only.
+   *
+   * The router's `model="auto"` selects a CHAT model; it has no meaning on an
+   * embeddings request, so the chat id is never reused here. Absent falls back
+   * to `DEFAULT_EMBEDDING_MODEL_ID`.
+   */
+  embeddingModelId?: string;
 }
 
 export class FreeLLMProvider extends OpenAICompatibleProvider {
@@ -97,6 +105,9 @@ export class FreeLLMProvider extends OpenAICompatibleProvider {
         ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
         modelId: config.modelId || 'auto',
         ...(config.extraBody !== undefined ? { extraBody: config.extraBody } : {}),
+        // B (F7) — forward the embeddings model override so a provider row that
+        // sets one is not silently dropped for this type.
+        ...(config.embeddingModelId !== undefined ? { embeddingModelId: config.embeddingModelId } : {}),
       },
       customId || 'freellmapi'
     );

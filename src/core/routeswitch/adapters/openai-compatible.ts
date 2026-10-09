@@ -6,6 +6,17 @@ export interface OpenAICompatibleConfig {
   baseUrl: string;
   apiKey?: string;
   modelId: string;
+  /**
+   * B (F7) — the model id used for EMBEDDING requests only.
+   *
+   * Deliberately separate from `modelId`. A chat id is not an embedding id:
+   * `modelId` is routinely `'auto'` (FreeLLMAPI's router picks) or `'fusion'`
+   * (this app's server-side ensemble), and neither is a model an embeddings
+   * endpoint can serve — sending one produced an opaque upstream 400/404.
+   * When absent the request uses `DEFAULT_EMBEDDING_MODEL_ID` (see below), never
+   * the chat id.
+   */
+  embeddingModelId?: string;
   /** Extra static headers merged into every request (e.g. OpenRouter's HTTP-Referer/X-Title). */
   extraHeaders?: Record<string, string>;
   /**
@@ -135,6 +146,82 @@ const DEFAULT_MAX_TOKENS_FLOOR = 1024;
  */
 const REASONING_RETRY_MULTIPLIER = 4;
 const REASONING_RETRY_CAP = 8000;
+
+/**
+ * B (F7) — the embedding model used when a provider row supplies no
+ * `embeddingModelId`.
+ *
+ * `text-embedding-3-small` is the conventional OpenAI-compatible embedding id
+ * (1536 dims), which is also the width the Cerebro vector store is built around
+ * (`src/core/memory/cerebro/vector.ts`), so an unconfigured provider produces a
+ * usable embedding instead of an error. It is a DEFAULT, not a claim: a provider
+ * that serves a different embedding model sets `embeddingModelId` on its row.
+ *
+ * Never a chat id: `auto` and `fusion` are the two values `modelId` actually
+ * holds in practice, and both are refused here.
+ */
+export const DEFAULT_EMBEDDING_MODEL_ID = 'text-embedding-3-small';
+
+/**
+ * B (F7) — pure, deterministic embeddings-URL builder.
+ *
+ * The previous inline expression appended `/v1/embeddings` to whatever
+ * `baseUrl` held, so the documented FreeLLMAPI/OpenAI-shaped base URL
+ * `http://host:3001/v1` produced `http://host:3001/v1/v1/embeddings` — a 404
+ * from every conforming server. Root cause was that the builder assumed
+ * `baseUrl` never already carried an API version prefix.
+ *
+ * Rules, in order:
+ *   1. trailing slashes are stripped;
+ *   2. a URL already ending in `/embeddings` is returned unchanged (an
+ *      operator who pasted the full endpoint gets it honoured, not doubled);
+ *   3. a URL already ending in `/v1` gains only `/embeddings`;
+ *   4. anything else gains `/v1/embeddings`.
+ *
+ * Exported so the rule is pinned by a unit test rather than inferred from a
+ * request mock.
+ */
+export function buildEmbeddingsUrl(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '');
+  if (trimmed.endsWith('/embeddings')) return trimmed;
+  if (trimmed.endsWith('/v1')) return `${trimmed}/embeddings`;
+  return `${trimmed}/v1/embeddings`;
+}
+
+/**
+ * B (F7) — pure, deterministic embeddings REQUEST BODY builder.
+ *
+ * This is the deterministic guard the plan asks for as a `§VERIFY:` key check
+ * on the embeddings body. The `§VERIFY:` sentinel itself is a CoreExec DAG-node
+ * classifier (`coreexec/dispatch.ts`) with no representation inside a provider
+ * adapter — inserting a node here would cross the CoreExec/RouteSwitch boundary
+ * — so the same guarantee is provided the way Phase A provided its `extraBody`
+ * guarantee: a pure function plus unit tests that assert the exact key set.
+ *
+ * Two properties are enforced, both deterministic and LLM-free:
+ *   1. the body contains EXACTLY `input` and `model` — no caller-supplied field
+ *      can add a chat-only parameter (`messages`, `response_format`) to an
+ *      embeddings request;
+ *   2. `model` is never a chat id. A blank, whitespace-only, `auto`, `fusion`,
+ *      or otherwise absent id falls back to `DEFAULT_EMBEDDING_MODEL_ID`.
+ *
+ * Rule 2 is stated as an explicit refusal list rather than a "looks like an
+ * embedding model" heuristic: the two values `modelId` actually holds here are
+ * `auto` and `fusion`, and guessing at unfamiliar-but-valid embedding ids would
+ * break a provider whose rows legitimately use one.
+ */
+export function buildEmbeddingRequestBody(
+  input: string,
+  embeddingModelId?: string,
+): { input: string; model: string } {
+  const requested = typeof embeddingModelId === 'string' ? embeddingModelId.trim() : '';
+  const reserved = new Set(['auto', 'fusion']);
+  const model =
+    requested.length === 0 || reserved.has(requested.toLowerCase())
+      ? DEFAULT_EMBEDDING_MODEL_ID
+      : requested;
+  return { input, model };
+}
 
 /**
  * P2-1 — raw AbortSignal.timeout budgets (NOT egressFetch: LLM traffic to
@@ -543,13 +630,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
 
     return content;
-  }
-
-  async generateEmbedding(text: string): Promise<Float32Array> {
+  }  async generateEmbedding(text: string): Promise<Float32Array> {
     const effectiveConfig = await this._resolveEffectiveConfig();
-    const url = effectiveConfig.baseUrl.endsWith('/')
-      ? `${effectiveConfig.baseUrl}v1/embeddings`
-      : `${effectiveConfig.baseUrl}/v1/embeddings`;
+    // B (F7) — both the URL and the model come from the pure builders above.
+    // The model is the row's `embeddingModelId` when it set one, else the
+    // default; the chat `modelId` is never consulted, so an `auto`/`fusion`
+    // chat scope cannot make an embeddings call with a chat id.
+    const url = buildEmbeddingsUrl(effectiveConfig.baseUrl);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -562,10 +649,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const body = {
-      input: text,
-      model: effectiveConfig.modelId, // or a specific embedding model if configured, but for now we use modelId
-    };
+    const body = buildEmbeddingRequestBody(text, effectiveConfig.embeddingModelId);
 
     // P2-1: raw AbortSignal.timeout for embeddings (15 s budget).
     const embeddingTimeout = AbortSignal.timeout(OPENAI_COMPAT_EMBEDDING_TIMEOUT_MS);

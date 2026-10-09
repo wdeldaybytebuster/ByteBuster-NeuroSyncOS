@@ -3,6 +3,11 @@ import path from 'path';
 import crypto from 'crypto';
 import { OKFDirectoryManager } from './directory-manager';
 import { OKFIndexer } from './indexer';
+import {
+  schemaDriftBreaker,
+  parkSchemaDriftTask,
+  SCHEMA_DRIFT_STRIKE_LIMIT,
+} from '../coreexec/schema-drift-breaker';
 
 export interface ExtractedConcept {
   type: string;
@@ -212,7 +217,41 @@ Return ONLY this exact JSON array format, e.g.:
 
     let lastErr = '';
 
+    // F-CB-IMPL — the breaker's key for THIS retry loop. One identity for the
+    // whole extraction means its two attempts are counted as consecutive: a
+    // failed primary and its failed retry are two strikes on one pipeline, not
+    // one strike each on two pipelines. A successful extraction resets it.
+    const driftKey = 'okf-concept-extraction';
+
+    /**
+     * Deterministic trip handler. Records the strike, and on the failure that
+     * reaches the limit parks the task and stops the loop. Returns nothing —
+     * the loop re-checks `shouldAttempt` at its top, so the halt needs no
+     * throw and no early return.
+     */
+    const recordDrift = (message: string): void => {
+      const { tripped } = schemaDriftBreaker.recordFailure(driftKey);
+      if (!tripped) return;
+      console.warn(
+        `[OKF Generator] schema-drift breaker tripped after ${SCHEMA_DRIFT_STRIKE_LIMIT} ` +
+          `consecutive invalid responses; halting automated retries and parking the task.`
+      );
+      parkSchemaDriftTask({
+        key: driftKey,
+        validationError: message,
+        origin: 'OKFGenerator',
+      });
+    };
+
     for (const attempt of attempts) {
+      // F-CB-IMPL — the "halt automated retries" half of Axiom 4. A tripped
+      // breaker skips the remaining attempts entirely: retrying a pipeline that
+      // has already failed the schema check three times in a row is exactly the
+      // behaviour the breaker exists to stop.
+      if (!schemaDriftBreaker.shouldAttempt(driftKey)) {
+        console.warn('[OKF Generator] schema-drift breaker is tripped; skipping remaining extraction attempts.');
+        break;
+      }
       try {
         const raw = await generateFn(attempt.prompt, attempt.schema);
 
@@ -241,17 +280,25 @@ Return ONLY this exact JSON array format, e.g.:
             (c): c is ExtractedConcept =>
               typeof c === 'object' && c !== null && 'type' in c && 'title' in c && 'description' in c
           );
+          // F-CB-IMPL — a schema-valid response, whether it carried concepts or
+          // was a legitimate empty array. Reset before returning so a pipeline
+          // that recovers is not tripped by stale failures.
+          schemaDriftBreaker.recordSuccess(driftKey);
           if (concepts.length > 0) {
             return concepts;
           }
           // Valid JSON array but empty — not worth retrying; treat as no concepts.
           return [];
         }
-        // Valid JSON but not an array — fall through to retry
+        // Valid JSON but not an array — fall through to retry. This is a schema
+        // violation too (the contract is an array), so it counts as a strike.
         lastErr = `Parsed JSON was not an array (got ${typeof parsed})`;
+        recordDrift(lastErr);
       } catch (err: any) {
         lastErr = err?.message || String(err);
         console.warn(`[OKF Generator] Concept extraction ${attempt.label} failed:`, lastErr);
+        // Unparseable output is the canonical schema-drift signal.
+        recordDrift(lastErr);
       }
     }
 

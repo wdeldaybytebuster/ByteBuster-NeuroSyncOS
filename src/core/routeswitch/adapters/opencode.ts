@@ -7,6 +7,13 @@ export interface OpenCodeProviderConfig {
   /** Blank or 'auto' resolves to a live free model from OpenCode Zen's catalog. */
   modelId?: string;
   /**
+   * B (F7) — embedding model for `generateEmbedding` only. Zen's free chat
+   * catalog and its embeddings availability are unrelated, so the chat
+   * `modelId` is never reused for embeddings; absent falls back to
+   * `DEFAULT_EMBEDDING_MODEL_ID`.
+   */
+  embeddingModelId?: string;
+  /**
    * A4 — durable per-provider body default (e.g. a Fusion panel preference
    * persisted with the provider row). Subject to the SAME `sanitizeExtraBody`
    * denylist as a per-call value, so it may extend the request but can never
@@ -69,6 +76,9 @@ export class OpenCodeProvider extends OpenAICompatibleProvider {
       baseUrl: OPENCODE_ZEN_BASE_URL,
       ...(config.apiKey !== undefined ? { apiKey: config.apiKey } : {}),
       modelId: config.modelId || 'auto',
+      // B (F7) — forward the embeddings model override so a provider row that
+      // sets one is not silently dropped for this type.
+      ...(config.embeddingModelId !== undefined ? { embeddingModelId: config.embeddingModelId } : {}),
       // A4 — forward a config-level body default so a durable provider row is
       // not silently dropped for this type: `generate` below reads `this.config`
       // and hands it to `_generateWithConfig` (and to every candidate in the

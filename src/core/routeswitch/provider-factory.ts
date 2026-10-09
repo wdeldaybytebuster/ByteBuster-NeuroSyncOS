@@ -103,6 +103,29 @@ function warnUnsupportedExtraBody(type: ProviderType, config: any): void {
 }
 
 /**
+ * B (F7) — pull a durable per-provider `embeddingModelId` off a parsed provider
+ * config, if one was persisted with the row.
+ *
+ * The factory is the only route by which a stored row reaches an adapter, so a
+ * row that sets an embedding model has to be forwarded here or `generateEmbedding`
+ * silently falls back to `DEFAULT_EMBEDDING_MODEL_ID` for every provider — the
+ * same "value accepted then dropped" defect class the `extraBody` seam removed.
+ *
+ * A blank or whitespace-only string yields no key at all rather than an empty
+ * one: the adapter's own builder already treats absent and blank identically,
+ * but not adding the key keeps `exactOptionalPropertyTypes` satisfied and keeps
+ * the row's intent unambiguous in the constructed config. Reserved chat ids
+ * (`auto`, `fusion`) are deliberately NOT rejected here — `buildEmbeddingRequestBody`
+ * is the single place that decides them, so there is exactly one rule to test.
+ */
+function staticEmbeddingModel(config: any): { embeddingModelId?: string } {
+  const value = config?.embeddingModelId;
+  if (typeof value !== 'string') return {};
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? { embeddingModelId: trimmed } : {};
+}
+
+/**
  * Single source of truth for turning a DB provider row (type + parsed
  * config_json + decrypted apiKey) into a live LLMProvider instance. Used by
  * the boot sequence, provider CRUD sync, and the connectivity test endpoint
@@ -122,6 +145,7 @@ export function instantiateProvider(
           baseUrl: config.baseUrl,
           modelId: config.modelId || 'Auto',
           apiKey: apiKey || '',
+          ...staticEmbeddingModel(config),
           ...staticExtraBody(config, 'openai-compatible'),
         },
         customId
@@ -132,6 +156,7 @@ export function instantiateProvider(
           baseUrl: config.baseUrl || 'http://localhost:3001/v1',
           ...(apiKey !== undefined ? { apiKey } : {}),
           ...(config.modelId !== undefined ? { modelId: config.modelId } : {}),
+          ...staticEmbeddingModel(config),
           ...staticExtraBody(config, 'freellmapi'),
         },
         customId
@@ -162,6 +187,10 @@ export function instantiateProvider(
         {
           modelId: config.modelId,
           ...(apiKey !== undefined ? { apiKey } : {}),
+          // B (F7) — same forwarding rationale as the `extraBody` spread below:
+          // this type derives from `OpenAICompatibleProvider`, whose
+          // `generateEmbedding` reads `embeddingModelId` off the config.
+          ...staticEmbeddingModel(config),
           // A4 — `OpenCodeProvider` extends `OpenAICompatibleProvider`, whose
           // `_generateWithConfig` already sanitizes and merges a config-level
           // `extraBody`; passing it keeps the contract uniform across every
@@ -176,6 +205,10 @@ export function instantiateProvider(
         {
           modelId: config.modelId,
           ...(apiKey !== undefined ? { apiKey } : {}),
+          // B (F7) — same reasoning as the opencode arm above: this provider
+          // extends `OpenAICompatibleProvider`, so a config-level
+          // `embeddingModelId` is honoured by `generateEmbedding` once passed.
+          ...staticEmbeddingModel(config),
           // A4 — same reasoning as the opencode arm above: this provider
           // extends `OpenAICompatibleProvider`, so a config-level `extraBody`
           // is honoured by `_generateWithConfig` once it is passed through.
