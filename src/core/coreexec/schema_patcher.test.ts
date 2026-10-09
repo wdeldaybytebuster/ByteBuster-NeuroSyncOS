@@ -67,7 +67,7 @@ describe('Skill C: Circuit Breaker Auto-Patcher (TDD)', () => {
       params: { 
         errorTrace: syntheticErrorTrace
       }
-    }, projectId, db, CerebroVectorStore);
+    }, projectId, CerebroVectorStore);
 
     expect(result).not.toBeNull();
     expect(result!.status).toBe('success');

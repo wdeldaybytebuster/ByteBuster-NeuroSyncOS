@@ -52,7 +52,7 @@ describe('Skill B: Quarantined OKF Ingestion (TDD)', () => {
         url: 'https://example.com/malicious-doc',
         mockContent: poisonedPayload // Mock content for test simulation
       }
-    }, projectId, db, CerebroVectorStore);
+    }, projectId, CerebroVectorStore);
 
     // 1. Assert successful execution of the plugin
     console.log(result); expect(result!.status).toBe('success');
@@ -87,9 +87,9 @@ describe('Skill B: Quarantined OKF Ingestion (TDD)', () => {
       plugin: 'okf_indexer',
       params: { 
         url: 'https://example.com/safe-doc',
-        mockContent: payload 
+        mockContent: payload
       }
-    }, projectId, db, CerebroVectorStore);
+    }, projectId, CerebroVectorStore);
     
     console.log(result); expect(result!.status).toBe('success');
 
