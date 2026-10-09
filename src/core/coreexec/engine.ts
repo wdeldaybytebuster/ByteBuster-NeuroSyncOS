@@ -79,8 +79,19 @@ export function executeRun(
   });
 }
 
-function getEnvironmentMaxWorkers(): number {
+export function getEnvironmentMaxWorkers(): number {
   try {
+    // D2: scope to the active (newest) hardware profile. A stale profile's
+    // rules must never override the current tier's max_workers.
+    const profile = db.prepare('SELECT id FROM hardware_profiles ORDER BY profiled_at DESC LIMIT 1').get() as { id: string } | undefined;
+    if (profile?.id) {
+      const row = db.prepare("SELECT rule_value FROM environment_rules WHERE profile_id = ? AND rule_key = 'max_workers' ORDER BY created_at DESC LIMIT 1").get(profile.id) as { rule_value: string } | undefined;
+      if (row && row.rule_value) {
+        const parsed = parseInt(row.rule_value, 10);
+        if (!isNaN(parsed) && parsed >= 0) return parsed;
+      }
+      return 3;
+    }
     const row = db.prepare("SELECT rule_value FROM environment_rules WHERE rule_key = 'max_workers' ORDER BY created_at DESC LIMIT 1").get() as { rule_value: string } | undefined;
     if (row && row.rule_value) {
       const parsed = parseInt(row.rule_value, 10);

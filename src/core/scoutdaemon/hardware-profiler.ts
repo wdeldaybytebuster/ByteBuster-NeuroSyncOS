@@ -215,7 +215,7 @@ export function getEnvRule(ruleKey: string, defaultValue: string = ''): string {
     const profile = getActiveHardwareProfile();
     if (!profile) return defaultValue;
     const row = db
-      .prepare('SELECT rule_value FROM environment_rules WHERE profile_id = ? AND rule_key = ?')
+      .prepare('SELECT rule_value FROM environment_rules WHERE profile_id = ? AND rule_key = ? ORDER BY created_at DESC LIMIT 1')
       .get(profile.id, ruleKey) as { rule_value: string } | undefined;
     return row?.rule_value ?? defaultValue;
   } catch {
