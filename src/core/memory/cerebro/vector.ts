@@ -1,5 +1,16 @@
 import { db } from '../../basevault/db';
 import crypto from 'crypto';
+import { postWriteOpOrThrow } from '../../basevault/write-queue';
+
+/**
+ * §5 / Phase F-6 — every Cerebro write now goes through the single-writer
+ * queue (postWriteOpOrThrow). On a worker thread that means the op is
+ * routed to the main-thread sink; on the main thread (routes, tests, the
+ * inline reflection sweep) the sink applies it locally — same statement,
+ * same order, same throw-on-failure semantics as the pre-cutover direct
+ * INSERT. The sync signature and returned id are unchanged: ids are
+ * caller-minted so callers never wait on the RPC hop.
+ */
 
 /**
  * CerebroDashboard's "Base Score" / "Match Boost" sliders (Memory Search
@@ -80,35 +91,18 @@ export class CerebroVectorStore {
    */
   public static insert(content: string, type: string, embedding?: Float32Array, projectId?: string | null, isAutoIngested: boolean = false, sourceTool?: string): string {
     const id = crypto.randomUUID();
-    const now = Date.now();
 
-    if (isAutoIngested) {
-      db.prepare(`
-        INSERT INTO memory_quarantine (id, content, type, project_id, last_accessed_at, access_count, created_at, taint_flag, source_tool)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, content, type, projectId ?? null, now, 0, now, 1, sourceTool ?? null);
+    postWriteOpOrThrow({
+      kind: 'memory_insert',
+      id,
+      content,
+      type,
+      projectId: projectId ?? null,
+      isAutoIngested,
+      sourceTool: sourceTool ?? null,
+      ...(embedding !== undefined ? { embedding: Array.from(embedding) } : {}),
+    });
 
-      if (embedding) {
-        db.prepare(`
-          INSERT INTO memory_quarantine_vec (id, embedding)
-          VALUES (?, vec_quantize_binary(?))
-        `).run(id, embedding);
-      }
-    } else {
-      // 1. Insert Meta
-      db.prepare(`
-        INSERT INTO cerebro_memories_meta (id, content, type, project_id, last_accessed_at, access_count, created_at, source_tool)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, content, type, projectId ?? null, now, 0, now, sourceTool ?? null);
-
-      // 2. Insert Vector if provided
-      if (embedding) {
-        db.prepare(`
-          INSERT INTO cerebro_memories_vec (id, embedding)
-          VALUES (?, vec_quantize_binary(?))
-        `).run(id, embedding);
-      }
-    }
     return id;
   }
 
