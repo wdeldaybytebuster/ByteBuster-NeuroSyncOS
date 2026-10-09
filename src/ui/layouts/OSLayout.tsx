@@ -1,13 +1,33 @@
-import React, { useState, createContext, useContext } from 'react';
-import { UnifiedMasterDashboard } from '../views/UnifiedMasterDashboard';
-import { CoreExecDashboard } from '../views/CoreExecDashboard';
-import { RouteSwitchDashboard } from '../views/RouteSwitchDashboard';
-import { CerebroDashboard } from '../views/CerebroDashboard';
-import { BaseVaultDashboard } from '../views/BaseVaultDashboard';
-import { PortGridDashboard } from '../views/PortGridDashboard';
-import { ScopeLogicDashboard } from '../views/ScopeLogicDashboard';
-import { ScoutDaemonDashboard } from '../views/ScoutDaemonDashboard';
+import React, { useState, createContext, useContext, lazy, Suspense } from 'react';
 import { CerebroChatbot } from '../components/CerebroChatbot';
+
+// Phase F-3 — the eight dashboards are lazy boundaries. Each view pulls a
+// heavy dependency family with it (CoreExec → xyflow canvas, PortGrid →
+// xterm terminal, …); eagerly importing all of them charged every boot with
+// the whole graph even though exactly one is ever mounted. `lazy()` +
+// Suspense splits them into separately-loaded chunks that pair with the
+// F-2 manualChunks map. The named-export mapping (.then(m => ({default})))
+// is required because each view exports its component by name.
+//
+// CerebroChatbot stays EAGER on purpose (blueprint F-3): it is a global
+// singleton mounted on every view from first paint — lazy-loading the
+// assistant would add a flash of missing UI to every navigation.
+const UnifiedMasterDashboard = lazy(() =>
+  import('../views/UnifiedMasterDashboard.js').then(m => ({ default: m.UnifiedMasterDashboard })));
+const CoreExecDashboard = lazy(() =>
+  import('../views/CoreExecDashboard.js').then(m => ({ default: m.CoreExecDashboard })));
+const RouteSwitchDashboard = lazy(() =>
+  import('../views/RouteSwitchDashboard.js').then(m => ({ default: m.RouteSwitchDashboard })));
+const CerebroDashboard = lazy(() =>
+  import('../views/CerebroDashboard.js').then(m => ({ default: m.CerebroDashboard })));
+const BaseVaultDashboard = lazy(() =>
+  import('../views/BaseVaultDashboard.js').then(m => ({ default: m.BaseVaultDashboard })));
+const PortGridDashboard = lazy(() =>
+  import('../views/PortGridDashboard.js').then(m => ({ default: m.PortGridDashboard })));
+const ScopeLogicDashboard = lazy(() =>
+  import('../views/ScopeLogicDashboard.js').then(m => ({ default: m.ScopeLogicDashboard })));
+const ScoutDaemonDashboard = lazy(() =>
+  import('../views/ScoutDaemonDashboard.js').then(m => ({ default: m.ScoutDaemonDashboard })));
 
 // Global navigation + project context
 interface NavigationContextType {
@@ -50,6 +70,19 @@ function readStoredActiveProject(): { id: string | null; name: string } {
   return { id: null, name: 'Global' };
 }
 
+/**
+ * F-3 Suspense fallback for the lazy dashboard boundary. A loading state
+ * only — no placeholder/mock data (AGENTS.md rule 4: dashboards poll live
+ * SQLite + daemons; nothing offline may stand in for them).
+ */
+function DashboardFallback() {
+  return (
+    <div className="h-full w-full flex items-center justify-center bg-void text-muted-foreground font-mono text-sm">
+      <span className="animate-pulse">Loading module…</span>
+    </div>
+  );
+}
+
 export function OSLayout() {
   const [activeView, setActiveView] = useState('coreexec');
   const initialProject = readStoredActiveProject();
@@ -83,7 +116,9 @@ export function OSLayout() {
   return (
     <NavigationContext.Provider value={{ activeView, navigate: setActiveView, activeProjectId, activeProjectName, setActiveProject, leftBarOpen, setLeftBarOpen, rightBarOpen, setRightBarOpen }}>
       <div className="h-screen w-full bg-void text-foreground font-sans overflow-hidden transition-colors duration-300">
-        {renderView()}
+        <Suspense fallback={<DashboardFallback />}>
+          {renderView()}
+        </Suspense>
         <CerebroChatbot />
       </div>
     </NavigationContext.Provider>
