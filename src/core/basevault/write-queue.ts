@@ -287,7 +287,8 @@ export function releaseWriteClient(): void {
   configureWriteClient(null);
 }
 
-/** The worker call site for every one of the 12 routed write statements. */export function postWriteOp(op: WriteOp): WriteResult {
+/** The worker call site for every one of the 12 routed write statements. */
+export function postWriteOp(op: WriteOp): WriteResult {
   const invalid = validateWriteOp(op);
   if (invalid) return { status: 400, error: invalid, applied: 'dropped' };
 
