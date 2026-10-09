@@ -36,7 +36,7 @@ function makeFakeDns() {
 }
 
 let factoryCalls: ReturnType<typeof makeFakeDns>[];
-let factory = () => {
+const factory = () => {
   const fake = makeFakeDns();
   factoryCalls.push(fake);
   return fake;
